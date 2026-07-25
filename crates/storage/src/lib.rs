@@ -3,6 +3,10 @@
 
 #![forbid(unsafe_code)]
 
+pub mod db;
 pub mod error;
+pub mod users;
 
+pub use db::Db;
 pub use error::StorageError;
+pub use users::{CreatedAccount, StoredUser, UserRepository};
