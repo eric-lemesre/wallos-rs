@@ -19,6 +19,24 @@ pub struct HealthResponse {
     pub status: String,
 }
 
+/// Requête de création de compte (REQ-AUT-001).
+///
+/// Le mot de passe transite en clair sur le canal TLS puis est haché argon2id côté serveur ;
+/// il n'est jamais stocké en clair.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct CreateAccountRequest {
+    /// Adresse e-mail du compte.
+    #[schema(example = "user@example.com", format = "email")]
+    pub email: String,
+    /// Mot de passe (longueur minimale vérifiée côté serveur, REQ-AUT-003).
+    #[schema(
+        example = "correct horse battery staple",
+        min_length = 12,
+        format = "password"
+    )]
+    pub password: String,
+}
+
 /// Détail d'erreur conforme à la RFC 9457 (`application/problem+json`).
 ///
 /// Schéma d'erreur unique de l'API : toute réponse d'erreur adopte ce format,
