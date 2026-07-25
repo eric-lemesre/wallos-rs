@@ -5,6 +5,7 @@
 use axum::{Json, Router};
 use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
+use wallos_core::requirement;
 use wallos_proto::HealthResponse;
 
 /// API wallos-rs v1.
@@ -25,13 +26,13 @@ pub struct ApiDoc;
 #[utoipa::path(
     get,
     path = "/health",
-    operation_id = "getApiV1Health",
+    operation_id = "getHealth",
     extensions(("x-requirements" = json!(["REQ-OPS-001"]))),
     responses(
         (status = 200, description = "Serveur opérationnel", body = HealthResponse, content_type = "application/json")
     )
 )]
-#[wallos_core::requirement(REQ-OPS-001)]
+#[requirement(REQ-OPS-001)]
 pub async fn api_v1_health() -> Json<HealthResponse> {
     Json(HealthResponse {
         service: "wallos-rs".to_string(),
@@ -41,7 +42,7 @@ pub async fn api_v1_health() -> Json<HealthResponse> {
 }
 
 /// Construit le routeur de l'application.
-#[wallos_core::requirement(REQ-OPS-001)]
+#[requirement(REQ-OPS-001)]
 pub fn app() -> Router {
     let (router, _api) = OpenApiRouter::new()
         .routes(routes!(api_v1_health))
