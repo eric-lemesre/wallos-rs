@@ -9,6 +9,7 @@
 
 pub use wallos_req_macros::{requirement, verifies};
 
+pub mod actor;
 pub mod error;
 pub mod money;
 
