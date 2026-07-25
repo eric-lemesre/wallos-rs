@@ -8,7 +8,10 @@ use axum::{Json, Router};
 use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use wallos_core::requirement;
-use wallos_proto::{HealthResponse, Problem, problem};
+use wallos_proto::{CreateAccountRequest, HealthResponse, Problem, problem};
+use wallos_storage::Db;
+
+pub mod accounts;
 
 /// API wallos-rs v1.
 #[derive(OpenApi)]
@@ -19,8 +22,8 @@ use wallos_proto::{HealthResponse, Problem, problem};
         description = "Code-first OpenAPI contract for wallos-rs."
     ),
     servers((url = "/api/v1")),
-    paths(api_v1_health),
-    components(schemas(HealthResponse, Problem))
+    paths(api_v1_health, accounts::create_account),
+    components(schemas(HealthResponse, Problem, CreateAccountRequest))
 )]
 pub struct ApiDoc;
 
@@ -63,11 +66,24 @@ async fn not_found(uri: Uri) -> Response {
     problem_response(StatusCode::NOT_FOUND, body)
 }
 
-/// Construit le routeur de l'application.
+/// Construit le routeur sans état : uniquement les routes publiques indépendantes de la base
+/// (santé, repli). Utilisé par les tests qui n'ont pas besoin de PostgreSQL.
 #[requirement(REQ-OPS-001)]
 pub fn app() -> Router {
     let (router, _api) = OpenApiRouter::new()
         .routes(routes!(api_v1_health))
         .split_for_parts();
     Router::new().nest("/api/v1", router).fallback(not_found)
+}
+
+/// Construit le routeur complet, avec état (base de données) : santé + création de compte.
+#[requirement(REQ-AUT-001)]
+pub fn app_with_db(db: Db) -> Router {
+    let (router, _api) = OpenApiRouter::new()
+        .routes(routes!(api_v1_health))
+        .routes(routes!(accounts::create_account))
+        .split_for_parts();
+    Router::new()
+        .nest("/api/v1", router.with_state(db))
+        .fallback(not_found)
 }

@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Crée un compte utilisateur. */
+        post: operations["createAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -25,6 +42,26 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description Requête de création de compte (REQ-AUT-001).
+         *
+         *     Le mot de passe transite en clair sur le canal TLS puis est haché argon2id côté serveur ;
+         *     il n'est jamais stocké en clair.
+         */
+        CreateAccountRequest: {
+            /**
+             * Format: email
+             * @description Adresse e-mail du compte.
+             * @example user@example.com
+             */
+            email: string;
+            /**
+             * Format: password
+             * @description Mot de passe (longueur minimale vérifiée côté serveur, REQ-AUT-003).
+             * @example correct horse battery staple
+             */
+            password: string;
+        };
         /** @description Réponse d'état du serveur. */
         HealthResponse: {
             /** @description Nom du service. */
@@ -68,6 +105,37 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    createAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Compte créé — réponse identique que l'e-mail existe ou non */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Requête invalide */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     getHealth: {
         parameters: {
             query?: never;
