@@ -1,0 +1,17 @@
+[package]
+name = "xtask"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+clap = { workspace = true }
+serde_json = { workspace = true }
+utoipa = { workspace = true }
+wallos-server = { workspace = true }
+yaml-rust2 = "0.10"
+regex = "1.11"
+walkdir = "2.5"

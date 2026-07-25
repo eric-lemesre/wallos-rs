@@ -1,0 +1,5 @@
+# Exclusions de couverture wallos-rs.
+# Format : chaque entrée porte une justification écrite et une référence REQ ou OQ.
+# Les exclusions sans justification ou sans référence sont rejetées par la CI.
+
+# Aucune exclusion pour l'instant ; ce fichier documente le format attendu.

@@ -1,0 +1,39 @@
+[package]
+name = "wallos-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "wallos-server"
+path = "src/main.rs"
+
+[dependencies]
+wallos-core = { workspace = true }
+wallos-proto = { workspace = true }
+wallos-storage = { workspace = true }
+wallos-notifier = { workspace = true }
+wallos-req-macros = { workspace = true }
+
+anyhow = { workspace = true }
+axum = { workspace = true }
+chrono = { workspace = true }
+config = { workspace = true }
+dotenvy = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+utoipa = { workspace = true }
+utoipa-axum = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+reqwest = { workspace = true }
+tower = { workspace = true }
