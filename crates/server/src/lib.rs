@@ -2,11 +2,13 @@
 
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+use axum::http::{StatusCode, Uri, header};
+use axum::response::{IntoResponse, Response};
 use axum::{Json, Router};
 use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use wallos_core::requirement;
-use wallos_proto::HealthResponse;
+use wallos_proto::{HealthResponse, Problem, problem};
 
 /// API wallos-rs v1.
 #[derive(OpenApi)]
@@ -18,7 +20,7 @@ use wallos_proto::HealthResponse;
     ),
     servers((url = "/api/v1")),
     paths(api_v1_health),
-    components(schemas(HealthResponse))
+    components(schemas(HealthResponse, Problem))
 )]
 pub struct ApiDoc;
 
@@ -41,11 +43,31 @@ pub async fn api_v1_health() -> Json<HealthResponse> {
     })
 }
 
+/// Sérialise un [`Problem`] en réponse `application/problem+json`.
+#[requirement(REQ-SEC-002)]
+fn problem_response(status: StatusCode, body: Problem) -> Response {
+    let payload = serde_json::to_vec(&body).unwrap_or_default();
+    (
+        status,
+        [(header::CONTENT_TYPE, "application/problem+json")],
+        payload,
+    )
+        .into_response()
+}
+
+/// Réponse par défaut : toute route inconnue renvoie une erreur RFC 9457.
+#[requirement(REQ-SEC-002)]
+async fn not_found(uri: Uri) -> Response {
+    let body = problem(StatusCode::NOT_FOUND.as_u16(), "about:blank", "Not Found")
+        .with_instance(uri.path().to_string());
+    problem_response(StatusCode::NOT_FOUND, body)
+}
+
 /// Construit le routeur de l'application.
 #[requirement(REQ-OPS-001)]
 pub fn app() -> Router {
     let (router, _api) = OpenApiRouter::new()
         .routes(routes!(api_v1_health))
         .split_for_parts();
-    Router::new().nest("/api/v1", router)
+    Router::new().nest("/api/v1", router).fallback(not_found)
 }
