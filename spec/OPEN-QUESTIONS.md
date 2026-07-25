@@ -38,7 +38,10 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
 - **Recommandation agent** : A si le déploiement cible est un serveur, B si la cible est un
   auto-hébergement domestique minimal. C est à éviter : double surface de test pour un bénéfice
   marginal, et la porte de couverture à 100 % devrait alors couvrir les deux moteurs.
-- **Statut** : open
+- **Décision** : PostgreSQL côté serveur, SQLite côté client desktop/mobile (confirme H3).
+  Séparation structurelle par modalité, pas d'abstraction runtime-swappable. Voir
+  `docs/adr/0010-database-postgres-server-sqlite-client.md`.
+- **Statut** : resolved
 
 ---
 
