@@ -12,7 +12,11 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
 - **Options** : A) figer un tag Docker précis pour toute la durée du projet — B) suivre la
   dernière version et rejouer l'enregistrement des oracles à chaque montée
 - **Recommandation agent** : A. La comparaison n'a de sens que contre une cible immobile.
-- **Statut** : open
+- **Décision** : A. Cible gelée = Wallos `bellamy/wallos:5.4.2`
+  (`@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f`), dernière stable
+  au 2026-07-25, figée jusqu'à implémentation complète. Voir
+  `docs/adr/0011-legacy-reference-wallos-5-4-2.md`.
+- **Statut** : resolved
 
 ---
 
@@ -25,7 +29,10 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   C) foyer partagé avec droits d'écriture
 - **Recommandation agent** : A pour la v1. B et C multiplient la surface d'autorisation à tester
   sans bénéfice immédiat.
-- **Statut** : open
+- **Décision** : C. Le foyer est l'unité de propriété et d'isolation (`household_id` non nullable) ;
+  ses membres ont lecture + écriture. Un payeur est un membre du foyer. Voir
+  `docs/adr/0012-household-shared-ownership.md`. Tension avec l'oracle legacy signalée (OQ-007).
+- **Statut** : resolved
 
 ---
 
@@ -51,7 +58,10 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   avant d'être contraint à une resynchronisation complète.
 - **Options** : A) 30 jours — B) 90 jours — C) rétention illimitée
 - **Recommandation agent** : B. Un appareil absent plus de trois mois peut légitimement repartir de zéro.
-- **Statut** : open
+- **Décision** : A (30 jours) **par défaut, paramétrable côté serveur** (opérateur, jamais
+  l'utilisateur final). Au-delà de la fenêtre, resynchronisation complète imposée. Voir
+  `docs/adr/0013-tombstone-retention-30d-configurable.md`.
+- **Statut** : resolved
 
 ---
 
@@ -63,7 +73,10 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   derrière un trait, avec repli — C) taux saisis manuellement, sans dépendance réseau
 - **Recommandation agent** : B, avec C comme adaptateur de repli toujours disponible. Cela rend
   l'application testable sans réseau, ce qui est une condition de la couverture à 100 %.
-- **Statut** : open
+- **Décision** : B. Trait `RateProvider` dans `core`, adaptateurs HTTP côté serveur, repli en
+  chaîne, adaptateur manuel/dernier taux connu toujours disponible en bout de chaîne. Voir
+  `docs/adr/0014-exchange-rate-adapters-with-fallback.md`.
+- **Statut** : resolved
 
 ---
 
@@ -75,7 +88,9 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   native dès la v1
 - **Recommandation agent** : A. Le rapport effort/valeur de la coquille native est faible tant que
   l'UI partagée n'est pas stabilisée.
-- **Statut** : open
+- **Décision** : A. PWA responsive en v1 ; coquille native mobile reportée. L3 E2E = émulation de
+  viewport (pas de smoke natif Maestro en v1). Voir `docs/adr/0015-mobile-v1-responsive-web.md`.
+- **Statut** : resolved
 
 ---
 
@@ -87,4 +102,7 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   B) les exclure du périmètre
 - **Recommandation agent** : A, avec ADR obligatoire. Basculer sans trace reviendrait à laisser
   l'agent inventer la règle métier, ce que tout le dispositif cherche à empêcher.
-- **Statut** : open
+- **Décision** : A. Reclassement en `oracle: design` au cas par cas, via ADR dédié mettant à jour
+  `spec/requirements/*.md` + le lock ; jamais de basculement silencieux. Voir
+  `docs/adr/0016-legacy-non-reproducible-reclassify-to-design.md`.
+- **Statut** : resolved
