@@ -1,0 +1,903 @@
+version: 1
+generated_at: '2026-07-25T16:50:41Z'
+source: spec/requirements/
+requirements:
+- id: REQ-AUT-001
+  title: Création d'un compte utilisateur
+  domain: auth
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: design
+  depends_on: []
+- id: REQ-AUT-002
+  title: Authentification par e-mail et mot de passe
+  domain: auth
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-AUT-001
+- id: REQ-AUT-003
+  title: Politique de mot de passe
+  domain: auth
+  status: accepted
+  criticality: medium
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: design
+  depends_on: []
+- id: REQ-AUT-004
+  title: Session web par jeton opaque en cookie
+  domain: auth
+  status: accepted
+  criticality: high
+  layer:
+  - api
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-AUT-002
+- id: REQ-AUT-005
+  title: Jeton d'appareil pour les modalités desktop et mobile
+  domain: auth
+  status: accepted
+  criticality: high
+  layer:
+  - api
+  - ui
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-AUT-002
+- id: REQ-AUT-006
+  title: Liste et révocation des appareils
+  domain: auth
+  status: accepted
+  criticality: high
+  layer:
+  - api
+  - ui
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-AUT-005
+- id: REQ-AUT-007
+  title: Changement de mot de passe
+  domain: auth
+  status: accepted
+  criticality: high
+  layer:
+  - api
+  - ui
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-AUT-003
+  - REQ-AUT-006
+- id: REQ-AUT-008
+  title: Limitation du taux de tentatives d'authentification
+  domain: auth
+  status: accepted
+  criticality: high
+  layer:
+  - api
+  e2e: optional
+  oracle: design
+  depends_on:
+  - REQ-AUT-002
+- id: REQ-AUT-009
+  title: Déconnexion
+  domain: auth
+  status: accepted
+  criticality: medium
+  layer:
+  - api
+  - ui
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-AUT-004
+- id: REQ-CAT-001
+  title: Gestion des catégories
+  domain: categories
+  status: accepted
+  criticality: medium
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SEC-001
+- id: REQ-CAT-002
+  title: Catégories par défaut à la création du compte
+  domain: categories
+  status: accepted
+  criticality: low
+  layer:
+  - core
+  - api
+  e2e: optional
+  oracle: legacy
+  depends_on:
+  - REQ-CAT-001
+  - REQ-I18N-001
+- id: REQ-CAT-003
+  title: Suppression d'une catégorie référencée
+  domain: categories
+  status: accepted
+  criticality: medium
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-CAT-001
+- id: REQ-CAT-004
+  title: Unicité du nom de catégorie par compte
+  domain: categories
+  status: accepted
+  criticality: low
+  layer:
+  - core
+  - api
+  e2e: optional
+  oracle: design
+  depends_on:
+  - REQ-CAT-001
+- id: REQ-CAT-005
+  title: Ordre d'affichage des catégories
+  domain: categories
+  status: accepted
+  criticality: low
+  layer:
+  - api
+  - ui
+  e2e: optional
+  oracle: design
+  depends_on:
+  - REQ-CAT-001
+- id: REQ-CUR-001
+  title: Devise de référence du compte
+  domain: currencies
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on: []
+- id: REQ-CUR-002
+  title: Représentation décimale des montants
+  domain: currencies
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  e2e: n-a
+  oracle: design
+  depends_on: []
+- id: REQ-CUR-003
+  title: Récupération des taux de change
+  domain: currencies
+  status: accepted
+  criticality: high
+  layer:
+  - api
+  e2e: optional
+  oracle: design
+  depends_on:
+  - REQ-CUR-001
+- id: REQ-CUR-004
+  title: Mode dégradé en cas d'échec du fournisseur de taux
+  domain: currencies
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-CUR-003
+- id: REQ-CUR-005
+  title: Règle d'arrondi
+  domain: currencies
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  e2e: n-a
+  oracle: legacy
+  depends_on:
+  - REQ-CUR-002
+- id: REQ-CUR-006
+  title: Formatage localisé des montants
+  domain: currencies
+  status: accepted
+  criticality: medium
+  layer:
+  - ui
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-CUR-005
+  - REQ-I18N-003
+- id: REQ-CUR-007
+  title: Référentiel des devises supportées
+  domain: currencies
+  status: accepted
+  criticality: medium
+  layer:
+  - core
+  - api
+  - ui
+  e2e: optional
+  oracle: legacy
+  depends_on: []
+- id: REQ-NOT-001
+  title: Rappel avant échéance
+  domain: notifications
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-012
+- id: REQ-NOT-002
+  title: Idempotence de l'ordonnanceur
+  domain: notifications
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-NOT-001
+  - REQ-SUB-014
+- id: REQ-NOT-003
+  title: Canal e-mail
+  domain: notifications
+  status: accepted
+  criticality: high
+  layer:
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-NOT-001
+  - REQ-I18N-001
+- id: REQ-NOT-004
+  title: Canaux de messagerie tiers
+  domain: notifications
+  status: accepted
+  criticality: medium
+  layer:
+  - api
+  - ui
+  e2e: optional
+  oracle: legacy
+  depends_on:
+  - REQ-NOT-001
+- id: REQ-NOT-005
+  title: Webhook générique
+  domain: notifications
+  status: accepted
+  criticality: medium
+  layer:
+  - api
+  - ui
+  e2e: optional
+  oracle: legacy
+  depends_on:
+  - REQ-NOT-001
+  - REQ-SEC-005
+- id: REQ-NOT-006
+  title: Test d'un canal de notification
+  domain: notifications
+  status: accepted
+  criticality: medium
+  layer:
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-NOT-003
+  - REQ-NOT-004
+- id: REQ-NOT-007
+  title: Politique de réessai et d'abandon
+  domain: notifications
+  status: accepted
+  criticality: medium
+  layer:
+  - core
+  - api
+  e2e: optional
+  oracle: design
+  depends_on:
+  - REQ-NOT-002
+- id: REQ-NOT-008
+  title: Notification native sur desktop et mobile
+  domain: notifications
+  status: accepted
+  criticality: low
+  layer:
+  - ui
+  e2e: optional
+  oracle: design
+  depends_on:
+  - REQ-NOT-001
+- id: REQ-SEC-001
+  title: Isolation stricte des données entre comptes
+  domain: security
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-AUT-002
+- id: REQ-SEC-002
+  title: Format d'erreur uniforme sans fuite d'information
+  domain: security
+  status: accepted
+  criticality: high
+  layer:
+  - api
+  e2e: optional
+  oracle: design
+  depends_on: []
+- id: REQ-SEC-003
+  title: Journalisation sans secret
+  domain: security
+  status: accepted
+  criticality: high
+  layer:
+  - api
+  e2e: n-a
+  oracle: design
+  depends_on: []
+- id: REQ-SEC-004
+  title: Chiffrement au repos des secrets de configuration
+  domain: security
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  e2e: n-a
+  oracle: design
+  depends_on:
+  - REQ-NOT-004
+- id: REQ-SEC-005
+  title: Protection contre la falsification de requête côté serveur
+  domain: security
+  status: accepted
+  criticality: high
+  layer:
+  - api
+  e2e: optional
+  oracle: design
+  depends_on:
+  - REQ-NOT-005
+  - REQ-SUB-015
+- id: REQ-SEC-006
+  title: En-têtes de sécurité et politique de contenu
+  domain: security
+  status: accepted
+  criticality: medium
+  layer:
+  - api
+  - ui
+  e2e: optional
+  oracle: design
+  depends_on: []
+- id: REQ-I18N-001
+  title: Choix et persistance de la langue
+  domain: i18n
+  status: accepted
+  criticality: medium
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-AUT-001
+- id: REQ-I18N-002
+  title: Absence de chaîne littérale dans le code
+  domain: i18n
+  status: accepted
+  criticality: medium
+  layer:
+  - ui
+  e2e: n-a
+  oracle: design
+  depends_on:
+  - REQ-I18N-001
+- id: REQ-I18N-003
+  title: Formats de date et de nombre localisés
+  domain: i18n
+  status: accepted
+  criticality: medium
+  layer:
+  - ui
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-I18N-001
+  - REQ-CUR-006
+- id: REQ-I18N-004
+  title: Repli sur la langue de référence
+  domain: i18n
+  status: accepted
+  criticality: low
+  layer:
+  - ui
+  e2e: optional
+  oracle: design
+  depends_on:
+  - REQ-I18N-002
+- id: REQ-STA-001
+  title: Normalisation du coût mensuel
+  domain: statistics
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-003
+  - REQ-CUR-005
+- id: REQ-STA-002
+  title: Coût annuel normalisé
+  domain: statistics
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-STA-001
+- id: REQ-STA-003
+  title: Exclusion des abonnements non actifs des agrégats
+  domain: statistics
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-008
+  - REQ-SUB-009
+  - REQ-SUB-010
+- id: REQ-STA-004
+  title: Répartition par catégorie et par payeur
+  domain: statistics
+  status: accepted
+  criticality: medium
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-STA-001
+  - REQ-CAT-001
+- id: REQ-STA-005
+  title: Échéancier des prochains paiements
+  domain: statistics
+  status: accepted
+  criticality: medium
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-012
+  - REQ-SUB-013
+  - REQ-SUB-009
+- id: REQ-STA-006
+  title: Évolution du coût sur douze mois
+  domain: statistics
+  status: accepted
+  criticality: low
+  layer:
+  - core
+  - api
+  - ui
+  e2e: optional
+  oracle: design
+  depends_on:
+  - REQ-STA-001
+- id: REQ-STA-007
+  title: Cohérence entre les agrégats et les filtres actifs
+  domain: statistics
+  status: accepted
+  criticality: medium
+  layer:
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-006
+  - REQ-STA-001
+- id: REQ-STA-008
+  title: Détermination des agrégats
+  domain: statistics
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  e2e: n-a
+  oracle: design
+  depends_on: []
+- id: REQ-SUB-001
+  title: Modèle de données d'un abonnement
+  domain: subscriptions
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  e2e: n-a
+  oracle: legacy
+  depends_on: []
+- id: REQ-SUB-002
+  title: Création d'un abonnement
+  domain: subscriptions
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-001
+  - REQ-SUB-003
+- id: REQ-SUB-003
+  title: Modèle de cycle de facturation
+  domain: subscriptions
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  e2e: n-a
+  oracle: legacy
+  depends_on: []
+- id: REQ-SUB-004
+  title: Modification d'un abonnement
+  domain: subscriptions
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-002
+  - REQ-SUB-012
+- id: REQ-SUB-005
+  title: Suppression d'un abonnement
+  domain: subscriptions
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-SYN-002
+- id: REQ-SUB-006
+  title: Liste des abonnements et filtres
+  domain: subscriptions
+  status: accepted
+  criticality: high
+  layer:
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-001
+- id: REQ-SUB-007
+  title: Recherche et tri
+  domain: subscriptions
+  status: accepted
+  criticality: medium
+  layer:
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-006
+  - REQ-STA-001
+- id: REQ-SUB-008
+  title: Abonnement désactivé
+  domain: subscriptions
+  status: accepted
+  criticality: medium
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-001
+- id: REQ-SUB-009
+  title: Date de fin et annulation programmée
+  domain: subscriptions
+  status: accepted
+  criticality: medium
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-012
+- id: REQ-SUB-010
+  title: Période d'essai gratuit
+  domain: subscriptions
+  status: accepted
+  criticality: medium
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-001
+  - REQ-NOT-001
+- id: REQ-SUB-011
+  title: Moyen de paiement
+  domain: subscriptions
+  status: accepted
+  criticality: low
+  layer:
+  - core
+  - api
+  - ui
+  e2e: optional
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-001
+- id: REQ-SUB-012
+  title: Calcul de la prochaine échéance pour un cycle mensuel
+  domain: subscriptions
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-003
+- id: REQ-SUB-013
+  title: Calcul de la prochaine échéance pour les cycles jour, semaine et année
+  domain: subscriptions
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  e2e: optional
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-003
+  - REQ-SUB-012
+- id: REQ-SUB-014
+  title: Rattrapage des échéances passées
+  domain: subscriptions
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-012
+  - REQ-NOT-002
+- id: REQ-SUB-015
+  title: Logo d'abonnement
+  domain: subscriptions
+  status: accepted
+  criticality: low
+  layer:
+  - api
+  - ui
+  e2e: optional
+  oracle: design
+  depends_on:
+  - REQ-SUB-001
+- id: REQ-SUB-016
+  title: Import et export des données
+  domain: subscriptions
+  status: accepted
+  criticality: medium
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-SUB-001
+  - REQ-CAT-001
+- id: REQ-SUB-017
+  title: Rattachement à un payeur
+  domain: subscriptions
+  status: accepted
+  criticality: medium
+  layer:
+  - core
+  - api
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-SUB-001
+  - REQ-STA-004
+- id: REQ-SYN-001
+  title: Horodatage de modification et identifiants stables
+  domain: sync
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  e2e: n-a
+  oracle: design
+  depends_on: []
+- id: REQ-SYN-002
+  title: Pierres tombales
+  domain: sync
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-SYN-001
+- id: REQ-SYN-003
+  title: Récupération incrémentale par curseur
+  domain: sync
+  status: accepted
+  criticality: high
+  layer:
+  - api
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-SYN-001
+  - REQ-SYN-002
+- id: REQ-SYN-004
+  title: Poussée des modifications locales
+  domain: sync
+  status: accepted
+  criticality: high
+  layer:
+  - api
+  - ui
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-SYN-001
+  - REQ-SYN-006
+- id: REQ-SYN-005
+  title: Résolution de conflit
+  domain: sync
+  status: accepted
+  criticality: high
+  layer:
+  - core
+  - api
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-SYN-001
+  - REQ-SYN-002
+- id: REQ-SYN-006
+  title: Idempotence des opérations d'écriture
+  domain: sync
+  status: accepted
+  criticality: high
+  layer:
+  - api
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-SYN-001
+- id: REQ-SYN-007
+  title: Fonctionnement hors ligne
+  domain: sync
+  status: accepted
+  criticality: high
+  layer:
+  - ui
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-SYN-004
+  - REQ-SYN-005
+- id: REQ-SYN-008
+  title: Appairage et synchronisation initiale
+  domain: sync
+  status: accepted
+  criticality: medium
+  layer:
+  - api
+  - ui
+  e2e: required
+  oracle: design
+  depends_on:
+  - REQ-AUT-005
+  - REQ-SYN-003
+- id: REQ-OPS-001
+  title: Endpoint de santé
+  domain: ops
+  status: accepted
+  criticality: low
+  layer:
+  - api
+  e2e: optional
+  oracle: design
+  depends_on: []

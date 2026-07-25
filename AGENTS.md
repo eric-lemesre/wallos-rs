@@ -10,6 +10,7 @@
 
 | # | Règle | Vérification |
 |---|-------|--------------|
+| R0 | Les commits créés par un agent IA **ne mentionnent jamais** `Co-authored-by` ni tout autre mécanisme d'attribution tierce. L'auteur d'un commit est l'humain responsable du dépôt. | revue + `git log` |
 | R1 | Toute ligne de code de production est rattachée à **au moins une exigence** (`REQ-*`) | `cargo xtask trace` |
 | R2 | Aucune exigence `status: accepted` sans **implémentation ET test** | `cargo xtask trace` |
 | R3 | **Interdiction absolue** d'abaisser un seuil de couverture, de supprimer un test, de le marquer `#[ignore]` / `test.skip` pour faire passer la CI | revue + CI |

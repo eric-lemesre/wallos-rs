@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "required": ["version", "waivers"],
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "waivers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["req_id", "justification", "expires_at", "reference"],
+        "properties": {
+          "req_id": { "type": "string", "pattern": "^REQ-[A-Z]+-[0-9]+$" },
+          "justification": { "type": "string", "minLength": 20 },
+          "expires_at": { "type": "string", "format": "date" },
+          "reference": { "type": "string", "pattern": "^(REQ-[A-Z]+-[0-9]+|OQ-[0-9]+)$" }
+        }
+      }
+    }
+  }
+}

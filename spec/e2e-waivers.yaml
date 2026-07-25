@@ -1,0 +1,4 @@
+version: 1
+# Les waivers E2E doivent porter une justification, une date d'expiration et une référence REQ/OQ.
+# Un waiver sans date d'expiration est une erreur CI.
+waivers: []
