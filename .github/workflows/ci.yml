@@ -40,3 +40,21 @@ jobs:
         run: cargo deny check
       - name: audit
         run: cargo audit
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: install
+        working-directory: frontend/ui
+        run: npm ci
+      # Porte 9 : le client TS généré ne doit jamais diverger du contrat OpenAPI.
+      - name: ts-types-drift
+        working-directory: frontend/ui
+        run: npm run ts-types-drift
+      - name: typecheck
+        working-directory: frontend/ui
+        run: npm run typecheck
