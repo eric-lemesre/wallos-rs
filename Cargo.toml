@@ -1,0 +1,94 @@
+[workspace]
+members = [
+    "crates/core",
+    "crates/proto",
+    "crates/storage",
+    "crates/server",
+    "crates/notifier",
+    "crates/client",
+    "crates/desktop",
+    "crates/req-macros",
+    "xtask",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Eric Lemesre <eric.lemesre@gmail.com>"]
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/eric-lemesre/wallos-rs"
+rust-version = "1.86"
+
+[workspace.dependencies]
+# Workspace crates (version lockstep)
+wallos-core = { path = "crates/core" }
+wallos-proto = { path = "crates/proto" }
+wallos-storage = { path = "crates/storage" }
+wallos-server = { path = "crates/server" }
+wallos-notifier = { path = "crates/notifier" }
+wallos-client = { path = "crates/client" }
+wallos-desktop = { path = "crates/desktop" }
+wallos-req-macros = { path = "crates/req-macros" }
+
+# Async / runtime
+tokio = { version = "1.44", features = ["full"] }
+tokio-util = "0.7"
+tokio-cron-scheduler = "0.13"
+
+# Web / API
+axum = { version = "0.8", features = ["macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
+hyper = { version = "1.6", features = ["full"] }
+
+# OpenAPI
+utoipa = { version = "5.2", features = ["axum_extras", "chrono", "uuid", "decimal"] }
+utoipa-axum = "0.2"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+
+# Money
+rust_decimal = { version = "1.37", features = ["serde-str", "maths"] }
+
+# IDs
+uuid = { version = "1.16", features = ["v4", "v7", "serde"] }
+
+# DB
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "chrono", "uuid", "rust_decimal", "migrate"] }
+
+# Auth / security
+argon2 = "0.6"
+password-auth = "0.4"
+rand = "0.9"
+secrecy = "0.10"
+
+# Errors
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Config
+config = "0.15"
+dotenvy = "0.15"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+
+# Testing
+tempfile = "3.21"
+proptest = "1.6"
+insta = "1.42"
+
+# CLI / tooling
+clap = { version = "4.5", features = ["derive"] }
+xshell = "0.2"
