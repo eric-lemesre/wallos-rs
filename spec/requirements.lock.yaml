@@ -567,7 +567,7 @@ requirements:
 - id: REQ-STA-008
   title: Détermination des agrégats
   domain: statistics
-  status: accepted
+  status: implemented
   criticality: high
   layer:
   - core

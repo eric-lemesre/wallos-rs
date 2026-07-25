@@ -162,7 +162,7 @@ depends_on: [REQ-SUB-006, REQ-STA-001]
 id: REQ-STA-008
 title: Détermination des agrégats
 domain: statistics
-status: accepted
+status: implemented
 criticality: high
 layer: [core]
 e2e: n-a
