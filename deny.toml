@@ -5,11 +5,18 @@ no-default-features = false
 [advisories]
 version = 2
 yanked = "warn"
-ignore = []
+ignore = [
+    # `paste` est signalé « unmaintained » (RUSTSEC-2024-0436) — informatif, PAS une vulnérabilité.
+    # Il est tiré transitivement par `utoipa-axum` (proc-macro de génération de routes OpenAPI) et
+    # ne peut être retiré sans abandonner utoipa-axum. Aucune surface d'exécution exploitable.
+    "RUSTSEC-2024-0436",
+]
 
 [licenses]
 version = 2
 allow = [
+    # Licence du projet lui-même (tous les crates wallos-*).
+    "AGPL-3.0-or-later",
     "MIT",
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
@@ -19,14 +26,23 @@ allow = [
     "MPL-2.0",
     "AGPL-3.0",
     "Unicode-DFS-2016",
+    # Licence Unicode v3 : portée par les crates ICU (`icu_*`), tirées transitivement par
+    # `url`/`idna` (via reqwest, sqlx). Permissive, sans clause copyleft.
+    "Unicode-3.0",
+    # Licence zlib : permissive, tirée transitivement (ex. crates de hachage/compression).
+    "Zlib",
+    # CDLA-Permissive-2.0 : licence de données permissive (ex. jeux de certificats/racines TLS),
+    # tirée transitivement. Sans copyleft.
+    "CDLA-Permissive-2.0",
     "CC0-1.0",
     "Unlicense",
 ]
 confidence-threshold = 0.8
 
+# Nos propres crates sont sous AGPL-3.0-or-later (chaîne SPDX exacte du workspace).
 [[licenses.exceptions]]
 name = "wallos-*"
-allow = ["AGPL-3.0"]
+allow = ["AGPL-3.0-or-later"]
 
 [bans]
 multiple-versions = "warn"
