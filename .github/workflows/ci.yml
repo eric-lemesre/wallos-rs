@@ -26,6 +26,8 @@ jobs:
         run: cargo xtask trace
       - name: lint-money
         run: cargo xtask lint-money
+      - name: lint-clock
+        run: cargo xtask lint-clock
 
       - name: tests
         run: cargo test --workspace

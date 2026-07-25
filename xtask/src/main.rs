@@ -8,6 +8,7 @@
 //! - `cargo xtask api-coverage` : 100% des operation_id testés
 //! - `cargo xtask authz-coverage` : 3 tests d'autorisation par operation_id
 //! - `cargo xtask lint-money` : interdiction des flottants monétaires
+//! - `cargo xtask lint-clock` : interdiction des accès à l'horloge dans `core` (REQ-STA-008)
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -39,6 +40,8 @@ enum Command {
     AuthzCoverage,
     /// Interdit les flottants dans les montants.
     LintMoney,
+    /// Interdit les accès directs à l'horloge système dans `core`.
+    LintClock,
 }
 
 fn workspace_root() -> PathBuf {
@@ -59,6 +62,7 @@ fn main() {
         Command::ApiCoverage => api_coverage::run(&root),
         Command::AuthzCoverage => authz_coverage::run(&root),
         Command::LintMoney => lint_money::run(&root),
+        Command::LintClock => lint_clock::run(&root),
     };
     std::process::exit(code);
 }
@@ -502,6 +506,46 @@ mod lint_money {
             0
         } else {
             eprintln!("Float types found in production crates:");
+            for v in violations {
+                eprintln!("  {v}");
+            }
+            1
+        }
+    }
+}
+
+/// Interdit les accès directs à l'horloge système dans le domaine pur `core`.
+///
+/// REQ-STA-008 : un agrégat dépendant de l'horloge n'est pas reproductible. La date de
+/// référence doit toujours être un paramètre explicite (`core::stats::AsOf`).
+mod lint_clock {
+    use regex::Regex;
+    use std::path::Path;
+    use walkdir::WalkDir;
+
+    pub fn run(root: &Path) -> i32 {
+        let re = Regex::new(r"\b(Utc|Local|SystemTime|Instant|OffsetDateTime)::now\b|\bnow_utc\b")
+            .expect("valid regex");
+        let mut violations = vec![];
+        for entry in WalkDir::new(root.join("crates").join("core"))
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("rs"))
+        {
+            let path = entry.path();
+            let content = std::fs::read_to_string(path).unwrap_or_default();
+            for (i, line) in content.lines().enumerate() {
+                if re.is_match(line) {
+                    violations.push(format!("{}:{}: {}", path.display(), i + 1, line.trim()));
+                }
+            }
+        }
+
+        if violations.is_empty() {
+            println!("No system-clock access in core.");
+            0
+        } else {
+            eprintln!("System-clock access found in core (REQ-STA-008):");
             for v in violations {
                 eprintln!("  {v}");
             }
