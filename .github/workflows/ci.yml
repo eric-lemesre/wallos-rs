@@ -76,3 +76,7 @@ jobs:
       - name: typecheck
         working-directory: frontend/ui
         run: npm run typecheck
+      # Porte 10 : tests de composants (vitest + Testing Library).
+      - name: test
+        working-directory: frontend/ui
+        run: npm test

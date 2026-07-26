@@ -19,4 +19,11 @@ export type HealthResponse = components["schemas"]["HealthResponse"];
  */
 export type Problem = components["schemas"]["Problem"];
 
+/**
+ * Corps de la requête de création de compte, issu du contrat.
+ *
+ * @implements REQ-AUT-001
+ */
+export type CreateAccountRequest = components["schemas"]["CreateAccountRequest"];
+
 export type { paths, components } from "./schema";
