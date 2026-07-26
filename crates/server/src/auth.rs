@@ -29,8 +29,22 @@ use crate::problem_response;
 
 /// Nom du cookie de session.
 const SESSION_COOKIE: &str = "session";
-/// Durée de vie d'une session, en heures.
-const SESSION_TTL_HOURS: i64 = 24;
+
+/// Durée d'inactivité (minutes) au-delà de laquelle une session est rejetée (REQ-AUT-004).
+/// Configurable côté serveur via `SESSION_IDLE_TTL_MINUTES` (défaut 30), jamais côté client.
+static SESSION_IDLE_TTL_MINUTES: LazyLock<i64> = LazyLock::new(|| {
+    std::env::var("SESSION_IDLE_TTL_MINUTES")
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok())
+        .filter(|m| *m > 0)
+        .unwrap_or(30)
+});
+
+/// Fenêtre d'inactivité d'une session (REQ-AUT-004).
+#[requirement(REQ-AUT-004)]
+fn session_idle_ttl() -> Duration {
+    Duration::minutes(*SESSION_IDLE_TTL_MINUTES)
+}
 
 /// Hash argon2id factice, calculé une fois, pour rendre la vérification timing-safe quand le compte
 /// n'existe pas (on dépense un temps comparable à une vraie vérification).
@@ -115,7 +129,7 @@ pub async fn create_session(
 
     let token = generate_token();
     let token_hash = Sha256::digest(token.as_bytes());
-    let expires_at = Utc::now() + Duration::hours(SESSION_TTL_HOURS);
+    let expires_at = Utc::now() + session_idle_ttl();
 
     if SessionRepository::new(db.pool())
         .create(&actor, token_hash.as_slice(), expires_at)
@@ -128,13 +142,10 @@ pub async fn create_session(
         );
     }
 
-    // Cookie opaque : aucune donnée métier, HttpOnly + SameSite=Lax (+ Secure par défaut).
-    // REQ-AUT-004 affinera (rotation, expiration d'inactivité).
+    // Cookie de session opaque : aucune donnée métier, HttpOnly + SameSite=Lax (+ Secure par
+    // défaut). Pas de Max-Age : le serveur fait autorité sur l'expiration (inactivité glissante).
     let secure = if *COOKIE_SECURE { "; Secure" } else { "" };
-    let cookie = format!(
-        "{SESSION_COOKIE}={token}; HttpOnly{secure}; SameSite=Lax; Path=/; Max-Age={}",
-        SESSION_TTL_HOURS * 3600
-    );
+    let cookie = format!("{SESSION_COOKIE}={token}; HttpOnly{secure}; SameSite=Lax; Path=/");
     (StatusCode::OK, [(header::SET_COOKIE, cookie)]).into_response()
 }
 
@@ -155,11 +166,16 @@ where
         };
         let token_hash = Sha256::digest(token.as_bytes());
         let db = Db::from_ref(state);
-        match SessionRepository::new(db.pool())
-            .find_valid(token_hash.as_slice(), Utc::now())
-            .await
-        {
-            Ok(Some(actor)) => Ok(Self(actor)),
+        let repo = SessionRepository::new(db.pool());
+        let now = Utc::now();
+        match repo.find_valid(token_hash.as_slice(), now).await {
+            Ok(Some(actor)) => {
+                // Inactivité glissante : repousser l'expiration (best-effort, REQ-AUT-004).
+                let _ = repo
+                    .touch(token_hash.as_slice(), now + session_idle_ttl())
+                    .await;
+                Ok(Self(actor))
+            }
             _ => Err(Unauthorized),
         }
     }

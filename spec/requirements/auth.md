@@ -80,7 +80,7 @@ depends_on: []
 id: REQ-AUT-004
 title: Session web par jeton opaque en cookie
 domain: auth
-status: accepted
+status: verified
 criticality: high
 layer: [api]
 e2e: required

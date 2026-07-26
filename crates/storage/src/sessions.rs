@@ -48,6 +48,26 @@ impl<'a> SessionRepository<'a> {
         Ok(())
     }
 
+    /// Repousse l'expiration d'une session (expiration d'inactivité glissante, REQ-AUT-004).
+    ///
+    /// Sans effet si le jeton est inconnu (idempotent).
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-AUT-004)]
+    pub async fn touch(
+        &self,
+        token_hash: &[u8],
+        new_expires_at: DateTime<Utc>,
+    ) -> Result<(), StorageError> {
+        sqlx::query("update sessions set expires_at = $2 where token_hash = $1")
+            .bind(token_hash)
+            .bind(new_expires_at)
+            .execute(self.pool)
+            .await?;
+        Ok(())
+    }
+
     /// Retrouve le contexte d'appelant d'une session **valide** (non expirée à `now`).
     ///
     /// Renvoie `None` si le jeton est inconnu ou la session expirée — l'appelant traduit en `401`.
