@@ -1,0 +1,13 @@
+{
+  "signup": {
+    "email": "Email",
+    "password": "Password",
+    "submit": "Create account",
+    "success": "Account created",
+    "error": "Something went wrong",
+    "validation": {
+      "emailInvalid": "Enter a valid email address",
+      "passwordTooShort": "Password must be at least 12 characters"
+    }
+  }
+}
