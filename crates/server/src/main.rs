@@ -20,6 +20,12 @@ async fn main() -> anyhow::Result<()> {
     info!("wallos-server listening on {addr}");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    // `into_make_service_with_connect_info` expose l'adresse du pair aux handlers (IP source pour la
+    // limitation du taux d'authentification, REQ-AUT-008).
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }

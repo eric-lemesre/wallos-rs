@@ -5,10 +5,12 @@
 
 pub mod db;
 pub mod error;
+pub mod login_attempts;
 pub mod sessions;
 pub mod users;
 
 pub use db::Db;
 pub use error::StorageError;
+pub use login_attempts::LoginAttemptRepository;
 pub use sessions::SessionRepository;
 pub use users::{CreatedAccount, Credentials, StoredUser, UserRepository};

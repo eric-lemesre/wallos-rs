@@ -9,20 +9,22 @@
 
 use std::sync::LazyLock;
 
+use std::net::SocketAddr;
+
 use argon2::password_hash::SaltString;
 use argon2::password_hash::rand_core::OsRng;
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::Json;
-use axum::extract::{FromRef, FromRequestParts, State};
+use axum::extract::{ConnectInfo, FromRef, FromRequestParts, State};
 use axum::http::request::Parts;
-use axum::http::{HeaderMap, StatusCode, header};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use sha2::{Digest, Sha256};
 use wallos_core::actor::Actor;
 use wallos_core::requirement;
 use wallos_proto::{CreateSessionRequest, CurrentUser, problem};
-use wallos_storage::{Db, SessionRepository, UserRepository};
+use wallos_storage::{Db, LoginAttemptRepository, SessionRepository, UserRepository};
 
 use crate::accounts::hash_password;
 use crate::problem_response;
@@ -55,6 +57,94 @@ static DUMMY_HASH: LazyLock<String> =
 /// via `SESSION_COOKIE_SECURE=false` uniquement pour les tests e2e locaux servis en HTTP.
 static COOKIE_SECURE: LazyLock<bool> =
     LazyLock::new(|| std::env::var("SESSION_COOKIE_SECURE").as_deref() != Ok("false"));
+
+/// Nombre de tentatives échouées, par compte ou par IP, au-delà duquel l'authentification est
+/// limitée (REQ-AUT-008). Configurable côté serveur via `AUTH_RATELIMIT_MAX_ATTEMPTS` (défaut 5).
+static RATELIMIT_MAX_ATTEMPTS: LazyLock<i64> = LazyLock::new(|| {
+    std::env::var("AUTH_RATELIMIT_MAX_ATTEMPTS")
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok())
+        .filter(|m| *m > 0)
+        .unwrap_or(5)
+});
+
+/// Largeur (secondes) de la fenêtre glissante de comptage des tentatives (REQ-AUT-008).
+/// Configurable côté serveur via `AUTH_RATELIMIT_WINDOW_SECONDS` (défaut 900 = 15 min).
+static RATELIMIT_WINDOW_SECONDS: LazyLock<i64> = LazyLock::new(|| {
+    std::env::var("AUTH_RATELIMIT_WINDOW_SECONDS")
+        .ok()
+        .and_then(|v| v.parse::<i64>().ok())
+        .filter(|s| *s > 0)
+        .unwrap_or(900)
+});
+
+/// Fenêtre glissante de limitation du taux d'authentification (REQ-AUT-008).
+#[requirement(REQ-AUT-008)]
+fn ratelimit_window() -> Duration {
+    Duration::seconds(*RATELIMIT_WINDOW_SECONDS)
+}
+
+/// Décide, à partir des statistiques d'une clé (compte ou IP), si l'accès est limité.
+///
+/// Renvoie `Some(retry_after_secs)` (≥ 1) si le nombre d'échecs atteint le seuil dans la fenêtre —
+/// l'instant de retry étant la fin de fenêtre du plus ancien échec observé —, sinon `None`.
+/// Fonction **pure** : l'instant est injecté, aucun accès à l'horloge.
+#[requirement(REQ-AUT-008)]
+fn blocked_retry_after(
+    count: i64,
+    earliest: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+    window: Duration,
+    max: i64,
+) -> Option<i64> {
+    if count < max {
+        return None;
+    }
+    let earliest = earliest?;
+    Some(((earliest + window) - now).num_seconds().max(1))
+}
+
+/// IP source de la requête (REQ-AUT-008), extraite de `ConnectInfo` posé par le service.
+///
+/// Extracteur **infaillible** : `None` quand aucune `ConnectInfo` n'est disponible (p. ex. tests
+/// `oneshot` sans `into_make_service_with_connect_info`) — la dimension IP est alors ignorée.
+pub struct ClientIp(Option<String>);
+
+impl<S> FromRequestParts<S> for ClientIp
+where
+    S: Send + Sync,
+{
+    type Rejection = std::convert::Infallible;
+
+    #[requirement(REQ-AUT-008)]
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let ip = parts
+            .extensions
+            .get::<ConnectInfo<SocketAddr>>()
+            .map(|ConnectInfo(addr)| addr.ip().to_string());
+        Ok(Self(ip))
+    }
+}
+
+/// Rejet `429` : trop de tentatives d'authentification (REQ-AUT-008). Porte l'en-tête `Retry-After`
+/// (secondes). Type unitaire léger, calqué sur [`Unauthorized`].
+struct RateLimited {
+    retry_after: i64,
+}
+
+impl IntoResponse for RateLimited {
+    #[requirement(REQ-AUT-008)]
+    fn into_response(self) -> Response {
+        let mut response = problem_response(
+            StatusCode::TOO_MANY_REQUESTS,
+            problem(429, "about:blank", "Too Many Requests"),
+        );
+        response
+            .headers_mut()
+            .insert(header::RETRY_AFTER, HeaderValue::from(self.retry_after));
+        response
+    }
+}
 
 /// Vérifie un mot de passe contre un hash argon2id stocké.
 #[requirement(REQ-AUT-002)]
@@ -95,12 +185,18 @@ impl IntoResponse for Unauthorized {
     path = "/sessions",
     operation_id = "createSession",
     request_body = CreateSessionRequest,
-    extensions(("x-requirements" = json!(["REQ-AUT-002"]))),
+    extensions(("x-requirements" = json!(["REQ-AUT-002", "REQ-AUT-008"]))),
     responses(
         (status = 200, description = "Session ouverte ; cookie de session posé"),
         (
             status = 401,
             description = "Identifiants invalides",
+            body = wallos_proto::Problem,
+            content_type = "application/problem+json"
+        ),
+        (
+            status = 429,
+            description = "Trop de tentatives ; réessayer après l'en-tête Retry-After",
             body = wallos_proto::Problem,
             content_type = "application/problem+json"
         )
@@ -109,8 +205,40 @@ impl IntoResponse for Unauthorized {
 #[requirement(REQ-AUT-002)]
 pub async fn create_session(
     State(db): State<Db>,
+    ClientIp(ip): ClientIp,
     Json(req): Json<CreateSessionRequest>,
 ) -> Response {
+    // Limitation du taux (REQ-AUT-008) : évaluée AVANT toute vérification d'identifiants, afin de
+    // rejeter en 429 même si le mot de passe est correct. Compteurs par compte ET par IP source.
+    let now = Utc::now();
+    let since = now - ratelimit_window();
+    let max = *RATELIMIT_MAX_ATTEMPTS;
+    let window = ratelimit_window();
+    let attempts = LoginAttemptRepository::new(db.pool());
+
+    // Best-effort : une défaillance de lecture ne doit pas bloquer l'authentification légitime.
+    let (email_count, email_earliest) = attempts
+        .count_and_earliest_email(&req.email, since)
+        .await
+        .unwrap_or((0, None));
+    let (ip_count, ip_earliest) = match ip.as_deref() {
+        Some(ip) => attempts
+            .count_and_earliest_ip(ip, since)
+            .await
+            .unwrap_or((0, None)),
+        None => (0, None),
+    };
+    let retry_after = [
+        blocked_retry_after(email_count, email_earliest, now, window, max),
+        blocked_retry_after(ip_count, ip_earliest, now, window, max),
+    ]
+    .into_iter()
+    .flatten()
+    .max();
+    if let Some(retry_after) = retry_after {
+        return RateLimited { retry_after }.into_response();
+    }
+
     let credentials = UserRepository::new(db.pool())
         .find_credentials_by_email(&req.email)
         .await
@@ -120,12 +248,23 @@ pub async fn create_session(
     // Timing-safe : toujours exécuter un argon2 verify (réel ou factice).
     let actor = match credentials {
         Some(creds) if verify_password(&req.password, &creds.password_hash) => creds.actor,
-        Some(_) => return Unauthorized.into_response(),
+        Some(_) => {
+            let _ = attempts
+                .record_failure(&req.email, ip.as_deref(), now)
+                .await;
+            return Unauthorized.into_response();
+        }
         None => {
             let _ = verify_password(&req.password, &DUMMY_HASH);
+            let _ = attempts
+                .record_failure(&req.email, ip.as_deref(), now)
+                .await;
             return Unauthorized.into_response();
         }
     };
+
+    // Authentification réussie : réinitialiser le compteur du compte (best-effort).
+    let _ = attempts.clear_email(&req.email).await;
 
     let token = generate_token();
     let token_hash = Sha256::digest(token.as_bytes());
@@ -242,4 +381,58 @@ pub async fn delete_session(State(db): State<Db>, headers: HeaderMap) -> Respons
     let secure = if *COOKIE_SECURE { "; Secure" } else { "" };
     let expired = format!("{SESSION_COOKIE}=; HttpOnly{secure}; SameSite=Lax; Path=/; Max-Age=0");
     (StatusCode::NO_CONTENT, [(header::SET_COOKIE, expired)]).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Duration, Utc, blocked_retry_after};
+    use wallos_core::verifies;
+
+    const MAX: i64 = 5;
+
+    fn window() -> Duration {
+        Duration::seconds(900)
+    }
+
+    /// Sous le seuil : jamais limité.
+    #[test]
+    #[verifies(REQ-AUT-008)]
+    fn under_threshold_is_not_blocked() {
+        let now = Utc::now();
+        assert_eq!(
+            blocked_retry_after(MAX - 1, Some(now), now, window(), MAX),
+            None
+        );
+    }
+
+    /// Seuil atteint mais aucun instant de référence (cas dégénéré) : non limité, pas de panique.
+    #[test]
+    #[verifies(REQ-AUT-008)]
+    fn at_threshold_without_earliest_is_not_blocked() {
+        let now = Utc::now();
+        assert_eq!(blocked_retry_after(MAX, None, now, window(), MAX), None);
+    }
+
+    /// Seuil atteint, plus ancien échec à l'instant courant : Retry-After = fenêtre complète.
+    #[test]
+    #[verifies(REQ-AUT-008)]
+    fn at_threshold_returns_full_window() {
+        let now = Utc::now();
+        assert_eq!(
+            blocked_retry_after(MAX, Some(now), now, window(), MAX),
+            Some(900)
+        );
+    }
+
+    /// Plus ancien échec déjà sorti de la fenêtre : Retry-After borné à 1 seconde (jamais ≤ 0).
+    #[test]
+    #[verifies(REQ-AUT-008)]
+    fn expired_window_is_clamped_to_one_second() {
+        let now = Utc::now();
+        let earliest = now - window() - Duration::seconds(30);
+        assert_eq!(
+            blocked_retry_after(MAX, Some(earliest), now, window(), MAX),
+            Some(1)
+        );
+    }
 }

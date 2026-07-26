@@ -1,7 +1,10 @@
 //! Tests d'intégration de l'authentification et des sessions (REQ-AUT-002).
 
+use std::net::SocketAddr;
+
 use axum::Router;
 use axum::body::Body;
+use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode, header};
 use serde_json::json;
 use sqlx::PgPool;
@@ -28,6 +31,25 @@ async fn post(pool: &PgPool, uri: &str, body: serde_json::Value) -> axum::http::
         )
         .await
         .unwrap()
+}
+
+/// Comme [`post`], mais en injectant une IP source (via `ConnectInfo`) pour exercer la limitation
+/// de taux par IP (REQ-AUT-008) sous `oneshot`, qui ne pose autrement aucune adresse de pair.
+async fn post_from_ip(
+    pool: &PgPool,
+    uri: &str,
+    body: serde_json::Value,
+    ip: &str,
+) -> axum::http::Response<Body> {
+    let addr: SocketAddr = format!("{ip}:44444").parse().unwrap();
+    let mut request = Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    request.extensions_mut().insert(ConnectInfo(addr));
+    app(pool.clone()).oneshot(request).await.unwrap()
 }
 
 async fn signup(pool: &PgPool, email: &str) {
@@ -126,6 +148,72 @@ async fn wrong_password_and_absent_account_are_indistinguishable(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(wb, ab);
+}
+
+// --- Limitation du taux de tentatives (REQ-AUT-008) ---
+
+/// Extrait et valide l'en-tête `Retry-After` (entier ≥ 1) d'une réponse 429.
+fn retry_after_seconds(response: &axum::http::Response<Body>) -> i64 {
+    response
+        .headers()
+        .get(header::RETRY_AFTER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<i64>().ok())
+        .expect("429 carries a numeric Retry-After header")
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-AUT-008)]
+async fn too_many_failed_attempts_returns_429_including_with_correct_password(pool: PgPool) {
+    signup(&pool, "target@example.com").await;
+
+    // Le seuil par défaut est 5 : cinq échecs consécutifs remplissent la fenêtre.
+    for _ in 0..5 {
+        let attempt = login(&pool, "target@example.com", "not the password").await;
+        assert_eq!(attempt.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // Tentative suivante AVEC le bon mot de passe : rejetée en 429 (la limite prime).
+    let blocked = login(&pool, "target@example.com", PASSWORD).await;
+    assert_eq!(blocked.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(retry_after_seconds(&blocked) >= 1);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-AUT-008)]
+async fn rate_limit_applies_per_ip_across_different_accounts(pool: PgPool) {
+    const ATTACKER: &str = "203.0.113.7";
+    const BYSTANDER: &str = "198.51.100.9";
+
+    // Cinq échecs depuis la même IP, sur cinq comptes DIFFÉRENTS : aucun compte n'atteint le seuil,
+    // mais l'IP oui.
+    for i in 0..5 {
+        let body = json!({ "email": format!("victim{i}@example.com"), "password": "nope" });
+        let attempt = post_from_ip(&pool, "/api/v1/sessions", body, ATTACKER).await;
+        assert_eq!(attempt.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // Tentative suivante depuis l'IP attaquante : limitée en 429.
+    let blocked = post_from_ip(
+        &pool,
+        "/api/v1/sessions",
+        json!({ "email": "victim9@example.com", "password": "nope" }),
+        ATTACKER,
+    )
+    .await;
+    assert_eq!(blocked.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(retry_after_seconds(&blocked) >= 1);
+
+    // Contrôle : une autre IP n'est pas affectée par la limite de l'IP attaquante.
+    signup(&pool, "innocent@example.com").await;
+    let allowed = post_from_ip(
+        &pool,
+        "/api/v1/sessions",
+        json!({ "email": "innocent@example.com", "password": PASSWORD }),
+        BYSTANDER,
+    )
+    .await;
+    assert_eq!(allowed.status(), StatusCode::OK);
 }
 
 // --- Autorisation §9 : createSession (public) ---
