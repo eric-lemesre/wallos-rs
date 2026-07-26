@@ -37,6 +37,24 @@ pub struct CreateAccountRequest {
     pub password: String,
 }
 
+/// Requête d'authentification (REQ-AUT-002).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct CreateSessionRequest {
+    /// Adresse e-mail du compte.
+    #[schema(example = "user@example.com", format = "email")]
+    pub email: String,
+    /// Mot de passe.
+    #[schema(format = "password")]
+    pub password: String,
+}
+
+/// Représentation du compte authentifié courant (REQ-AUT-002).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct CurrentUser {
+    /// Adresse e-mail du compte courant.
+    pub email: String,
+}
+
 /// Détail d'erreur conforme à la RFC 9457 (`application/problem+json`).
 ///
 /// Schéma d'erreur unique de l'API : toute réponse d'erreur adopte ce format,

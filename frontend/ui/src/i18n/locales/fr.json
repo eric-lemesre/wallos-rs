@@ -10,5 +10,16 @@
       "passwordTooShort": "Le mot de passe doit contenir au moins 12 caractères",
       "passwordCompromised": "Ce mot de passe est trop courant — choisissez-en un autre"
     }
+  },
+  "login": {
+    "email": "Adresse e-mail",
+    "password": "Mot de passe",
+    "submit": "Se connecter",
+    "error": "E-mail ou mot de passe invalide",
+    "loggedInAs": "Connecté en tant que {{email}}",
+    "validation": {
+      "emailInvalid": "Saisissez une adresse e-mail valide",
+      "passwordRequired": "Saisissez votre mot de passe"
+    }
   }
 }

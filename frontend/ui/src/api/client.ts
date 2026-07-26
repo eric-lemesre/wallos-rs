@@ -26,4 +26,18 @@ export type Problem = components["schemas"]["Problem"];
  */
 export type CreateAccountRequest = components["schemas"]["CreateAccountRequest"];
 
+/**
+ * Corps de la requête d'authentification, issu du contrat.
+ *
+ * @implements REQ-AUT-002
+ */
+export type CreateSessionRequest = components["schemas"]["CreateSessionRequest"];
+
+/**
+ * Compte authentifié courant, issu du contrat.
+ *
+ * @implements REQ-AUT-002
+ */
+export type CurrentUser = components["schemas"]["CurrentUser"];
+
 export type { paths, components } from "./schema";
