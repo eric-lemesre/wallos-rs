@@ -7,7 +7,8 @@
     "error": "Une erreur est survenue",
     "validation": {
       "emailInvalid": "Saisissez une adresse e-mail valide",
-      "passwordTooShort": "Le mot de passe doit contenir au moins 12 caractères"
+      "passwordTooShort": "Le mot de passe doit contenir au moins 12 caractères",
+      "passwordCompromised": "Ce mot de passe est trop courant — choisissez-en un autre"
     }
   }
 }

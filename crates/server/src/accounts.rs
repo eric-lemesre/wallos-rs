@@ -11,14 +11,24 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use wallos_core::password_policy::validate_password;
 use wallos_core::requirement;
 use wallos_proto::{CreateAccountRequest, problem};
 use wallos_storage::{Db, UserRepository};
 
 use crate::problem_response;
 
-/// Longueur minimale de mot de passe (politique complète : REQ-AUT-003).
-const MIN_PASSWORD_LEN: usize = 12;
+/// Applique la politique de mot de passe (REQ-AUT-003) et traduit un échec en `422 Problem`.
+///
+/// Le `detail` porte la clé i18n stable du motif, mappée par le client.
+#[requirement(REQ-AUT-003)]
+fn enforce_password_policy(password: &str) -> Result<(), Response> {
+    validate_password(password).map_err(|error| {
+        let body =
+            problem(422, "about:blank", "Unprocessable Entity").with_detail(error.message_key());
+        problem_response(StatusCode::UNPROCESSABLE_ENTITY, body)
+    })
+}
 
 /// Crée un compte utilisateur.
 #[utoipa::path(
@@ -42,10 +52,8 @@ pub async fn create_account(
     State(db): State<Db>,
     Json(req): Json<CreateAccountRequest>,
 ) -> Response {
-    if req.password.chars().count() < MIN_PASSWORD_LEN {
-        let body = problem(422, "about:blank", "Unprocessable Entity")
-            .with_detail("password must be at least 12 characters");
-        return problem_response(StatusCode::UNPROCESSABLE_ENTITY, body);
+    if let Err(response) = enforce_password_policy(&req.password) {
+        return response;
     }
 
     let Ok(hash) = hash_password(&req.password) else {

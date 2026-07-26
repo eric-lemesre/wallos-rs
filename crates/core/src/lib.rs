@@ -12,6 +12,7 @@ pub use wallos_req_macros::{requirement, verifies};
 pub mod actor;
 pub mod error;
 pub mod money;
+pub mod password_policy;
 pub mod stats;
 
 pub use error::DomainError;

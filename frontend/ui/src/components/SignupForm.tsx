@@ -5,15 +5,19 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 
 import { api, type CreateAccountRequest } from "../api/client";
+import { MIN_PASSWORD_LENGTH, isCompromised } from "../auth/passwordPolicy";
 
 /**
  * Schéma de validation du formulaire d'inscription. Les messages sont des **clés i18n**,
- * résolues à l'affichage — aucune chaîne littérale (REQ-I18N-002). La longueur minimale de
- * mot de passe (12) est identique à la validation serveur (REQ-AUT-001 / REQ-AUT-003).
+ * résolues à l'affichage — aucune chaîne littérale (REQ-I18N-002). La politique (longueur >= 12,
+ * refus des mots de passe compromis) est identique à la validation serveur (REQ-AUT-003).
  */
 const signupSchema = z.object({
   email: z.string().email("signup.validation.emailInvalid"),
-  password: z.string().min(12, "signup.validation.passwordTooShort"),
+  password: z
+    .string()
+    .min(MIN_PASSWORD_LENGTH, "signup.validation.passwordTooShort")
+    .refine((pw) => !isCompromised(pw), "signup.validation.passwordCompromised"),
 });
 
 type SignupValues = z.infer<typeof signupSchema>;
