@@ -38,6 +38,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Liste les appareils appairés du foyer courant, en distinguant l'appareil courant (REQ-AUT-006). */
+        get: operations["listDevices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Révoque un appareil appairé — révocation **immédiate** : son jeton ne vaut plus rien (REQ-AUT-006). */
+        delete: operations["revokeDevice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -166,6 +200,24 @@ export interface components {
             email: string;
         };
         /**
+         * @description Résumé d'un appareil appairé, pour la liste de gestion (REQ-AUT-006).
+         *
+         *     `id` (UUID) et `last_seen_at` (RFC 3339) sont sérialisés en chaînes pour rester indépendants des
+         *     features `utoipa`/`chrono` ; `current` distingue l'appareil à l'origine de la requête courante.
+         */
+        DeviceSummary: {
+            /** @description Vrai si cet appareil est celui qui a émis la requête courante. */
+            current: boolean;
+            /** @description Identifiant de l'appareil (UUID), clé de révocation. */
+            id: string;
+            /** @description Libellé lisible. */
+            label: string;
+            /** @description Dernière activité (horodatage RFC 3339). */
+            last_seen_at: string;
+            /** @description Plateforme de l'appareil. */
+            platform: string;
+        };
+        /**
          * @description Jeton d'appareil émis à l'appairage (REQ-AUT-005).
          *
          *     Renvoyé **une seule fois** : la coquille native le stocke via `PlatformAdapter.secureStore`,
@@ -282,6 +334,74 @@ export interface operations {
             };
             /** @description Trop de tentatives ; réessayer après l'en-tête Retry-After */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Appareils appairés du foyer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceSummary"][];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    revokeDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant (UUID) de l'appareil à révoquer */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Appareil révoqué */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Appareil inconnu ou hors du foyer */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

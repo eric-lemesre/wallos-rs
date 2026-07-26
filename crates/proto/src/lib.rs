@@ -85,6 +85,24 @@ pub struct DeviceToken {
     pub token: String,
 }
 
+/// Résumé d'un appareil appairé, pour la liste de gestion (REQ-AUT-006).
+///
+/// `id` (UUID) et `last_seen_at` (RFC 3339) sont sérialisés en chaînes pour rester indépendants des
+/// features `utoipa`/`chrono` ; `current` distingue l'appareil à l'origine de la requête courante.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct DeviceSummary {
+    /// Identifiant de l'appareil (UUID), clé de révocation.
+    pub id: String,
+    /// Libellé lisible.
+    pub label: String,
+    /// Plateforme de l'appareil.
+    pub platform: String,
+    /// Dernière activité (horodatage RFC 3339).
+    pub last_seen_at: String,
+    /// Vrai si cet appareil est celui qui a émis la requête courante.
+    pub current: bool,
+}
+
 /// Détail d'erreur conforme à la RFC 9457 (`application/problem+json`).
 ///
 /// Schéma d'erreur unique de l'API : toute réponse d'erreur adopte ce format,

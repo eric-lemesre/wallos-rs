@@ -15,7 +15,7 @@ use argon2::password_hash::SaltString;
 use argon2::password_hash::rand_core::OsRng;
 use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::Json;
-use axum::extract::{ConnectInfo, FromRef, FromRequestParts, State};
+use axum::extract::{ConnectInfo, FromRef, FromRequestParts, Path, State};
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
@@ -25,7 +25,8 @@ use uuid::Uuid;
 use wallos_core::actor::Actor;
 use wallos_core::requirement;
 use wallos_proto::{
-    CreateDeviceSessionRequest, CreateSessionRequest, CurrentUser, DeviceToken, problem,
+    CreateDeviceSessionRequest, CreateSessionRequest, CurrentUser, DeviceSummary, DeviceToken,
+    problem,
 };
 use wallos_storage::{
     Db, DeviceTokenRepository, LoginAttemptRepository, SessionRepository, UserRepository,
@@ -380,6 +381,31 @@ pub async fn create_device_session(
     (StatusCode::OK, Json(DeviceToken { token })).into_response()
 }
 
+/// Identifiant de l'appareil ayant présenté un jeton Bearer valide sur la requête courante.
+///
+/// Posé dans les extensions par [`AuthActor`] quand l'authentification provient d'un jeton
+/// d'appareil (pas d'un cookie). Lu par l'extracteur [`CurrentDevice`] pour distinguer l'appareil
+/// courant dans la liste (REQ-AUT-006).
+#[derive(Clone, Copy)]
+struct CurrentDeviceId(Uuid);
+
+/// Appareil à l'origine de la requête courante, s'il s'agit d'un jeton d'appareil (REQ-AUT-006).
+///
+/// Extracteur **infaillible** : `None` pour une authentification par cookie (aucun appareil courant).
+pub struct CurrentDevice(Option<Uuid>);
+
+impl<S> FromRequestParts<S> for CurrentDevice
+where
+    S: Send + Sync,
+{
+    type Rejection = std::convert::Infallible;
+
+    #[requirement(REQ-AUT-006)]
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        Ok(Self(parts.extensions.get::<CurrentDeviceId>().map(|c| c.0)))
+    }
+}
+
 /// Contexte d'appelant. Accepte **deux sources** : le cookie de session web (REQ-AUT-002/004) ou un
 /// jeton d'appareil `Authorization: Bearer <token>` (REQ-AUT-005). Rejette en `401` sinon.
 pub struct AuthActor(pub Actor);
@@ -413,8 +439,9 @@ where
         if let Some(token) = bearer_token(&parts.headers) {
             let token_hash = Sha256::digest(token.as_bytes());
             let repo = DeviceTokenRepository::new(db.pool());
-            if let Ok(Some((actor, _device_id))) = repo.find_valid(token_hash.as_slice(), now).await
+            if let Ok(Some((actor, device_id))) = repo.find_valid(token_hash.as_slice(), now).await
             {
+                parts.extensions.insert(CurrentDeviceId(device_id));
                 return Ok(Self(actor));
             }
         }
@@ -472,6 +499,104 @@ pub async fn get_current_user(AuthActor(actor): AuthActor, State(db): State<Db>)
         Ok(Some(user)) => Json(CurrentUser { email: user.email }).into_response(),
         // Session valide mais compte introuvable : incohérence -> 401 (ne divulgue rien).
         _ => Unauthorized.into_response(),
+    }
+}
+
+/// Réponse `404` générique pour un appareil inconnu (ou hors du foyer) — ne divulgue rien (§9).
+#[requirement(REQ-AUT-006)]
+fn device_not_found() -> Response {
+    problem_response(
+        StatusCode::NOT_FOUND,
+        problem(404, "about:blank", "Not Found"),
+    )
+}
+
+/// Liste les appareils appairés du foyer courant, en distinguant l'appareil courant (REQ-AUT-006).
+#[utoipa::path(
+    get,
+    path = "/devices",
+    operation_id = "listDevices",
+    extensions(("x-requirements" = json!(["REQ-AUT-006"]))),
+    responses(
+        (status = 200, description = "Appareils appairés du foyer", body = Vec<DeviceSummary>, content_type = "application/json"),
+        (
+            status = 401,
+            description = "Non authentifié",
+            body = wallos_proto::Problem,
+            content_type = "application/problem+json"
+        )
+    )
+)]
+#[requirement(REQ-AUT-006)]
+pub async fn list_devices(
+    AuthActor(actor): AuthActor,
+    CurrentDevice(current): CurrentDevice,
+    State(db): State<Db>,
+) -> Response {
+    match DeviceTokenRepository::new(db.pool()).list(&actor).await {
+        Ok(rows) => {
+            let devices: Vec<DeviceSummary> = rows
+                .into_iter()
+                .map(|row| DeviceSummary {
+                    current: current == Some(row.id),
+                    id: row.id.to_string(),
+                    label: row.label,
+                    platform: row.platform,
+                    last_seen_at: row.last_seen_at.to_rfc3339(),
+                })
+                .collect();
+            Json(devices).into_response()
+        }
+        _ => problem_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            problem(500, "about:blank", "Internal Server Error"),
+        ),
+    }
+}
+
+/// Révoque un appareil appairé — révocation **immédiate** : son jeton ne vaut plus rien (REQ-AUT-006).
+#[utoipa::path(
+    delete,
+    path = "/devices/{id}",
+    operation_id = "revokeDevice",
+    params(("id" = String, Path, description = "Identifiant (UUID) de l'appareil à révoquer")),
+    extensions(("x-requirements" = json!(["REQ-AUT-006"]))),
+    responses(
+        (status = 204, description = "Appareil révoqué"),
+        (
+            status = 401,
+            description = "Non authentifié",
+            body = wallos_proto::Problem,
+            content_type = "application/problem+json"
+        ),
+        (
+            status = 404,
+            description = "Appareil inconnu ou hors du foyer",
+            body = wallos_proto::Problem,
+            content_type = "application/problem+json"
+        )
+    )
+)]
+#[requirement(REQ-AUT-006)]
+pub async fn revoke_device(
+    AuthActor(actor): AuthActor,
+    State(db): State<Db>,
+    Path(id): Path<String>,
+) -> Response {
+    // Un identifiant mal formé est traité comme inexistant (404) — ne divulgue rien.
+    let Ok(device_id) = Uuid::parse_str(&id) else {
+        return device_not_found();
+    };
+    match DeviceTokenRepository::new(db.pool())
+        .revoke(&actor, device_id)
+        .await
+    {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => device_not_found(),
+        _ => problem_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            problem(500, "about:blank", "Internal Server Error"),
+        ),
     }
 }
 

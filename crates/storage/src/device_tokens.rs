@@ -12,6 +12,19 @@ use wallos_core::requirement;
 
 use crate::StorageError;
 
+/// Appareil appairé, exposé aux lectures autorisées (REQ-AUT-006).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct DeviceRow {
+    /// Identifiant de l'appareil (clé de révocation).
+    pub id: Uuid,
+    /// Libellé lisible.
+    pub label: String,
+    /// Plateforme.
+    pub platform: String,
+    /// Dernière activité observée.
+    pub last_seen_at: DateTime<Utc>,
+}
+
 /// Accès aux jetons d'appareil.
 pub struct DeviceTokenRepository<'a> {
     pool: &'a sqlx::PgPool,
@@ -78,5 +91,40 @@ impl<'a> DeviceTokenRepository<'a> {
         .fetch_optional(self.pool)
         .await?;
         Ok(row.map(|(user_id, household_id, id)| (Actor::new(user_id, household_id), id)))
+    }
+
+    /// Liste les appareils appairés **du foyer de l'appelant** (garde-fou d'isolation, ADR 0006/0012).
+    ///
+    /// Triés par activité décroissante (le plus récemment vu en premier).
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-AUT-006)]
+    pub async fn list(&self, actor: &Actor) -> Result<Vec<DeviceRow>, StorageError> {
+        let rows = sqlx::query_as::<_, DeviceRow>(
+            "select id, label, platform, last_seen_at from device_tokens \
+             where household_id = $1 order by last_seen_at desc",
+        )
+        .bind(actor.household_id())
+        .fetch_all(self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    /// Révoque un appareil **du foyer de l'appelant** (révocation immédiate, REQ-AUT-006).
+    ///
+    /// Renvoie `true` si un appareil a été supprimé, `false` s'il n'existe pas *ou* appartient à un
+    /// autre foyer — l'appelant traduit ce `false` en `404`, jamais `403` (AGENTS.md §9).
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-AUT-006)]
+    pub async fn revoke(&self, actor: &Actor, id: Uuid) -> Result<bool, StorageError> {
+        let result = sqlx::query("delete from device_tokens where id = $1 and household_id = $2")
+            .bind(id)
+            .bind(actor.household_id())
+            .execute(self.pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
     }
 }

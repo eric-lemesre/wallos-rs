@@ -22,5 +22,14 @@
       "emailInvalid": "Enter a valid email address",
       "passwordRequired": "Enter your password"
     }
+  },
+  "devices": {
+    "title": "Your devices",
+    "empty": "No paired devices",
+    "platform": "Platform",
+    "lastSeen": "Last seen",
+    "current": "This device",
+    "revoke": "Revoke",
+    "loadError": "Could not load your devices"
   }
 }
