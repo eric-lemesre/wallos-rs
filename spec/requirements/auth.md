@@ -196,7 +196,7 @@ depends_on: [REQ-AUT-002]
 id: REQ-AUT-009
 title: Déconnexion
 domain: auth
-status: accepted
+status: verified
 criticality: medium
 layer: [api, ui]
 e2e: required

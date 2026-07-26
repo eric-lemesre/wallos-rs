@@ -91,6 +91,37 @@ async fn touch_slides_expiry_and_keeps_session_valid(pool: sqlx::PgPool) {
 }
 
 #[sqlx::test]
+#[verifies(REQ-AUT-009)]
+async fn delete_invalidates_session_and_is_idempotent(pool: sqlx::PgPool) {
+    let actor = seed_account(&pool, "frank@example.com").await;
+    let sessions = SessionRepository::new(&pool);
+    let now = Utc::now();
+    sessions
+        .create(&actor, b"token-del", now + Duration::minutes(30))
+        .await
+        .unwrap();
+    assert!(
+        sessions
+            .find_valid(b"token-del", now)
+            .await
+            .unwrap()
+            .is_some()
+    );
+
+    sessions.delete(b"token-del").await.unwrap();
+    assert!(
+        sessions
+            .find_valid(b"token-del", now)
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    // Rejeu : reste Ok (idempotent).
+    sessions.delete(b"token-del").await.unwrap();
+}
+
+#[sqlx::test]
 #[verifies(REQ-AUT-004)]
 async fn touch_on_unknown_token_is_a_noop(pool: sqlx::PgPool) {
     let sessions = SessionRepository::new(&pool);

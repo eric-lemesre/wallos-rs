@@ -48,6 +48,21 @@ impl<'a> SessionRepository<'a> {
         Ok(())
     }
 
+    /// Invalide une session côté serveur (déconnexion, REQ-AUT-009).
+    ///
+    /// **Idempotent** : sans effet si le jeton est déjà absent.
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-AUT-009)]
+    pub async fn delete(&self, token_hash: &[u8]) -> Result<(), StorageError> {
+        sqlx::query("delete from sessions where token_hash = $1")
+            .bind(token_hash)
+            .execute(self.pool)
+            .await?;
+        Ok(())
+    }
+
     /// Repousse l'expiration d'une session (expiration d'inactivité glissante, REQ-AUT-004).
     ///
     /// Sans effet si le jeton est inconnu (idempotent).

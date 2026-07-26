@@ -66,7 +66,11 @@ export interface paths {
         put?: never;
         /** Authentifie un utilisateur et ouvre une session. */
         post: operations["createSession"];
-        delete?: never;
+        /**
+         * Déconnecte : invalide la session côté serveur et expire le cookie (REQ-AUT-009).
+         * @description **Idempotent** : renvoie toujours `204`, même sans cookie ou session déjà invalidée.
+         */
+        delete: operations["deleteSession"];
         options?: never;
         head?: never;
         patch?: never;
@@ -266,6 +270,24 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
+            };
+        };
+    };
+    deleteSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session invalidée (idempotent) ; cookie expiré */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

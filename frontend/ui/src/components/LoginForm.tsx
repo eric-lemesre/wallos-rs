@@ -46,6 +46,12 @@ export function LoginForm() {
     }
   }
 
+  /** Déconnexion : invalide la session côté serveur puis efface l'état local (REQ-AUT-009). */
+  async function handleLogout() {
+    await api.DELETE("/sessions");
+    setCurrentUser(null);
+  }
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} data-testid="login-form" noValidate>
       <label htmlFor="login-email">{t("login.email")}</label>
@@ -80,9 +86,14 @@ export function LoginForm() {
         </p>
       )}
       {currentUser && (
-        <p data-testid="login-current-user" role="status">
-          {t("login.loggedInAs", { email: currentUser })}
-        </p>
+        <>
+          <p data-testid="login-current-user" role="status">
+            {t("login.loggedInAs", { email: currentUser })}
+          </p>
+          <button type="button" data-testid="logout" onClick={handleLogout}>
+            {t("login.logout")}
+          </button>
+        </>
       )}
     </form>
   );

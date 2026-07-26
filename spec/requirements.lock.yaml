@@ -101,7 +101,7 @@ requirements:
 - id: REQ-AUT-009
   title: Déconnexion
   domain: auth
-  status: accepted
+  status: verified
   criticality: medium
   layer:
   - api

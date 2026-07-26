@@ -15,7 +15,7 @@ use argon2::{Argon2, PasswordHash, PasswordVerifier};
 use axum::Json;
 use axum::extract::{FromRef, FromRequestParts, State};
 use axum::http::request::Parts;
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use chrono::{Duration, Utc};
 use sha2::{Digest, Sha256};
@@ -161,7 +161,7 @@ where
 
     #[requirement(REQ-AUT-002)]
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let Some(token) = session_token(parts) else {
+        let Some(token) = session_token(&parts.headers) else {
             return Err(Unauthorized);
         };
         let token_hash = Sha256::digest(token.as_bytes());
@@ -183,8 +183,8 @@ where
 
 /// Extrait la valeur du cookie de session de l'en-tête `Cookie`.
 #[requirement(REQ-AUT-002)]
-fn session_token(parts: &Parts) -> Option<String> {
-    let header = parts.headers.get(header::COOKIE)?.to_str().ok()?;
+fn session_token(headers: &HeaderMap) -> Option<String> {
+    let header = headers.get(header::COOKIE)?.to_str().ok()?;
     header
         .split(';')
         .map(str::trim)
@@ -218,4 +218,28 @@ pub async fn get_current_user(AuthActor(actor): AuthActor, State(db): State<Db>)
         // Session valide mais compte introuvable : incohérence -> 401 (ne divulgue rien).
         _ => Unauthorized.into_response(),
     }
+}
+
+/// Déconnecte : invalide la session côté serveur et expire le cookie (REQ-AUT-009).
+///
+/// **Idempotent** : renvoie toujours `204`, même sans cookie ou session déjà invalidée.
+#[utoipa::path(
+    delete,
+    path = "/sessions",
+    operation_id = "deleteSession",
+    extensions(("x-requirements" = json!(["REQ-AUT-009"]))),
+    responses((status = 204, description = "Session invalidée (idempotent) ; cookie expiré"))
+)]
+#[requirement(REQ-AUT-009)]
+pub async fn delete_session(State(db): State<Db>, headers: HeaderMap) -> Response {
+    if let Some(token) = session_token(&headers) {
+        let token_hash = Sha256::digest(token.as_bytes());
+        // Best-effort : l'idempotence prime, on renvoie 204 quoi qu'il arrive.
+        let _ = SessionRepository::new(db.pool())
+            .delete(token_hash.as_slice())
+            .await;
+    }
+    let secure = if *COOKIE_SECURE { "; Secure" } else { "" };
+    let expired = format!("{SESSION_COOKIE}=; HttpOnly{secure}; SameSite=Lax; Path=/; Max-Age=0");
+    (StatusCode::NO_CONTENT, [(header::SET_COOKIE, expired)]).into_response()
 }
