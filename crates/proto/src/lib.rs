@@ -55,6 +55,36 @@ pub struct CurrentUser {
     pub email: String,
 }
 
+/// Requête d'appairage d'un appareil natif (REQ-AUT-005).
+///
+/// Comme l'authentification web, mais émet un jeton propre à l'appareil (corps de réponse) au lieu
+/// d'un cookie ; l'appareil fournit un libellé et sa plateforme.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct CreateDeviceSessionRequest {
+    /// Adresse e-mail du compte.
+    #[schema(example = "user@example.com", format = "email")]
+    pub email: String,
+    /// Mot de passe.
+    #[schema(format = "password")]
+    pub password: String,
+    /// Libellé lisible de l'appareil (choisi par l'utilisateur ou dérivé du matériel).
+    #[schema(example = "MacBook de Léa")]
+    pub label: String,
+    /// Plateforme de l'appareil.
+    #[schema(example = "desktop")]
+    pub platform: String,
+}
+
+/// Jeton d'appareil émis à l'appairage (REQ-AUT-005).
+///
+/// Renvoyé **une seule fois** : la coquille native le stocke via `PlatformAdapter.secureStore`,
+/// jamais en clair côté serveur (seule son empreinte SHA-256 est conservée).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct DeviceToken {
+    /// Jeton opaque à présenter en `Authorization: Bearer`.
+    pub token: String,
+}
+
 /// Détail d'erreur conforme à la RFC 9457 (`application/problem+json`).
 ///
 /// Schéma d'erreur unique de l'API : toute réponse d'erreur adopte ce format,

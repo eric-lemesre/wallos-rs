@@ -103,7 +103,7 @@ depends_on: [REQ-AUT-002]
 id: REQ-AUT-005
 title: Jeton d'appareil pour les modalités desktop et mobile
 domain: auth
-status: accepted
+status: implemented
 criticality: high
 layer: [api, ui]
 e2e: required

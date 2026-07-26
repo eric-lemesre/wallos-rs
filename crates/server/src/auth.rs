@@ -21,10 +21,15 @@ use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, Duration, Utc};
 use sha2::{Digest, Sha256};
+use uuid::Uuid;
 use wallos_core::actor::Actor;
 use wallos_core::requirement;
-use wallos_proto::{CreateSessionRequest, CurrentUser, problem};
-use wallos_storage::{Db, LoginAttemptRepository, SessionRepository, UserRepository};
+use wallos_proto::{
+    CreateDeviceSessionRequest, CreateSessionRequest, CurrentUser, DeviceToken, problem,
+};
+use wallos_storage::{
+    Db, DeviceTokenRepository, LoginAttemptRepository, SessionRepository, UserRepository,
+};
 
 use crate::accounts::hash_password;
 use crate::problem_response;
@@ -179,7 +184,84 @@ impl IntoResponse for Unauthorized {
     }
 }
 
-/// Authentifie un utilisateur et ouvre une session.
+/// Retry-After (secondes) si le couple (compte, IP) dépasse le seuil de tentatives, sinon `None`.
+///
+/// Cœur de la limitation de taux (REQ-AUT-008), partagé par les endpoints de login web et appareil.
+/// Best-effort : une défaillance de lecture ne bloque pas l'authentification légitime.
+#[requirement(REQ-AUT-008)]
+async fn rate_limit_retry_after(
+    attempts: &LoginAttemptRepository<'_>,
+    email: &str,
+    ip: Option<&str>,
+    now: DateTime<Utc>,
+) -> Option<i64> {
+    let since = now - ratelimit_window();
+    let max = *RATELIMIT_MAX_ATTEMPTS;
+    let window = ratelimit_window();
+    let (email_count, email_earliest) = attempts
+        .count_and_earliest_email(email, since)
+        .await
+        .unwrap_or((0, None));
+    let (ip_count, ip_earliest) = match ip {
+        Some(ip) => attempts
+            .count_and_earliest_ip(ip, since)
+            .await
+            .unwrap_or((0, None)),
+        None => (0, None),
+    };
+    [
+        blocked_retry_after(email_count, email_earliest, now, window, max),
+        blocked_retry_after(ip_count, ip_earliest, now, window, max),
+    ]
+    .into_iter()
+    .flatten()
+    .max()
+}
+
+/// Authentifie un couple e-mail/mot de passe pour un endpoint de login (web ou appareil).
+///
+/// Applique la limitation de taux (REQ-AUT-008) **avant** la vérification, puis un argon2 verify
+/// timing-safe (REQ-AUT-002 : hash factice si le compte est absent). Journalise les échecs, remet à
+/// zéro le compteur du compte sur succès. Renvoie l'`Actor`, ou une `Response` de rejet prête à
+/// retourner (`429` limité, `401` identifiants invalides — corps générique identique).
+#[requirement(REQ-AUT-002)]
+async fn authenticate(
+    db: &Db,
+    email: &str,
+    password: &str,
+    ip: Option<&str>,
+    now: DateTime<Utc>,
+) -> Result<Actor, Response> {
+    let attempts = LoginAttemptRepository::new(db.pool());
+    if let Some(retry_after) = rate_limit_retry_after(&attempts, email, ip, now).await {
+        return Err(RateLimited { retry_after }.into_response());
+    }
+
+    let credentials = UserRepository::new(db.pool())
+        .find_credentials_by_email(email)
+        .await
+        .ok()
+        .flatten();
+
+    match credentials {
+        Some(creds) if verify_password(password, &creds.password_hash) => {
+            let _ = attempts.clear_email(email).await;
+            Ok(creds.actor)
+        }
+        Some(_) => {
+            let _ = attempts.record_failure(email, ip, now).await;
+            Err(Unauthorized.into_response())
+        }
+        None => {
+            // Timing-safe : dépenser un argon2 verify même sans compte.
+            let _ = verify_password(password, &DUMMY_HASH);
+            let _ = attempts.record_failure(email, ip, now).await;
+            Err(Unauthorized.into_response())
+        }
+    }
+}
+
+/// Authentifie un utilisateur et ouvre une session web (cookie).
 #[utoipa::path(
     post,
     path = "/sessions",
@@ -208,67 +290,15 @@ pub async fn create_session(
     ClientIp(ip): ClientIp,
     Json(req): Json<CreateSessionRequest>,
 ) -> Response {
-    // Limitation du taux (REQ-AUT-008) : évaluée AVANT toute vérification d'identifiants, afin de
-    // rejeter en 429 même si le mot de passe est correct. Compteurs par compte ET par IP source.
     let now = Utc::now();
-    let since = now - ratelimit_window();
-    let max = *RATELIMIT_MAX_ATTEMPTS;
-    let window = ratelimit_window();
-    let attempts = LoginAttemptRepository::new(db.pool());
-
-    // Best-effort : une défaillance de lecture ne doit pas bloquer l'authentification légitime.
-    let (email_count, email_earliest) = attempts
-        .count_and_earliest_email(&req.email, since)
-        .await
-        .unwrap_or((0, None));
-    let (ip_count, ip_earliest) = match ip.as_deref() {
-        Some(ip) => attempts
-            .count_and_earliest_ip(ip, since)
-            .await
-            .unwrap_or((0, None)),
-        None => (0, None),
+    let actor = match authenticate(&db, &req.email, &req.password, ip.as_deref(), now).await {
+        Ok(actor) => actor,
+        Err(rejection) => return rejection,
     };
-    let retry_after = [
-        blocked_retry_after(email_count, email_earliest, now, window, max),
-        blocked_retry_after(ip_count, ip_earliest, now, window, max),
-    ]
-    .into_iter()
-    .flatten()
-    .max();
-    if let Some(retry_after) = retry_after {
-        return RateLimited { retry_after }.into_response();
-    }
-
-    let credentials = UserRepository::new(db.pool())
-        .find_credentials_by_email(&req.email)
-        .await
-        .ok()
-        .flatten();
-
-    // Timing-safe : toujours exécuter un argon2 verify (réel ou factice).
-    let actor = match credentials {
-        Some(creds) if verify_password(&req.password, &creds.password_hash) => creds.actor,
-        Some(_) => {
-            let _ = attempts
-                .record_failure(&req.email, ip.as_deref(), now)
-                .await;
-            return Unauthorized.into_response();
-        }
-        None => {
-            let _ = verify_password(&req.password, &DUMMY_HASH);
-            let _ = attempts
-                .record_failure(&req.email, ip.as_deref(), now)
-                .await;
-            return Unauthorized.into_response();
-        }
-    };
-
-    // Authentification réussie : réinitialiser le compteur du compte (best-effort).
-    let _ = attempts.clear_email(&req.email).await;
 
     let token = generate_token();
     let token_hash = Sha256::digest(token.as_bytes());
-    let expires_at = Utc::now() + session_idle_ttl();
+    let expires_at = now + session_idle_ttl();
 
     if SessionRepository::new(db.pool())
         .create(&actor, token_hash.as_slice(), expires_at)
@@ -288,7 +318,70 @@ pub async fn create_session(
     (StatusCode::OK, [(header::SET_COOKIE, cookie)]).into_response()
 }
 
-/// Contexte d'appelant extrait du cookie de session. Rejette en `401` si absent, inconnu ou expiré.
+/// Appaire un appareil natif et émet un jeton propre à l'appareil (REQ-AUT-005).
+#[utoipa::path(
+    post,
+    path = "/device-sessions",
+    operation_id = "createDeviceSession",
+    request_body = CreateDeviceSessionRequest,
+    extensions(("x-requirements" = json!(["REQ-AUT-005", "REQ-AUT-008"]))),
+    responses(
+        (status = 200, description = "Appareil appairé ; jeton d'appareil émis (corps)", body = DeviceToken, content_type = "application/json"),
+        (
+            status = 401,
+            description = "Identifiants invalides",
+            body = wallos_proto::Problem,
+            content_type = "application/problem+json"
+        ),
+        (
+            status = 429,
+            description = "Trop de tentatives ; réessayer après l'en-tête Retry-After",
+            body = wallos_proto::Problem,
+            content_type = "application/problem+json"
+        )
+    )
+)]
+#[requirement(REQ-AUT-005)]
+pub async fn create_device_session(
+    State(db): State<Db>,
+    ClientIp(ip): ClientIp,
+    Json(req): Json<CreateDeviceSessionRequest>,
+) -> Response {
+    let now = Utc::now();
+    let actor = match authenticate(&db, &req.email, &req.password, ip.as_deref(), now).await {
+        Ok(actor) => actor,
+        Err(rejection) => return rejection,
+    };
+
+    // Jeton d'appareil opaque, long, révocable individuellement. Renvoyé une seule fois (corps) ;
+    // seule son empreinte SHA-256 est stockée (ADR 0018/0019).
+    let token = generate_token();
+    let token_hash = Sha256::digest(token.as_bytes());
+    let device_id = Uuid::new_v4();
+
+    if DeviceTokenRepository::new(db.pool())
+        .create(
+            &actor,
+            device_id,
+            token_hash.as_slice(),
+            &req.label,
+            &req.platform,
+            now,
+        )
+        .await
+        .is_err()
+    {
+        return problem_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            problem(500, "about:blank", "Internal Server Error"),
+        );
+    }
+
+    (StatusCode::OK, Json(DeviceToken { token })).into_response()
+}
+
+/// Contexte d'appelant. Accepte **deux sources** : le cookie de session web (REQ-AUT-002/004) ou un
+/// jeton d'appareil `Authorization: Bearer <token>` (REQ-AUT-005). Rejette en `401` sinon.
 pub struct AuthActor(pub Actor);
 
 impl<S> FromRequestParts<S> for AuthActor
@@ -300,23 +393,33 @@ where
 
     #[requirement(REQ-AUT-002)]
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let Some(token) = session_token(&parts.headers) else {
-            return Err(Unauthorized);
-        };
-        let token_hash = Sha256::digest(token.as_bytes());
         let db = Db::from_ref(state);
-        let repo = SessionRepository::new(db.pool());
         let now = Utc::now();
-        match repo.find_valid(token_hash.as_slice(), now).await {
-            Ok(Some(actor)) => {
+
+        // 1) Cookie de session web (modalité navigateur).
+        if let Some(token) = session_token(&parts.headers) {
+            let token_hash = Sha256::digest(token.as_bytes());
+            let repo = SessionRepository::new(db.pool());
+            if let Ok(Some(actor)) = repo.find_valid(token_hash.as_slice(), now).await {
                 // Inactivité glissante : repousser l'expiration (best-effort, REQ-AUT-004).
                 let _ = repo
                     .touch(token_hash.as_slice(), now + session_idle_ttl())
                     .await;
-                Ok(Self(actor))
+                return Ok(Self(actor));
             }
-            _ => Err(Unauthorized),
         }
+
+        // 2) Jeton d'appareil `Authorization: Bearer` (modalité native, REQ-AUT-005).
+        if let Some(token) = bearer_token(&parts.headers) {
+            let token_hash = Sha256::digest(token.as_bytes());
+            let repo = DeviceTokenRepository::new(db.pool());
+            if let Ok(Some((actor, _device_id))) = repo.find_valid(token_hash.as_slice(), now).await
+            {
+                return Ok(Self(actor));
+            }
+        }
+
+        Err(Unauthorized)
     }
 }
 
@@ -328,6 +431,19 @@ fn session_token(headers: &HeaderMap) -> Option<String> {
         .split(';')
         .map(str::trim)
         .find_map(|kv| kv.strip_prefix(&format!("{SESSION_COOKIE}=")))
+        .map(str::to_owned)
+}
+
+/// Extrait le jeton d'un en-tête `Authorization: Bearer <token>` (REQ-AUT-005).
+#[requirement(REQ-AUT-005)]
+fn bearer_token(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(header::AUTHORIZATION)?
+        .to_str()
+        .ok()?
+        .strip_prefix("Bearer ")
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
         .map(str::to_owned)
 }
 
