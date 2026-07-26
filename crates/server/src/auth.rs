@@ -23,10 +23,11 @@ use chrono::{DateTime, Duration, Utc};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use wallos_core::actor::Actor;
+use wallos_core::password_policy::validate_password;
 use wallos_core::requirement;
 use wallos_proto::{
-    CreateDeviceSessionRequest, CreateSessionRequest, CurrentUser, DeviceSummary, DeviceToken,
-    problem,
+    ChangePasswordRequest, CreateDeviceSessionRequest, CreateSessionRequest, CurrentUser,
+    DeviceSummary, DeviceToken, problem,
 };
 use wallos_storage::{
     Db, DeviceTokenRepository, LoginAttemptRepository, SessionRepository, UserRepository,
@@ -598,6 +599,96 @@ pub async fn revoke_device(
             problem(500, "about:blank", "Internal Server Error"),
         ),
     }
+}
+
+/// Change le mot de passe du compte courant et coupe les accès existants (REQ-AUT-007).
+///
+/// Exige le mot de passe actuel (sinon `403`, aucun état modifié). Le nouveau doit respecter la
+/// politique (REQ-AUT-003, sinon `422`). En cas de succès, **toutes les sessions et jetons
+/// d'appareil sont invalidés sauf la crédential courante** — un changement de mot de passe qui ne
+/// couperait pas les accès existants ne remédierait à rien.
+#[utoipa::path(
+    put,
+    path = "/password",
+    operation_id = "changePassword",
+    request_body = ChangePasswordRequest,
+    extensions(("x-requirements" = json!(["REQ-AUT-007"]))),
+    responses(
+        (status = 204, description = "Mot de passe changé ; autres sessions et jetons d'appareil invalidés"),
+        (
+            status = 401,
+            description = "Non authentifié",
+            body = wallos_proto::Problem,
+            content_type = "application/problem+json"
+        ),
+        (
+            status = 403,
+            description = "Mot de passe actuel incorrect ; aucun changement",
+            body = wallos_proto::Problem,
+            content_type = "application/problem+json"
+        ),
+        (
+            status = 422,
+            description = "Nouveau mot de passe non conforme",
+            body = wallos_proto::Problem,
+            content_type = "application/problem+json"
+        )
+    )
+)]
+#[requirement(REQ-AUT-007)]
+pub async fn change_password(
+    AuthActor(actor): AuthActor,
+    CurrentDevice(current_device): CurrentDevice,
+    State(db): State<Db>,
+    headers: HeaderMap,
+    Json(req): Json<ChangePasswordRequest>,
+) -> Response {
+    let users = UserRepository::new(db.pool());
+
+    // Mot de passe actuel revérifié : échec -> 403, sans aucune modification d'état.
+    let stored = users.find_password_hash(&actor).await.ok().flatten();
+    let current_ok = stored
+        .as_deref()
+        .is_some_and(|hash| verify_password(&req.current_password, hash));
+    if !current_ok {
+        return problem_response(
+            StatusCode::FORBIDDEN,
+            problem(403, "about:blank", "Forbidden"),
+        );
+    }
+
+    // Nouveau mot de passe : politique REQ-AUT-003 (longueur + non compromis).
+    if let Err(error) = validate_password(&req.new_password) {
+        let body =
+            problem(422, "about:blank", "Unprocessable Entity").with_detail(error.message_key());
+        return problem_response(StatusCode::UNPROCESSABLE_ENTITY, body);
+    }
+
+    let Ok(new_hash) = hash_password(&req.new_password) else {
+        return problem_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            problem(500, "about:blank", "Internal Server Error"),
+        );
+    };
+    if users.update_password(&actor, &new_hash).await.is_err() {
+        return problem_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            problem(500, "about:blank", "Internal Server Error"),
+        );
+    }
+
+    // Coupe tous les autres accès. On préserve la crédential courante : la session web si la requête
+    // vient d'un cookie, sinon l'appareil courant si elle vient d'un jeton Bearer.
+    let current_session_hash =
+        session_token(&headers).map(|token| Sha256::digest(token.as_bytes()));
+    let _ = SessionRepository::new(db.pool())
+        .revoke_all_for_user_except(&actor, current_session_hash.as_ref().map(|h| h.as_slice()))
+        .await;
+    let _ = DeviceTokenRepository::new(db.pool())
+        .revoke_all_for_user_except(&actor, current_device)
+        .await;
+
+    StatusCode::NO_CONTENT.into_response()
 }
 
 /// Déconnecte : invalide la session côté serveur et expire le cookie (REQ-AUT-009).

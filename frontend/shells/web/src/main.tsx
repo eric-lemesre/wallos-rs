@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
 
+import { ChangePasswordForm } from "../../../ui/src/components/ChangePasswordForm";
 import { DevicesList } from "../../../ui/src/components/DevicesList";
 import { LoginForm } from "../../../ui/src/components/LoginForm";
 import { SignupForm } from "../../../ui/src/components/SignupForm";
@@ -18,6 +19,7 @@ if (root) {
           <SignupForm />
           <LoginForm />
           <DevicesList />
+          <ChangePasswordForm />
         </main>
       </I18nextProvider>
     </StrictMode>,

@@ -129,6 +129,43 @@ impl<'a> UserRepository<'a> {
         Ok(user)
     }
 
+    /// Lit le hash de mot de passe **du compte de l'appelant** (REQ-AUT-007).
+    ///
+    /// Utilisé pour vérifier le mot de passe actuel avant un changement. Filtré sur le foyer de
+    /// l'`Actor` (garde-fou d'isolation).
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-AUT-007)]
+    pub async fn find_password_hash(&self, actor: &Actor) -> Result<Option<String>, StorageError> {
+        let row: Option<(String,)> =
+            sqlx::query_as("select password_hash from users where id = $1 and household_id = $2")
+                .bind(actor.user_id())
+                .bind(actor.household_id())
+                .fetch_optional(self.pool)
+                .await?;
+        Ok(row.map(|(hash,)| hash))
+    }
+
+    /// Remplace le hash de mot de passe **du compte de l'appelant** (REQ-AUT-007).
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-AUT-007)]
+    pub async fn update_password(
+        &self,
+        actor: &Actor,
+        new_password_hash: &str,
+    ) -> Result<(), StorageError> {
+        sqlx::query("update users set password_hash = $3 where id = $1 and household_id = $2")
+            .bind(actor.user_id())
+            .bind(actor.household_id())
+            .bind(new_password_hash)
+            .execute(self.pool)
+            .await?;
+        Ok(())
+    }
+
     /// Récupère les identifiants d'un compte par e-mail, pour l'authentification (REQ-AUT-002).
     ///
     /// Renvoie `None` si aucun compte ne correspond — l'appelant doit rester **timing-safe**

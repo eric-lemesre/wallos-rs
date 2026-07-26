@@ -31,5 +31,18 @@
     "current": "Cet appareil",
     "revoke": "Révoquer",
     "loadError": "Impossible de charger vos appareils"
+  },
+  "changePassword": {
+    "current": "Mot de passe actuel",
+    "new": "Nouveau mot de passe",
+    "submit": "Changer le mot de passe",
+    "success": "Mot de passe changé. Les autres sessions et appareils ont été déconnectés.",
+    "wrongCurrent": "Le mot de passe actuel est incorrect",
+    "error": "Impossible de changer votre mot de passe",
+    "validation": {
+      "currentRequired": "Saisissez votre mot de passe actuel",
+      "newTooShort": "Le mot de passe doit contenir au moins 12 caractères",
+      "newCompromised": "Ce mot de passe est trop courant — choisissez-en un autre"
+    }
   }
 }

@@ -85,6 +85,19 @@ pub struct DeviceToken {
     pub token: String,
 }
 
+/// Requête de changement de mot de passe (REQ-AUT-007).
+///
+/// Exige le mot de passe actuel (sinon `403`) ; le nouveau doit respecter la politique (REQ-AUT-003).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct ChangePasswordRequest {
+    /// Mot de passe actuel, revérifié côté serveur.
+    #[schema(format = "password")]
+    pub current_password: String,
+    /// Nouveau mot de passe (longueur minimale + non compromis, REQ-AUT-003).
+    #[schema(format = "password", min_length = 12)]
+    pub new_password: String,
+}
+
 /// Résumé d'un appareil appairé, pour la liste de gestion (REQ-AUT-006).
 ///
 /// `id` (UUID) et `last_seen_at` (RFC 3339) sont sérialisés en chaînes pour rester indépendants des

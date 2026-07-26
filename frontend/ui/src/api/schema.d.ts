@@ -106,6 +106,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change le mot de passe du compte courant et coupe les accès existants (REQ-AUT-007).
+         * @description Exige le mot de passe actuel (sinon `403`, aucun état modifié). Le nouveau doit respecter la
+         *     politique (REQ-AUT-003, sinon `422`). En cas de succès, **toutes les sessions et jetons
+         *     d'appareil sont invalidés sauf la crédential courante** — un changement de mot de passe qui ne
+         *     couperait pas les accès existants ne remédierait à rien.
+         */
+        put: operations["changePassword"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sessions": {
         parameters: {
             query?: never;
@@ -131,6 +154,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description Requête de changement de mot de passe (REQ-AUT-007).
+         *
+         *     Exige le mot de passe actuel (sinon `403`) ; le nouveau doit respecter la politique (REQ-AUT-003).
+         */
+        ChangePasswordRequest: {
+            /**
+             * Format: password
+             * @description Mot de passe actuel, revérifié côté serveur.
+             */
+            current_password: string;
+            /**
+             * Format: password
+             * @description Nouveau mot de passe (longueur minimale + non compromis, REQ-AUT-003).
+             */
+            new_password: string;
+        };
         /**
          * @description Requête de création de compte (REQ-AUT-001).
          *
@@ -451,6 +491,55 @@ export interface operations {
             };
             /** @description Non authentifié */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Mot de passe changé ; autres sessions et jetons d'appareil invalidés */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Mot de passe actuel incorrect ; aucun changement */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Nouveau mot de passe non conforme */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

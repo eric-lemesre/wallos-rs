@@ -111,6 +111,30 @@ impl<'a> DeviceTokenRepository<'a> {
         Ok(rows)
     }
 
+    /// Révoque **tous les jetons d'appareil du compte de l'appelant sauf, optionnellement, un**
+    /// (REQ-AUT-007).
+    ///
+    /// Appelé lors d'un changement de mot de passe : `keep_id = Some(appareil courant)` préserve
+    /// l'appareil en cours (auth par Bearer), `None` les révoque tous (auth par cookie).
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-AUT-007)]
+    pub async fn revoke_all_for_user_except(
+        &self,
+        actor: &Actor,
+        keep_id: Option<Uuid>,
+    ) -> Result<(), StorageError> {
+        sqlx::query(
+            "delete from device_tokens where user_id = $1 and ($2::uuid is null or id <> $2)",
+        )
+        .bind(actor.user_id())
+        .bind(keep_id)
+        .execute(self.pool)
+        .await?;
+        Ok(())
+    }
+
     /// Révoque un appareil **du foyer de l'appelant** (révocation immédiate, REQ-AUT-006).
     ///
     /// Renvoie `true` si un appareil a été supprimé, `false` s'il n'existe pas *ou* appartient à un
