@@ -55,6 +55,53 @@ async fn expired_session_is_invisible(pool: sqlx::PgPool) {
 }
 
 #[sqlx::test]
+#[verifies(REQ-AUT-004)]
+async fn touch_slides_expiry_and_keeps_session_valid(pool: sqlx::PgPool) {
+    let actor = seed_account(&pool, "erin@example.com").await;
+    let sessions = SessionRepository::new(&pool);
+    let now = Utc::now();
+    // Session sur le point d'expirer.
+    sessions
+        .create(&actor, b"token-slide", now + Duration::seconds(1))
+        .await
+        .unwrap();
+
+    // Un instant après l'expiration initiale : sans slide, elle serait invalide.
+    let later = now + Duration::minutes(5);
+    assert!(
+        sessions
+            .find_valid(b"token-slide", later)
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    // On repousse l'expiration (activité) : la session redevient valide à `later`.
+    sessions
+        .touch(b"token-slide", later + Duration::minutes(30))
+        .await
+        .unwrap();
+    assert!(
+        sessions
+            .find_valid(b"token-slide", later)
+            .await
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[sqlx::test]
+#[verifies(REQ-AUT-004)]
+async fn touch_on_unknown_token_is_a_noop(pool: sqlx::PgPool) {
+    let sessions = SessionRepository::new(&pool);
+    // Aucun jeton correspondant : ne doit pas échouer.
+    sessions
+        .touch(b"nope", Utc::now() + Duration::minutes(30))
+        .await
+        .unwrap();
+}
+
+#[sqlx::test]
 #[verifies(REQ-AUT-002)]
 async fn unknown_token_resolves_to_none(pool: sqlx::PgPool) {
     let sessions = SessionRepository::new(&pool);
