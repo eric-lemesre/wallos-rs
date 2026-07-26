@@ -15,6 +15,7 @@
     "email": "Adresse e-mail",
     "password": "Mot de passe",
     "submit": "Se connecter",
+    "logout": "Se déconnecter",
     "error": "E-mail ou mot de passe invalide",
     "loggedInAs": "Connecté en tant que {{email}}",
     "validation": {

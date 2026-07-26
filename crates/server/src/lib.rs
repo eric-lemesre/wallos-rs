@@ -29,7 +29,8 @@ pub mod auth;
         api_v1_health,
         accounts::create_account,
         auth::create_session,
-        auth::get_current_user
+        auth::get_current_user,
+        auth::delete_session
     ),
     components(schemas(
         HealthResponse,
@@ -98,6 +99,7 @@ pub fn app_with_db(db: Db) -> Router {
         .routes(routes!(accounts::create_account))
         .routes(routes!(auth::create_session))
         .routes(routes!(auth::get_current_user))
+        .routes(routes!(auth::delete_session))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))

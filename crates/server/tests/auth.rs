@@ -70,6 +70,17 @@ async fn get_me(pool: &PgPool, cookie: Option<&str>) -> axum::http::Response<Bod
         .unwrap()
 }
 
+async fn logout(pool: &PgPool, cookie: Option<&str>) -> axum::http::Response<Body> {
+    let mut builder = Request::builder().method("DELETE").uri("/api/v1/sessions");
+    if let Some(cookie) = cookie {
+        builder = builder.header(header::COOKIE, cookie);
+    }
+    app(pool.clone())
+        .oneshot(builder.body(Body::empty()).unwrap())
+        .await
+        .unwrap()
+}
+
 // --- Parcours fonctionnels ---
 
 #[sqlx::test(migrations = "../storage/migrations")]
@@ -181,4 +192,69 @@ async fn authz_other_get_current_user(pool: PgPool) {
 async fn authz_anon_get_current_user(pool: PgPool) {
     // Sans cookie de session : 401.
     assert_eq!(get_me(&pool, None).await.status(), StatusCode::UNAUTHORIZED);
+}
+
+// --- Déconnexion (REQ-AUT-009) ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-AUT-009)]
+async fn logout_invalidates_session_server_side(pool: PgPool) {
+    signup(&pool, "logmeout@example.com").await;
+    let cookie = session_cookie(&login(&pool, "logmeout@example.com", PASSWORD).await);
+    assert_eq!(get_me(&pool, Some(&cookie)).await.status(), StatusCode::OK);
+
+    assert_eq!(
+        logout(&pool, Some(&cookie)).await.status(),
+        StatusCode::NO_CONTENT
+    );
+    // Le même cookie ne donne plus accès : invalidation côté serveur.
+    assert_eq!(
+        get_me(&pool, Some(&cookie)).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-AUT-009)]
+async fn logout_is_idempotent(pool: PgPool) {
+    signup(&pool, "twice@example.com").await;
+    let cookie = session_cookie(&login(&pool, "twice@example.com", PASSWORD).await);
+    assert_eq!(
+        logout(&pool, Some(&cookie)).await.status(),
+        StatusCode::NO_CONTENT
+    );
+    // Rejeu sur session déjà invalidée : toujours 204.
+    assert_eq!(
+        logout(&pool, Some(&cookie)).await.status(),
+        StatusCode::NO_CONTENT
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-AUT-009)]
+async fn authz_owner_delete_session(pool: PgPool) {
+    signup(&pool, "owner-lo@example.com").await;
+    let cookie = session_cookie(&login(&pool, "owner-lo@example.com", PASSWORD).await);
+    assert_eq!(
+        logout(&pool, Some(&cookie)).await.status(),
+        StatusCode::NO_CONTENT
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-AUT-009)]
+async fn authz_other_delete_session(pool: PgPool) {
+    signup(&pool, "other-lo@example.com").await;
+    let cookie = session_cookie(&login(&pool, "other-lo@example.com", PASSWORD).await);
+    assert_eq!(
+        logout(&pool, Some(&cookie)).await.status(),
+        StatusCode::NO_CONTENT
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-AUT-009)]
+async fn authz_anon_delete_session(pool: PgPool) {
+    // Sans cookie : la déconnexion reste 204 (idempotente, endpoint public).
+    assert_eq!(logout(&pool, None).await.status(), StatusCode::NO_CONTENT);
 }

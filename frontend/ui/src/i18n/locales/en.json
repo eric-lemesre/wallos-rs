@@ -15,6 +15,7 @@
     "email": "Email",
     "password": "Password",
     "submit": "Sign in",
+    "logout": "Sign out",
     "error": "Invalid email or password",
     "loggedInAs": "Signed in as {{email}}",
     "validation": {

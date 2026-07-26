@@ -54,6 +54,30 @@ describe("LoginForm", () => {
     );
   });
 
+  it("se déconnecte : invalide la session et efface l'état (REQ-AUT-009)", async () => {
+    vi.spyOn(api, "POST").mockResolvedValue({
+      response: new Response(null, { status: 200 }),
+    } as never);
+    vi.spyOn(api, "GET").mockResolvedValue({
+      data: { email: "alice@example.com" },
+      response: new Response(null, { status: 200 }),
+    } as never);
+    const del = vi
+      .spyOn(api, "DELETE")
+      .mockResolvedValue({ response: new Response(null, { status: 204 }) } as never);
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByTestId("login-email"), "alice@example.com");
+    await user.type(screen.getByTestId("login-password"), "correct horse battery staple");
+    await user.click(screen.getByTestId("login-submit"));
+    await screen.findByTestId("login-current-user");
+
+    await user.click(screen.getByTestId("logout"));
+    await waitFor(() => expect(del).toHaveBeenCalledWith("/sessions"));
+    expect(screen.queryByTestId("login-current-user")).toBeNull();
+  });
+
   it("affiche un message générique quand les identifiants sont invalides", async () => {
     vi.spyOn(api, "POST").mockResolvedValue({
       response: new Response(null, { status: 401 }),

@@ -70,4 +70,19 @@ export class TargetDriver implements AppDriver {
       return false;
     }
   }
+
+  async logout(): Promise<void> {
+    await this.page.getByTestId("logout").click();
+  }
+
+  async currentUserGone(): Promise<boolean> {
+    try {
+      await this.page
+        .getByTestId("login-current-user")
+        .waitFor({ state: "detached", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
