@@ -80,3 +80,43 @@ jobs:
       - name: test
         working-directory: frontend/ui
         run: npm test
+
+  # Porte 11 : e2e L1 web (Playwright, chromium ET webkit) contre subtrack.
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: wallos
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/wallos
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: build server
+        run: cargo build -p wallos-server
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: install shell deps
+        working-directory: frontend/shells/web
+        run: npm ci
+      - name: install e2e deps
+        working-directory: e2e
+        run: npm ci
+      - name: install playwright browsers
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium webkit
+      - name: e2e (chromium + webkit)
+        working-directory: e2e
+        run: npm test

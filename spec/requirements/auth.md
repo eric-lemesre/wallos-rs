@@ -8,7 +8,7 @@
 id: REQ-AUT-001
 title: Création d'un compte utilisateur
 domain: auth
-status: accepted
+status: verified
 criticality: high
 layer: [core, api, ui]
 e2e: required
