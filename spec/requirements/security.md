@@ -8,7 +8,7 @@
 id: REQ-SEC-001
 title: Isolation stricte des données entre comptes
 domain: security
-status: accepted
+status: verified
 criticality: high
 layer: [core, api]
 e2e: required
