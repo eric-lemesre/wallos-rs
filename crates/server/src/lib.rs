@@ -11,7 +11,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use wallos_core::requirement;
 use wallos_proto::{
     CreateAccountRequest, CreateDeviceSessionRequest, CreateSessionRequest, CurrentUser,
-    DeviceToken, HealthResponse, Problem, problem,
+    DeviceSummary, DeviceToken, HealthResponse, Problem, problem,
 };
 use wallos_storage::Db;
 
@@ -33,6 +33,8 @@ pub mod auth;
         auth::create_session,
         auth::create_device_session,
         auth::get_current_user,
+        auth::list_devices,
+        auth::revoke_device,
         auth::delete_session
     ),
     components(schemas(
@@ -42,6 +44,7 @@ pub mod auth;
         CreateSessionRequest,
         CreateDeviceSessionRequest,
         DeviceToken,
+        DeviceSummary,
         CurrentUser
     ))
 )]
@@ -105,6 +108,8 @@ pub fn app_with_db(db: Db) -> Router {
         .routes(routes!(auth::create_session))
         .routes(routes!(auth::create_device_session))
         .routes(routes!(auth::get_current_user))
+        .routes(routes!(auth::list_devices))
+        .routes(routes!(auth::revoke_device))
         .routes(routes!(auth::delete_session))
         .split_for_parts();
     Router::new()

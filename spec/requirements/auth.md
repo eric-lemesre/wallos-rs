@@ -127,7 +127,7 @@ depends_on: [REQ-AUT-002]
 id: REQ-AUT-006
 title: Liste et révocation des appareils
 domain: auth
-status: accepted
+status: verified
 criticality: high
 layer: [api, ui]
 e2e: required

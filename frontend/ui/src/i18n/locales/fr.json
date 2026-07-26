@@ -22,5 +22,14 @@
       "emailInvalid": "Saisissez une adresse e-mail valide",
       "passwordRequired": "Saisissez votre mot de passe"
     }
+  },
+  "devices": {
+    "title": "Vos appareils",
+    "empty": "Aucun appareil appairé",
+    "platform": "Plateforme",
+    "lastSeen": "Dernière activité",
+    "current": "Cet appareil",
+    "revoke": "Révoquer",
+    "loadError": "Impossible de charger vos appareils"
   }
 }

@@ -18,4 +18,13 @@ export interface AppDriver {
   loginFailed(): Promise<boolean>;
   logout(): Promise<void>;
   currentUserGone(): Promise<boolean>;
+
+  // Gestion des appareils (REQ-AUT-006).
+  /** Appaire un appareil via l'API (comme le ferait une coquille native). */
+  pairDevice(input: SignupInput, label: string, platform: string): Promise<void>;
+  /** Recharge la vue des appareils (la liste se rafraîchit avec la session courante). */
+  openDevices(): Promise<void>;
+  deviceListed(label: string): Promise<boolean>;
+  revokeDevice(label: string): Promise<void>;
+  deviceGone(label: string): Promise<boolean>;
 }
