@@ -104,6 +104,18 @@ async fn password_at_exact_minimum_length_is_accepted(pool: PgPool) {
     assert_eq!(response.status(), StatusCode::CREATED);
 }
 
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-AUT-003)]
+async fn compromised_password_is_rejected(pool: PgPool) {
+    // Assez long (12) mais figurant dans la liste de compromis -> 422 (REQ-AUT-003).
+    let response = post_accounts(
+        app(pool),
+        json!({ "email": "dave@example.com", "password": "password1234" }),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
 // --- Autorisation §9 : l'inscription est un endpoint PUBLIC (comme getHealth) ---
 
 #[sqlx::test(migrations = "../storage/migrations")]

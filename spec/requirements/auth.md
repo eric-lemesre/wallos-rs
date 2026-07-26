@@ -57,7 +57,7 @@ depends_on: [REQ-AUT-001]
 id: REQ-AUT-003
 title: Politique de mot de passe
 domain: auth
-status: accepted
+status: verified
 criticality: medium
 layer: [core, api, ui]
 e2e: required

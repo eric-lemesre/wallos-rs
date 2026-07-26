@@ -46,6 +46,22 @@ describe("SignupForm", () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it("refuse un mot de passe compromis sans appeler l'API (REQ-AUT-003)", async () => {
+    const post = vi.spyOn(api, "POST");
+    const user = userEvent.setup();
+    renderForm();
+
+    await user.type(screen.getByTestId("signup-email"), "alice@example.com");
+    // Assez long mais présent dans la liste de compromis.
+    await user.type(screen.getByTestId("signup-password"), "password1234");
+    await user.click(screen.getByTestId("signup-submit"));
+
+    expect(await screen.findByTestId("signup-password-error")).toHaveTextContent(
+      i18n.t("signup.validation.passwordCompromised"),
+    );
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it("soumet un formulaire valide au contrat et affiche le succès", async () => {
     const post = vi
       .spyOn(api, "POST")
