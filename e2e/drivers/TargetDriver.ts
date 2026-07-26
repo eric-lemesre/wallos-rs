@@ -136,4 +136,23 @@ export class TargetDriver implements AppDriver {
       return false;
     }
   }
+
+  // --- Changement de mot de passe (REQ-AUT-007) ---
+
+  async changePassword(current: string, next: string): Promise<void> {
+    await this.page.getByTestId("change-password-current").fill(current);
+    await this.page.getByTestId("change-password-new").fill(next);
+    await this.page.getByTestId("change-password-submit").click();
+  }
+
+  async passwordChangeSucceeded(): Promise<boolean> {
+    try {
+      await this.page
+        .getByTestId("change-password-success")
+        .waitFor({ state: "visible", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }

@@ -27,4 +27,8 @@ export interface AppDriver {
   deviceListed(label: string): Promise<boolean>;
   revokeDevice(label: string): Promise<void>;
   deviceGone(label: string): Promise<boolean>;
+
+  // Changement de mot de passe (REQ-AUT-007).
+  changePassword(current: string, next: string): Promise<void>;
+  passwordChangeSucceeded(): Promise<boolean>;
 }

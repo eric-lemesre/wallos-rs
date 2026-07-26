@@ -63,6 +63,29 @@ impl<'a> SessionRepository<'a> {
         Ok(())
     }
 
+    /// Invalide **toutes les sessions du compte de l'appelant sauf, optionnellement, une** (REQ-AUT-007).
+    ///
+    /// Appelé lors d'un changement de mot de passe : `keep_token_hash = Some(hash courant)` préserve
+    /// la session en cours, `None` les révoque toutes.
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-AUT-007)]
+    pub async fn revoke_all_for_user_except(
+        &self,
+        actor: &Actor,
+        keep_token_hash: Option<&[u8]>,
+    ) -> Result<(), StorageError> {
+        sqlx::query(
+            "delete from sessions where user_id = $1 and ($2::bytea is null or token_hash <> $2)",
+        )
+        .bind(actor.user_id())
+        .bind(keep_token_hash)
+        .execute(self.pool)
+        .await?;
+        Ok(())
+    }
+
     /// Repousse l'expiration d'une session (expiration d'inactivité glissante, REQ-AUT-004).
     ///
     /// Sans effet si le jeton est inconnu (idempotent).

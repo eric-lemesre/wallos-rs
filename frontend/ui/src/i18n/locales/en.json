@@ -31,5 +31,18 @@
     "current": "This device",
     "revoke": "Revoke",
     "loadError": "Could not load your devices"
+  },
+  "changePassword": {
+    "current": "Current password",
+    "new": "New password",
+    "submit": "Change password",
+    "success": "Password changed. Other sessions and devices were signed out.",
+    "wrongCurrent": "Current password is incorrect",
+    "error": "Could not change your password",
+    "validation": {
+      "currentRequired": "Enter your current password",
+      "newTooShort": "Password must be at least 12 characters",
+      "newCompromised": "This password is too common — choose another"
+    }
   }
 }

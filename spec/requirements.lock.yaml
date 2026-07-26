@@ -77,7 +77,7 @@ requirements:
 - id: REQ-AUT-007
   title: Changement de mot de passe
   domain: auth
-  status: accepted
+  status: verified
   criticality: high
   layer:
   - api

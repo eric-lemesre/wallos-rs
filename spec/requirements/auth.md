@@ -150,7 +150,7 @@ depends_on: [REQ-AUT-005]
 id: REQ-AUT-007
 title: Changement de mot de passe
 domain: auth
-status: accepted
+status: verified
 criticality: high
 layer: [api, ui]
 e2e: required
