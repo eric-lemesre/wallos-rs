@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/device-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Appaire un appareil natif et émet un jeton propre à l'appareil (REQ-AUT-005). */
+        post: operations["createDeviceSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -64,7 +81,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Authentifie un utilisateur et ouvre une session. */
+        /** Authentifie un utilisateur et ouvre une session web (cookie). */
         post: operations["createSession"];
         /**
          * Déconnecte : invalide la session côté serveur et expire le cookie (REQ-AUT-009).
@@ -100,6 +117,35 @@ export interface components {
              */
             password: string;
         };
+        /**
+         * @description Requête d'appairage d'un appareil natif (REQ-AUT-005).
+         *
+         *     Comme l'authentification web, mais émet un jeton propre à l'appareil (corps de réponse) au lieu
+         *     d'un cookie ; l'appareil fournit un libellé et sa plateforme.
+         */
+        CreateDeviceSessionRequest: {
+            /**
+             * Format: email
+             * @description Adresse e-mail du compte.
+             * @example user@example.com
+             */
+            email: string;
+            /**
+             * @description Libellé lisible de l'appareil (choisi par l'utilisateur ou dérivé du matériel).
+             * @example MacBook de Léa
+             */
+            label: string;
+            /**
+             * Format: password
+             * @description Mot de passe.
+             */
+            password: string;
+            /**
+             * @description Plateforme de l'appareil.
+             * @example desktop
+             */
+            platform: string;
+        };
         /** @description Requête d'authentification (REQ-AUT-002). */
         CreateSessionRequest: {
             /**
@@ -118,6 +164,16 @@ export interface components {
         CurrentUser: {
             /** @description Adresse e-mail du compte courant. */
             email: string;
+        };
+        /**
+         * @description Jeton d'appareil émis à l'appairage (REQ-AUT-005).
+         *
+         *     Renvoyé **une seule fois** : la coquille native le stocke via `PlatformAdapter.secureStore`,
+         *     jamais en clair côté serveur (seule son empreinte SHA-256 est conservée).
+         */
+        DeviceToken: {
+            /** @description Jeton opaque à présenter en `Authorization: Bearer`. */
+            token: string;
         };
         /** @description Réponse d'état du serveur. */
         HealthResponse: {
@@ -184,6 +240,48 @@ export interface operations {
             };
             /** @description Requête invalide */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createDeviceSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDeviceSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Appareil appairé ; jeton d'appareil émis (corps) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceToken"];
+                };
+            };
+            /** @description Identifiants invalides */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Trop de tentatives ; réessayer après l'en-tête Retry-After */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

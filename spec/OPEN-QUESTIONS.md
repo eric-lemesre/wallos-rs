@@ -94,6 +94,27 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
 
 ---
 
+## OQ-008 — Volet client natif des jetons d'appareil (secureStore / coquille desktop)
+- **Bloque** : le critère « stocké via `PlatformAdapter.secureStore` » de REQ-AUT-005, et la partie
+  desktop de REQ-AUT-006/007.
+- **Contexte** : le back-end des jetons d'appareil est livrable et testable immédiatement, mais
+  `frontend/platform` (`PlatformAdapter`/`SecureStore`), la coquille desktop Tauri et le niveau e2e
+  L2 (`tauri-driver`) sont absents. Les bâtir est un chantier distinct (plusieurs ADR, nouveau tier
+  e2e) qui n'est pas mûr tant que l'UI partagée ne l'est pas (cf. ADR 0015 sur le report du natif).
+- **Options** : A) livrer l'API des jetons d'appareil maintenant (Bearer, révocable) + REQ-AUT-006
+  en UI **web** (liste/révocation vérifiable en L1) ; laisser REQ-AUT-005 en `implemented` et
+  différer le stockage natif — B) tout bloquer jusqu'à la coquille desktop — C) construire la
+  coquille native d'abord.
+- **Recommandation agent** : A. Débloque un maximum de valeur testable sans figer prématurément
+  l'archi native.
+- **Décision** : A (arbitrée par le responsable du dépôt, 2026-07-26). API des jetons d'appareil
+  livrée (ADR 0019) ; REQ-AUT-005 = `implemented` ; REQ-AUT-006 = `verified` en modalité web ; le
+  stockage natif via `secureStore` et l'e2e L2 desktop sont reportés à l'incrément « coquille
+  desktop ».
+- **Statut** : resolved
+
+---
+
 ## OQ-007 — Traitement des exigences `oracle: legacy` non reproductibles
 - **Bloque** : protocole §8.1
 - **Contexte** : certaines exigences ne pourront pas être capturées sur l'application d'origine
