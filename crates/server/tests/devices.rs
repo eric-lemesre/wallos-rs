@@ -128,6 +128,36 @@ async fn pairing_with_wrong_password_is_rejected(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-AUT-008)]
+async fn too_many_failed_device_pairings_returns_429(pool: PgPool) {
+    // L'appairage vérifie un mot de passe : il partage la limitation de taux des logins (REQ-AUT-008).
+    signup(&pool, "pair-brute@example.com").await;
+    for _ in 0..5 {
+        let attempt = pair_device(
+            &pool,
+            "pair-brute@example.com",
+            "wrong password",
+            "L",
+            "desktop",
+        )
+        .await;
+        assert_eq!(attempt.status(), StatusCode::UNAUTHORIZED);
+    }
+    // Le 6ᵉ, même avec le bon mot de passe, est limité.
+    let blocked = pair_device(&pool, "pair-brute@example.com", PASSWORD, "L", "desktop").await;
+    assert_eq!(blocked.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(
+        blocked
+            .headers()
+            .get(header::RETRY_AFTER)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<i64>().ok())
+            .expect("429 carries Retry-After")
+            >= 1
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
 #[verifies(REQ-AUT-005)]
 async fn invalid_bearer_token_is_unauthorized(pool: PgPool) {
     // Un jeton inconnu ne donne aucun accès.
