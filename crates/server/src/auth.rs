@@ -612,7 +612,7 @@ pub async fn revoke_device(
     path = "/password",
     operation_id = "changePassword",
     request_body = ChangePasswordRequest,
-    extensions(("x-requirements" = json!(["REQ-AUT-007"]))),
+    extensions(("x-requirements" = json!(["REQ-AUT-007", "REQ-AUT-008"]))),
     responses(
         (status = 204, description = "Mot de passe changé ; autres sessions et jetons d'appareil invalidés"),
         (
@@ -632,6 +632,12 @@ pub async fn revoke_device(
             description = "Nouveau mot de passe non conforme",
             body = wallos_proto::Problem,
             content_type = "application/problem+json"
+        ),
+        (
+            status = 429,
+            description = "Trop de tentatives ; réessayer après l'en-tête Retry-After",
+            body = wallos_proto::Problem,
+            content_type = "application/problem+json"
         )
     )
 )]
@@ -639,23 +645,43 @@ pub async fn revoke_device(
 pub async fn change_password(
     AuthActor(actor): AuthActor,
     CurrentDevice(current_device): CurrentDevice,
+    ClientIp(ip): ClientIp,
     State(db): State<Db>,
     headers: HeaderMap,
     Json(req): Json<ChangePasswordRequest>,
 ) -> Response {
+    let now = Utc::now();
     let users = UserRepository::new(db.pool());
 
+    // Compte de l'appelant : e-mail (clé de limitation de taux) + hash actuel. Incohérence -> 403.
+    let Some((email, stored_hash)) = users
+        .find_email_and_password_hash(&actor)
+        .await
+        .ok()
+        .flatten()
+    else {
+        return problem_response(
+            StatusCode::FORBIDDEN,
+            problem(403, "about:blank", "Forbidden"),
+        );
+    };
+
+    // Limitation de taux (REQ-AUT-008) : le mot de passe actuel est vérifié en argon2 ; sans cette
+    // garde, une session détournée pourrait forcer `current_password` pour prendre le compte.
+    let attempts = LoginAttemptRepository::new(db.pool());
+    if let Some(retry_after) = rate_limit_retry_after(&attempts, &email, ip.as_deref(), now).await {
+        return RateLimited { retry_after }.into_response();
+    }
+
     // Mot de passe actuel revérifié : échec -> 403, sans aucune modification d'état.
-    let stored = users.find_password_hash(&actor).await.ok().flatten();
-    let current_ok = stored
-        .as_deref()
-        .is_some_and(|hash| verify_password(&req.current_password, hash));
-    if !current_ok {
+    if !verify_password(&req.current_password, &stored_hash) {
+        let _ = attempts.record_failure(&email, ip.as_deref(), now).await;
         return problem_response(
             StatusCode::FORBIDDEN,
             problem(403, "about:blank", "Forbidden"),
         );
     }
+    let _ = attempts.clear_email(&email).await;
 
     // Nouveau mot de passe : politique REQ-AUT-003 (longueur + non compromis).
     if let Err(error) = validate_password(&req.new_password) {

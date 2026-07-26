@@ -129,22 +129,26 @@ impl<'a> UserRepository<'a> {
         Ok(user)
     }
 
-    /// Lit le hash de mot de passe **du compte de l'appelant** (REQ-AUT-007).
+    /// Lit l'e-mail et le hash de mot de passe **du compte de l'appelant** (REQ-AUT-007).
     ///
-    /// Utilisé pour vérifier le mot de passe actuel avant un changement. Filtré sur le foyer de
-    /// l'`Actor` (garde-fou d'isolation).
+    /// L'e-mail sert de clé de limitation de taux (REQ-AUT-008) au changement de mot de passe ; le
+    /// hash sert à vérifier le mot de passe actuel. Filtré sur le foyer de l'`Actor` (isolation).
     ///
     /// # Errors
     /// `StorageError::Database` en cas d'échec de requête.
     #[requirement(REQ-AUT-007)]
-    pub async fn find_password_hash(&self, actor: &Actor) -> Result<Option<String>, StorageError> {
-        let row: Option<(String,)> =
-            sqlx::query_as("select password_hash from users where id = $1 and household_id = $2")
-                .bind(actor.user_id())
-                .bind(actor.household_id())
-                .fetch_optional(self.pool)
-                .await?;
-        Ok(row.map(|(hash,)| hash))
+    pub async fn find_email_and_password_hash(
+        &self,
+        actor: &Actor,
+    ) -> Result<Option<(String, String)>, StorageError> {
+        let row: Option<(String, String)> = sqlx::query_as(
+            "select email::text, password_hash from users where id = $1 and household_id = $2",
+        )
+        .bind(actor.user_id())
+        .bind(actor.household_id())
+        .fetch_optional(self.pool)
+        .await?;
+        Ok(row)
     }
 
     /// Remplace le hash de mot de passe **du compte de l'appelant** (REQ-AUT-007).

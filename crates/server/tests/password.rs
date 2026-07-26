@@ -213,6 +213,31 @@ async fn changing_password_cuts_other_sessions_and_devices_but_keeps_current(poo
     );
 }
 
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-AUT-008)]
+async fn too_many_wrong_current_passwords_returns_429(pool: PgPool) {
+    // La vérification du mot de passe actuel est protégée contre la force brute (REQ-AUT-008).
+    signup(&pool, "brute-pw@example.com").await;
+    let cookie = session_cookie(&login(&pool, "brute-pw@example.com", PASSWORD).await);
+
+    for _ in 0..5 {
+        let attempt = change_password(&pool, Some(&cookie), "wrong current", NEW_PASSWORD).await;
+        assert_eq!(attempt.status(), StatusCode::FORBIDDEN);
+    }
+    // Le 6ᵉ, même avec le bon mot de passe actuel, est limité.
+    let blocked = change_password(&pool, Some(&cookie), PASSWORD, NEW_PASSWORD).await;
+    assert_eq!(blocked.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(
+        blocked
+            .headers()
+            .get(header::RETRY_AFTER)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<i64>().ok())
+            .expect("429 carries Retry-After")
+            >= 1
+    );
+}
+
 // --- Autorisation §9 : changePassword (protégé) ---
 
 #[sqlx::test(migrations = "../storage/migrations")]
