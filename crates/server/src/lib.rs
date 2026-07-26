@@ -8,10 +8,13 @@ use axum::{Json, Router};
 use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use wallos_core::requirement;
-use wallos_proto::{CreateAccountRequest, HealthResponse, Problem, problem};
+use wallos_proto::{
+    CreateAccountRequest, CreateSessionRequest, CurrentUser, HealthResponse, Problem, problem,
+};
 use wallos_storage::Db;
 
 pub mod accounts;
+pub mod auth;
 
 /// API wallos-rs v1.
 #[derive(OpenApi)]
@@ -22,8 +25,19 @@ pub mod accounts;
         description = "Code-first OpenAPI contract for wallos-rs."
     ),
     servers((url = "/api/v1")),
-    paths(api_v1_health, accounts::create_account),
-    components(schemas(HealthResponse, Problem, CreateAccountRequest))
+    paths(
+        api_v1_health,
+        accounts::create_account,
+        auth::create_session,
+        auth::get_current_user
+    ),
+    components(schemas(
+        HealthResponse,
+        Problem,
+        CreateAccountRequest,
+        CreateSessionRequest,
+        CurrentUser
+    ))
 )]
 pub struct ApiDoc;
 
@@ -82,6 +96,8 @@ pub fn app_with_db(db: Db) -> Router {
     let (router, _api) = OpenApiRouter::new()
         .routes(routes!(api_v1_health))
         .routes(routes!(accounts::create_account))
+        .routes(routes!(auth::create_session))
+        .routes(routes!(auth::get_current_user))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))

@@ -31,7 +31,7 @@ depends_on: []
 id: REQ-AUT-002
 title: Authentification par e-mail et mot de passe
 domain: auth
-status: accepted
+status: verified
 criticality: high
 layer: [core, api, ui]
 e2e: required

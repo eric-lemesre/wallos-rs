@@ -23,7 +23,9 @@ export default defineConfig({
     {
       command: "cargo run -p wallos-server",
       cwd: "..",
-      env: { DATABASE_URL },
+      // e2e servi en HTTP : on désactive l'attribut Secure du cookie (webkit ne stocke pas un
+      // cookie Secure sur http://localhost). En production (HTTPS) il reste actif par défaut.
+      env: { DATABASE_URL, SESSION_COOKIE_SECURE: "false" },
       url: "http://localhost:3000/api/v1/health",
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,

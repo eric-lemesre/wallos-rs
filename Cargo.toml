@@ -70,6 +70,8 @@ argon2 = { version = "0.5", features = ["std"] }
 password-auth = "0.4"
 rand = "0.9"
 secrecy = "0.10"
+# Empreinte SHA-256 des jetons de session opaques (ADR 0018). Jamais pour les mots de passe.
+sha2 = "0.10"
 
 # Errors
 thiserror = "2.0"

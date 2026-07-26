@@ -13,4 +13,7 @@ export interface AppDriver {
   signup(input: SignupInput): Promise<void>;
   signupSucceeded(): Promise<boolean>;
   hasPasswordError(): Promise<boolean>;
+  login(input: SignupInput): Promise<void>;
+  currentUserVisible(): Promise<boolean>;
+  loginFailed(): Promise<boolean>;
 }

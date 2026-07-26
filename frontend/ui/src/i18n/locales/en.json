@@ -10,5 +10,16 @@
       "passwordTooShort": "Password must be at least 12 characters",
       "passwordCompromised": "This password is too common — choose another"
     }
+  },
+  "login": {
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "error": "Invalid email or password",
+    "loggedInAs": "Signed in as {{email}}",
+    "validation": {
+      "emailInvalid": "Enter a valid email address",
+      "passwordRequired": "Enter your password"
+    }
   }
 }

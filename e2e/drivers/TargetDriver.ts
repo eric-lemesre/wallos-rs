@@ -42,4 +42,32 @@ export class TargetDriver implements AppDriver {
       return false;
     }
   }
+
+  async login({ email, password }: SignupInput): Promise<void> {
+    await this.page.getByTestId("login-email").fill(email);
+    await this.page.getByTestId("login-password").fill(password);
+    await this.page.getByTestId("login-submit").click();
+  }
+
+  async currentUserVisible(): Promise<boolean> {
+    try {
+      await this.page
+        .getByTestId("login-current-user")
+        .waitFor({ state: "visible", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async loginFailed(): Promise<boolean> {
+    try {
+      await this.page
+        .getByTestId("login-error")
+        .waitFor({ state: "visible", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }

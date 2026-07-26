@@ -11,23 +11,18 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use wallos_core::password_policy::validate_password;
+use wallos_core::password_policy::{PasswordPolicyError, validate_password};
 use wallos_core::requirement;
 use wallos_proto::{CreateAccountRequest, problem};
 use wallos_storage::{Db, UserRepository};
 
 use crate::problem_response;
 
-/// Applique la politique de mot de passe (REQ-AUT-003) et traduit un échec en `422 Problem`.
-///
-/// Le `detail` porte la clé i18n stable du motif, mappée par le client.
+/// Applique la politique de mot de passe (REQ-AUT-003). Retourne l'erreur (légère) ; l'appelant
+/// construit la `422 Problem` dont le `detail` porte la clé i18n stable du motif.
 #[requirement(REQ-AUT-003)]
-fn enforce_password_policy(password: &str) -> Result<(), Response> {
-    validate_password(password).map_err(|error| {
-        let body =
-            problem(422, "about:blank", "Unprocessable Entity").with_detail(error.message_key());
-        problem_response(StatusCode::UNPROCESSABLE_ENTITY, body)
-    })
+fn enforce_password_policy(password: &str) -> Result<(), PasswordPolicyError> {
+    validate_password(password)
 }
 
 /// Crée un compte utilisateur.
@@ -52,8 +47,10 @@ pub async fn create_account(
     State(db): State<Db>,
     Json(req): Json<CreateAccountRequest>,
 ) -> Response {
-    if let Err(response) = enforce_password_policy(&req.password) {
-        return response;
+    if let Err(error) = enforce_password_policy(&req.password) {
+        let body =
+            problem(422, "about:blank", "Unprocessable Entity").with_detail(error.message_key());
+        return problem_response(StatusCode::UNPROCESSABLE_ENTITY, body);
     }
 
     let Ok(hash) = hash_password(&req.password) else {
@@ -76,7 +73,7 @@ pub async fn create_account(
 
 /// Hache un mot de passe en argon2id (paramètres par défaut, alignés OWASP).
 #[requirement(REQ-AUT-001)]
-fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
+pub(crate) fn hash_password(password: &str) -> Result<String, argon2::password_hash::Error> {
     let salt = SaltString::generate(&mut OsRng);
     let hash = Argon2::default().hash_password(password.as_bytes(), &salt)?;
     Ok(hash.to_string())

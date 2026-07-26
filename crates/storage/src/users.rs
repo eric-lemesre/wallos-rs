@@ -31,6 +31,15 @@ pub struct StoredUser {
     pub email: String,
 }
 
+/// Identifiants de connexion d'un compte (REQ-AUT-002).
+#[derive(Debug, Clone)]
+pub struct Credentials {
+    /// Contexte d'appelant du compte (utilisateur + foyer).
+    pub actor: Actor,
+    /// Hash argon2id du mot de passe stocké.
+    pub password_hash: String,
+}
+
 /// Accès aux comptes.
 pub struct UserRepository<'a> {
     pool: &'a PgPool,
@@ -118,5 +127,30 @@ impl<'a> UserRepository<'a> {
         .fetch_optional(self.pool)
         .await?;
         Ok(user)
+    }
+
+    /// Récupère les identifiants d'un compte par e-mail, pour l'authentification (REQ-AUT-002).
+    ///
+    /// Renvoie `None` si aucun compte ne correspond — l'appelant doit rester **timing-safe**
+    /// (vérifier malgré tout un hash factice) pour ne pas divulguer l'existence.
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-AUT-002)]
+    pub async fn find_credentials_by_email(
+        &self,
+        email: &str,
+    ) -> Result<Option<Credentials>, StorageError> {
+        let row: Option<(Uuid, Uuid, String)> =
+            sqlx::query_as("select id, household_id, password_hash from users where email = $1")
+                .bind(email)
+                .fetch_optional(self.pool)
+                .await?;
+        Ok(
+            row.map(|(user_id, household_id, password_hash)| Credentials {
+                actor: Actor::new(user_id, household_id),
+                password_hash,
+            }),
+        )
     }
 }
