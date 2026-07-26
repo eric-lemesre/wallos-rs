@@ -90,7 +90,7 @@ requirements:
 - id: REQ-AUT-008
   title: Limitation du taux de tentatives d'authentification
   domain: auth
-  status: accepted
+  status: verified
   criticality: high
   layer:
   - api

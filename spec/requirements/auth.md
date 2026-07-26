@@ -173,7 +173,7 @@ depends_on: [REQ-AUT-003, REQ-AUT-006]
 id: REQ-AUT-008
 title: Limitation du taux de tentatives d'authentification
 domain: auth
-status: accepted
+status: verified
 criticality: high
 layer: [api]
 e2e: optional
