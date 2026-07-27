@@ -250,4 +250,46 @@ mod tests {
         assert_eq!(parsed.status, 500);
         assert_eq!(parsed.detail.as_deref(), Some("boom"));
     }
+
+    #[test]
+    #[verifies(REQ-CUR-002, case = "montant sérialisé en chaîne")]
+    fn amounts_serialise_as_json_strings() {
+        // Un montant en entrée transite en CHAÎNE décimale, jamais en nombre JSON.
+        let input = serde_json::to_value(MoneyInput {
+            amount: "12.34".to_string(),
+            currency: "EUR".to_string(),
+        })
+        .unwrap();
+        assert!(input["amount"].is_string());
+        assert_eq!(input["amount"], "12.34");
+
+        // Idem pour un total en sortie.
+        let output = serde_json::to_value(ConvertedTotalResponse {
+            total: "142.50".to_string(),
+            currency: "EUR".to_string(),
+            converted: 3,
+            excluded: 0,
+            complete: true,
+            as_of: Some("2026-07-20".to_string()),
+        })
+        .unwrap();
+        assert!(output["total"].is_string());
+        assert_eq!(output["total"], "142.50");
+    }
+
+    #[test]
+    #[verifies(REQ-CUR-002, case = "un nombre JSON est refusé")]
+    fn amount_as_json_number_is_rejected() {
+        // Un nombre JSON pour un montant est refusé au parsing (le champ est une chaîne) : un montant
+        // ne peut jamais voyager en nombre flottant, même côté désérialisation.
+        let from_number: Result<MoneyInput, _> =
+            serde_json::from_value(serde_json::json!({ "amount": 12.34, "currency": "EUR" }));
+        assert!(from_number.is_err());
+
+        // La forme correcte (chaîne) se relit sans perte.
+        let from_string: MoneyInput =
+            serde_json::from_value(serde_json::json!({ "amount": "12.34", "currency": "EUR" }))
+                .unwrap();
+        assert_eq!(from_string.amount, "12.34");
+    }
 }

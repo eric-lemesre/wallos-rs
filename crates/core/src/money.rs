@@ -140,4 +140,21 @@ mod tests {
         assert_eq!(z.amount(), Decimal::ZERO);
         assert_eq!(z.currency(), CurrencyCode::new("EUR").unwrap());
     }
+
+    #[test]
+    #[verifies(REQ-CUR-002, case = "somme exacte à deux décimales")]
+    fn two_decimal_sum_is_exact() {
+        // Le piège flottant classique : 0.10 + 0.20 vaut 0.30 EXACTEMENT en décimal (un flottant
+        // binaire donnerait 0.30000000000000004). C'est la garantie même de REQ-CUR-002.
+        let a: Decimal = "0.10".parse().unwrap();
+        let b: Decimal = "0.20".parse().unwrap();
+        assert_eq!(a + b, "0.30".parse::<Decimal>().unwrap());
+
+        // Somme réaliste de montants à deux décimales : le total est exact, sans erreur de représentation.
+        let eur = CurrencyCode::new("EUR").unwrap();
+        let m1 = Money::new("19.99".parse().unwrap(), eur).unwrap();
+        let m2 = Money::new("0.01".parse().unwrap(), eur).unwrap();
+        let total = m1.amount() + m2.amount();
+        assert_eq!(total, "20.00".parse::<Decimal>().unwrap());
+    }
 }

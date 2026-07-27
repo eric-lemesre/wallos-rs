@@ -31,7 +31,7 @@ depends_on: []
 id: REQ-CUR-002
 title: Représentation décimale des montants
 domain: currencies
-status: draft
+status: verified
 criticality: high
 layer: [core, api]
 e2e: n-a
