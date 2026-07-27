@@ -4,8 +4,11 @@ use std::net::SocketAddr;
 
 use anyhow::Context;
 use tracing::info;
+use wallos_core::requirement;
 use wallos_storage::Db;
 
+/// Démarre le service : connexion + migrations, puis sert l'API (dont la santé, REQ-OPS-001).
+#[requirement(REQ-OPS-001)]
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();

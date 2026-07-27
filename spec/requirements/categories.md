@@ -5,7 +5,7 @@
 id: REQ-CAT-001
 title: Gestion des catégories
 domain: categories
-status: accepted
+status: draft
 criticality: medium
 layer: [core, api, ui]
 e2e: required
@@ -28,7 +28,7 @@ depends_on: [REQ-SEC-001]
 id: REQ-CAT-002
 title: Catégories par défaut à la création du compte
 domain: categories
-status: accepted
+status: draft
 criticality: low
 layer: [core, api]
 e2e: optional
@@ -48,7 +48,7 @@ depends_on: [REQ-CAT-001, REQ-I18N-001]
 id: REQ-CAT-003
 title: Suppression d'une catégorie référencée
 domain: categories
-status: accepted
+status: draft
 criticality: medium
 layer: [core, api, ui]
 e2e: required
@@ -71,7 +71,7 @@ depends_on: [REQ-CAT-001]
 id: REQ-CAT-004
 title: Unicité du nom de catégorie par compte
 domain: categories
-status: accepted
+status: draft
 criticality: low
 layer: [core, api]
 e2e: optional
@@ -94,7 +94,7 @@ depends_on: [REQ-CAT-001]
 id: REQ-CAT-005
 title: Ordre d'affichage des catégories
 domain: categories
-status: accepted
+status: draft
 criticality: low
 layer: [api, ui]
 e2e: optional

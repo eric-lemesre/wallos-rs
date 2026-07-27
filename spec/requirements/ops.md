@@ -2,7 +2,7 @@
 id: REQ-OPS-001
 title: Endpoint de santé
 domain: ops
-status: accepted
+status: draft
 criticality: low
 layer:
 - api

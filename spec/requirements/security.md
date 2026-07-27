@@ -35,7 +35,7 @@ depends_on: [REQ-AUT-002]
 id: REQ-SEC-002
 title: Format d'erreur uniforme sans fuite d'information
 domain: security
-status: accepted
+status: draft
 criticality: high
 layer: [api]
 e2e: optional
@@ -58,7 +58,7 @@ depends_on: []
 id: REQ-SEC-003
 title: Journalisation sans secret
 domain: security
-status: accepted
+status: draft
 criticality: high
 layer: [api]
 e2e: n-a
@@ -81,7 +81,7 @@ depends_on: []
 id: REQ-SEC-004
 title: Chiffrement au repos des secrets de configuration
 domain: security
-status: accepted
+status: draft
 criticality: high
 layer: [core, api]
 e2e: n-a
@@ -105,7 +105,7 @@ depends_on: [REQ-NOT-004]
 id: REQ-SEC-005
 title: Protection contre la falsification de requête côté serveur
 domain: security
-status: accepted
+status: draft
 criticality: high
 layer: [api]
 e2e: optional
@@ -128,7 +128,7 @@ depends_on: [REQ-NOT-005, REQ-SUB-015]
 id: REQ-SEC-006
 title: En-têtes de sécurité et politique de contenu
 domain: security
-status: accepted
+status: draft
 criticality: medium
 layer: [api, ui]
 e2e: optional
@@ -155,7 +155,7 @@ depends_on: []
 id: REQ-I18N-001
 title: Choix et persistance de la langue
 domain: i18n
-status: accepted
+status: draft
 criticality: medium
 layer: [core, api, ui]
 e2e: required
@@ -179,7 +179,7 @@ depends_on: [REQ-AUT-001]
 id: REQ-I18N-002
 title: Absence de chaîne littérale dans le code
 domain: i18n
-status: accepted
+status: draft
 criticality: medium
 layer: [ui]
 e2e: n-a
@@ -203,7 +203,7 @@ depends_on: [REQ-I18N-001]
 id: REQ-I18N-003
 title: Formats de date et de nombre localisés
 domain: i18n
-status: accepted
+status: draft
 criticality: medium
 layer: [ui]
 e2e: required
@@ -227,7 +227,7 @@ depends_on: [REQ-I18N-001, REQ-CUR-006]
 id: REQ-I18N-004
 title: Repli sur la langue de référence
 domain: i18n
-status: accepted
+status: draft
 criticality: low
 layer: [ui]
 e2e: optional

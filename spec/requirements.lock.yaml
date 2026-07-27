@@ -113,7 +113,7 @@ requirements:
 - id: REQ-CAT-001
   title: Gestion des catégories
   domain: categories
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - core
@@ -126,7 +126,7 @@ requirements:
 - id: REQ-CAT-002
   title: Catégories par défaut à la création du compte
   domain: categories
-  status: accepted
+  status: draft
   criticality: low
   layer:
   - core
@@ -139,7 +139,7 @@ requirements:
 - id: REQ-CAT-003
   title: Suppression d'une catégorie référencée
   domain: categories
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - core
@@ -152,7 +152,7 @@ requirements:
 - id: REQ-CAT-004
   title: Unicité du nom de catégorie par compte
   domain: categories
-  status: accepted
+  status: draft
   criticality: low
   layer:
   - core
@@ -164,7 +164,7 @@ requirements:
 - id: REQ-CAT-005
   title: Ordre d'affichage des catégories
   domain: categories
-  status: accepted
+  status: draft
   criticality: low
   layer:
   - api
@@ -176,7 +176,7 @@ requirements:
 - id: REQ-CUR-001
   title: Devise de référence du compte
   domain: currencies
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -188,7 +188,7 @@ requirements:
 - id: REQ-CUR-002
   title: Représentation décimale des montants
   domain: currencies
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -199,7 +199,7 @@ requirements:
 - id: REQ-CUR-003
   title: Récupération des taux de change
   domain: currencies
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - api
@@ -210,7 +210,7 @@ requirements:
 - id: REQ-CUR-004
   title: Mode dégradé en cas d'échec du fournisseur de taux
   domain: currencies
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -223,7 +223,7 @@ requirements:
 - id: REQ-CUR-005
   title: Règle d'arrondi
   domain: currencies
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -234,7 +234,7 @@ requirements:
 - id: REQ-CUR-006
   title: Formatage localisé des montants
   domain: currencies
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - ui
@@ -246,7 +246,7 @@ requirements:
 - id: REQ-CUR-007
   title: Référentiel des devises supportées
   domain: currencies
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - core
@@ -258,7 +258,7 @@ requirements:
 - id: REQ-NOT-001
   title: Rappel avant échéance
   domain: notifications
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -271,7 +271,7 @@ requirements:
 - id: REQ-NOT-002
   title: Idempotence de l'ordonnanceur
   domain: notifications
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -284,7 +284,7 @@ requirements:
 - id: REQ-NOT-003
   title: Canal e-mail
   domain: notifications
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - api
@@ -297,7 +297,7 @@ requirements:
 - id: REQ-NOT-004
   title: Canaux de messagerie tiers
   domain: notifications
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - api
@@ -309,7 +309,7 @@ requirements:
 - id: REQ-NOT-005
   title: Webhook générique
   domain: notifications
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - api
@@ -322,7 +322,7 @@ requirements:
 - id: REQ-NOT-006
   title: Test d'un canal de notification
   domain: notifications
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - api
@@ -335,7 +335,7 @@ requirements:
 - id: REQ-NOT-007
   title: Politique de réessai et d'abandon
   domain: notifications
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - core
@@ -347,7 +347,7 @@ requirements:
 - id: REQ-NOT-008
   title: Notification native sur desktop et mobile
   domain: notifications
-  status: accepted
+  status: draft
   criticality: low
   layer:
   - ui
@@ -370,7 +370,7 @@ requirements:
 - id: REQ-SEC-002
   title: Format d'erreur uniforme sans fuite d'information
   domain: security
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - api
@@ -380,7 +380,7 @@ requirements:
 - id: REQ-SEC-003
   title: Journalisation sans secret
   domain: security
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - api
@@ -390,7 +390,7 @@ requirements:
 - id: REQ-SEC-004
   title: Chiffrement au repos des secrets de configuration
   domain: security
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -402,7 +402,7 @@ requirements:
 - id: REQ-SEC-005
   title: Protection contre la falsification de requête côté serveur
   domain: security
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - api
@@ -414,7 +414,7 @@ requirements:
 - id: REQ-SEC-006
   title: En-têtes de sécurité et politique de contenu
   domain: security
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - api
@@ -425,7 +425,7 @@ requirements:
 - id: REQ-I18N-001
   title: Choix et persistance de la langue
   domain: i18n
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - core
@@ -438,7 +438,7 @@ requirements:
 - id: REQ-I18N-002
   title: Absence de chaîne littérale dans le code
   domain: i18n
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - ui
@@ -449,7 +449,7 @@ requirements:
 - id: REQ-I18N-003
   title: Formats de date et de nombre localisés
   domain: i18n
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - ui
@@ -461,7 +461,7 @@ requirements:
 - id: REQ-I18N-004
   title: Repli sur la langue de référence
   domain: i18n
-  status: accepted
+  status: draft
   criticality: low
   layer:
   - ui
@@ -472,7 +472,7 @@ requirements:
 - id: REQ-STA-001
   title: Normalisation du coût mensuel
   domain: statistics
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -486,7 +486,7 @@ requirements:
 - id: REQ-STA-002
   title: Coût annuel normalisé
   domain: statistics
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -499,7 +499,7 @@ requirements:
 - id: REQ-STA-003
   title: Exclusion des abonnements non actifs des agrégats
   domain: statistics
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -513,7 +513,7 @@ requirements:
 - id: REQ-STA-004
   title: Répartition par catégorie et par payeur
   domain: statistics
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - core
@@ -527,7 +527,7 @@ requirements:
 - id: REQ-STA-005
   title: Échéancier des prochains paiements
   domain: statistics
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - core
@@ -542,7 +542,7 @@ requirements:
 - id: REQ-STA-006
   title: Évolution du coût sur douze mois
   domain: statistics
-  status: accepted
+  status: draft
   criticality: low
   layer:
   - core
@@ -555,7 +555,7 @@ requirements:
 - id: REQ-STA-007
   title: Cohérence entre les agrégats et les filtres actifs
   domain: statistics
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - ui
@@ -577,7 +577,7 @@ requirements:
 - id: REQ-SUB-001
   title: Modèle de données d'un abonnement
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -588,7 +588,7 @@ requirements:
 - id: REQ-SUB-002
   title: Création d'un abonnement
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -602,7 +602,7 @@ requirements:
 - id: REQ-SUB-003
   title: Modèle de cycle de facturation
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -613,7 +613,7 @@ requirements:
 - id: REQ-SUB-004
   title: Modification d'un abonnement
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -627,7 +627,7 @@ requirements:
 - id: REQ-SUB-005
   title: Suppression d'un abonnement
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -640,7 +640,7 @@ requirements:
 - id: REQ-SUB-006
   title: Liste des abonnements et filtres
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - api
@@ -652,7 +652,7 @@ requirements:
 - id: REQ-SUB-007
   title: Recherche et tri
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - api
@@ -665,7 +665,7 @@ requirements:
 - id: REQ-SUB-008
   title: Abonnement désactivé
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - core
@@ -678,7 +678,7 @@ requirements:
 - id: REQ-SUB-009
   title: Date de fin et annulation programmée
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - core
@@ -691,7 +691,7 @@ requirements:
 - id: REQ-SUB-010
   title: Période d'essai gratuit
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - core
@@ -705,7 +705,7 @@ requirements:
 - id: REQ-SUB-011
   title: Moyen de paiement
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: low
   layer:
   - core
@@ -718,7 +718,7 @@ requirements:
 - id: REQ-SUB-012
   title: Calcul de la prochaine échéance pour un cycle mensuel
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -731,7 +731,7 @@ requirements:
 - id: REQ-SUB-013
   title: Calcul de la prochaine échéance pour les cycles jour, semaine et année
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -744,7 +744,7 @@ requirements:
 - id: REQ-SUB-014
   title: Rattrapage des échéances passées
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -757,7 +757,7 @@ requirements:
 - id: REQ-SUB-015
   title: Logo d'abonnement
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: low
   layer:
   - api
@@ -769,7 +769,7 @@ requirements:
 - id: REQ-SUB-016
   title: Import et export des données
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - core
@@ -783,7 +783,7 @@ requirements:
 - id: REQ-SUB-017
   title: Rattachement à un payeur
   domain: subscriptions
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - core
@@ -797,7 +797,7 @@ requirements:
 - id: REQ-SYN-001
   title: Horodatage de modification et identifiants stables
   domain: sync
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -808,7 +808,7 @@ requirements:
 - id: REQ-SYN-002
   title: Pierres tombales
   domain: sync
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -820,7 +820,7 @@ requirements:
 - id: REQ-SYN-003
   title: Récupération incrémentale par curseur
   domain: sync
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - api
@@ -832,7 +832,7 @@ requirements:
 - id: REQ-SYN-004
   title: Poussée des modifications locales
   domain: sync
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - api
@@ -845,7 +845,7 @@ requirements:
 - id: REQ-SYN-005
   title: Résolution de conflit
   domain: sync
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - core
@@ -858,7 +858,7 @@ requirements:
 - id: REQ-SYN-006
   title: Idempotence des opérations d'écriture
   domain: sync
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - api
@@ -869,7 +869,7 @@ requirements:
 - id: REQ-SYN-007
   title: Fonctionnement hors ligne
   domain: sync
-  status: accepted
+  status: draft
   criticality: high
   layer:
   - ui
@@ -881,7 +881,7 @@ requirements:
 - id: REQ-SYN-008
   title: Appairage et synchronisation initiale
   domain: sync
-  status: accepted
+  status: draft
   criticality: medium
   layer:
   - api
@@ -894,7 +894,7 @@ requirements:
 - id: REQ-OPS-001
   title: Endpoint de santé
   domain: ops
-  status: accepted
+  status: draft
   criticality: low
   layer:
   - api
