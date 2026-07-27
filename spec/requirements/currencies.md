@@ -57,7 +57,7 @@ depends_on: []
 id: REQ-CUR-003
 title: Récupération des taux de change
 domain: currencies
-status: draft
+status: verified
 criticality: high
 layer: [api]
 e2e: optional
