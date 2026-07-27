@@ -20,9 +20,10 @@ test.describe("Isolation des comptes", { tag: ["@design", "@REQ-SEC-001"] }, () 
     await app.pairDevice({ email: alice, password: PASSWORD }, "Alice-Laptop", "desktop");
     await app.openDevices();
     expect(await app.deviceListed("Alice-Laptop")).toBe(true);
-    await app.logout();
 
-    // Bob crée un compte, se connecte : l'appareil d'Alice n'apparaît jamais chez lui.
+    // Bob crée un compte puis se connecte : son login remplace le cookie d'Alice — inutile de se
+    // déconnecter via l'UI (l'état du formulaire est d'ailleurs réinitialisé par le reload ci-dessus).
+    // L'appareil d'Alice ne doit jamais apparaître chez Bob (isolation par foyer).
     await app.signup({ email: bob, password: PASSWORD });
     expect(await app.signupSucceeded()).toBe(true);
     await app.login({ email: bob, password: PASSWORD });
