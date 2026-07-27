@@ -1,15 +1,28 @@
 import type { Page } from "@playwright/test";
 
 import type { AppDriver, SignupInput } from "./AppDriver";
+import type { Credentials, Harness } from "./Harness";
 
 /**
  * Pilote `subtrack` via les `data-testid` stables (les sélecteurs CSS/XPath sont interdits, §7).
  */
-export class TargetDriver implements AppDriver {
+export class TargetDriver implements AppDriver, Harness {
   constructor(
     private readonly page: Page,
     private readonly baseURL: string,
   ) {}
+
+  // --- Contrat agnostique partagé (Harness, §8.1) ---
+
+  async signIn({ email, password }: Credentials): Promise<void> {
+    await this.gotoSignup();
+    await this.signup({ email, password });
+    await this.login({ email, password });
+  }
+
+  async signedIn(): Promise<boolean> {
+    return this.currentUserVisible();
+  }
 
   async gotoSignup(): Promise<void> {
     await this.page.goto(this.baseURL);
