@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test",
+    "e2e:legacy": "playwright test --config playwright.legacy.config.ts",
+    "e2e:record": "RECORD=1 playwright test --config playwright.legacy.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0",
