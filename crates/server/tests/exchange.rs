@@ -187,7 +187,13 @@ async fn aggregate(
     cookie: &str,
     body: serde_json::Value,
 ) -> axum::http::Response<Body> {
-    post_json(pool, "/api/v1/exchange/aggregate", body, Some(cookie.to_string())).await
+    post_json(
+        pool,
+        "/api/v1/exchange/aggregate",
+        body,
+        Some(cookie.to_string()),
+    )
+    .await
 }
 
 async fn body_json(response: axum::http::Response<Body>) -> serde_json::Value {

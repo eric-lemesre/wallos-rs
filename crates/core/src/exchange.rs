@@ -408,8 +408,22 @@ mod tests {
     /// Table datée : EUR->USD au 20/07 (ancien), GBP->USD au 25/07 (récent).
     fn dated_table() -> RateTable {
         RateTable::new(vec![
-            ExchangeRate::new(cur("EUR"), cur("USD"), dec("1.10"), day(2026, 7, 20), "acme").unwrap(),
-            ExchangeRate::new(cur("GBP"), cur("USD"), dec("1.25"), day(2026, 7, 25), "acme").unwrap(),
+            ExchangeRate::new(
+                cur("EUR"),
+                cur("USD"),
+                dec("1.10"),
+                day(2026, 7, 20),
+                "acme",
+            )
+            .unwrap(),
+            ExchangeRate::new(
+                cur("GBP"),
+                cur("USD"),
+                dec("1.25"),
+                day(2026, 7, 25),
+                "acme",
+            )
+            .unwrap(),
         ])
     }
 
@@ -459,11 +473,7 @@ mod tests {
     fn mixed_dated_and_identity_uses_dated_date() {
         let t = dated_table();
         // Un montant USD (identité, sans date) + un montant EUR (taux daté 20/07).
-        let agg = aggregate_converted(
-            &[money("5", "USD"), money("10", "EUR")],
-            cur("USD"),
-            &t,
-        );
+        let agg = aggregate_converted(&[money("5", "USD"), money("10", "EUR")], cur("USD"), &t);
         // 5 (identité) + 11 (10 EUR * 1.10) = 16 USD.
         assert_eq!(agg.total(), &money("16.00", "USD"));
         assert!(agg.is_complete());
@@ -504,7 +514,10 @@ mod tests {
             }
         }
         let p = BareProvider;
-        assert_eq!(p.dated_rate(cur("EUR"), cur("USD")), Some((dec("1.10"), None)));
+        assert_eq!(
+            p.dated_rate(cur("EUR"), cur("USD")),
+            Some((dec("1.10"), None))
+        );
         assert_eq!(p.dated_rate(cur("GBP"), cur("USD")), None);
         // L'agrégat reste complet (taux connu) mais sans date de fraîcheur remontée.
         let agg = aggregate_converted(&[money("10", "EUR")], cur("USD"), &p);
