@@ -6,9 +6,9 @@ no-default-features = false
 version = 2
 yanked = "warn"
 ignore = [
-    # `paste` est signalé « unmaintained » (RUSTSEC-2024-0436) — informatif, PAS une vulnérabilité.
-    # Il est tiré transitivement par `utoipa-axum` (proc-macro de génération de routes OpenAPI) et
-    # ne peut être retiré sans abandonner utoipa-axum. Aucune surface d'exécution exploitable.
+    # `paste` « unmaintained » (RUSTSEC-2024-0436) — informatif, PAS une vulnérabilité. Proc-macro
+    # build-time (aucune surface runtime), tirée uniquement par `utoipa-axum` (dernière version).
+    # Décision tracée : docs/adr/0020-ignore-rustsec-2024-0436-paste.md.
     "RUSTSEC-2024-0436",
 ]
 

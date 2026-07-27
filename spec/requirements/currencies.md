@@ -8,7 +8,7 @@
 id: REQ-CUR-001
 title: Devise de référence du compte
 domain: currencies
-status: accepted
+status: draft
 criticality: high
 layer: [core, api, ui]
 e2e: required
@@ -31,7 +31,7 @@ depends_on: []
 id: REQ-CUR-002
 title: Représentation décimale des montants
 domain: currencies
-status: accepted
+status: draft
 criticality: high
 layer: [core, api]
 e2e: n-a
@@ -57,7 +57,7 @@ depends_on: []
 id: REQ-CUR-003
 title: Récupération des taux de change
 domain: currencies
-status: accepted
+status: draft
 criticality: high
 layer: [api]
 e2e: optional
@@ -80,7 +80,7 @@ depends_on: [REQ-CUR-001]
 id: REQ-CUR-004
 title: Mode dégradé en cas d'échec du fournisseur de taux
 domain: currencies
-status: accepted
+status: draft
 criticality: high
 layer: [core, api, ui]
 e2e: required
@@ -104,7 +104,7 @@ depends_on: [REQ-CUR-003]
 id: REQ-CUR-005
 title: Règle d'arrondi
 domain: currencies
-status: accepted
+status: draft
 criticality: high
 layer: [core]
 e2e: n-a
@@ -127,7 +127,7 @@ depends_on: [REQ-CUR-002]
 id: REQ-CUR-006
 title: Formatage localisé des montants
 domain: currencies
-status: accepted
+status: draft
 criticality: medium
 layer: [ui]
 e2e: required
@@ -150,7 +150,7 @@ depends_on: [REQ-CUR-005, REQ-I18N-003]
 id: REQ-CUR-007
 title: Référentiel des devises supportées
 domain: currencies
-status: accepted
+status: draft
 criticality: medium
 layer: [core, api, ui]
 e2e: optional

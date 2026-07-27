@@ -9,7 +9,7 @@
 id: REQ-SUB-001
 title: Modèle de données d'un abonnement
 domain: subscriptions
-status: accepted
+status: draft
 criticality: high
 layer: [core, api]
 e2e: n-a
@@ -32,7 +32,7 @@ depends_on: []
 id: REQ-SUB-002
 title: Création d'un abonnement
 domain: subscriptions
-status: accepted
+status: draft
 criticality: high
 layer: [core, api, ui]
 e2e: required
@@ -55,7 +55,7 @@ depends_on: [REQ-SUB-001, REQ-SUB-003]
 id: REQ-SUB-003
 title: Modèle de cycle de facturation
 domain: subscriptions
-status: accepted
+status: draft
 criticality: high
 layer: [core, api]
 e2e: n-a
@@ -78,7 +78,7 @@ depends_on: []
 id: REQ-SUB-004
 title: Modification d'un abonnement
 domain: subscriptions
-status: accepted
+status: draft
 criticality: high
 layer: [core, api, ui]
 e2e: required
@@ -101,7 +101,7 @@ depends_on: [REQ-SUB-002, REQ-SUB-012]
 id: REQ-SUB-005
 title: Suppression d'un abonnement
 domain: subscriptions
-status: accepted
+status: draft
 criticality: high
 layer: [core, api, ui]
 e2e: required
@@ -125,7 +125,7 @@ depends_on: [REQ-SYN-002]
 id: REQ-SUB-006
 title: Liste des abonnements et filtres
 domain: subscriptions
-status: accepted
+status: draft
 criticality: high
 layer: [api, ui]
 e2e: required
@@ -148,7 +148,7 @@ depends_on: [REQ-SUB-001]
 id: REQ-SUB-007
 title: Recherche et tri
 domain: subscriptions
-status: accepted
+status: draft
 criticality: medium
 layer: [api, ui]
 e2e: required
@@ -171,7 +171,7 @@ depends_on: [REQ-SUB-006, REQ-STA-001]
 id: REQ-SUB-008
 title: Abonnement désactivé
 domain: subscriptions
-status: accepted
+status: draft
 criticality: medium
 layer: [core, api, ui]
 e2e: required
@@ -194,7 +194,7 @@ depends_on: [REQ-SUB-001]
 id: REQ-SUB-009
 title: Date de fin et annulation programmée
 domain: subscriptions
-status: accepted
+status: draft
 criticality: medium
 layer: [core, api, ui]
 e2e: required
@@ -217,7 +217,7 @@ depends_on: [REQ-SUB-012]
 id: REQ-SUB-010
 title: Période d'essai gratuit
 domain: subscriptions
-status: accepted
+status: draft
 criticality: medium
 layer: [core, api, ui]
 e2e: required
@@ -240,7 +240,7 @@ depends_on: [REQ-SUB-001, REQ-NOT-001]
 id: REQ-SUB-011
 title: Moyen de paiement
 domain: subscriptions
-status: accepted
+status: draft
 criticality: low
 layer: [core, api, ui]
 e2e: optional
@@ -260,7 +260,7 @@ depends_on: [REQ-SUB-001]
 id: REQ-SUB-012
 title: Calcul de la prochaine échéance pour un cycle mensuel
 domain: subscriptions
-status: accepted
+status: draft
 criticality: high
 layer: [core, api, ui]
 e2e: required
@@ -288,7 +288,7 @@ depends_on: [REQ-SUB-003]
 id: REQ-SUB-013
 title: Calcul de la prochaine échéance pour les cycles jour, semaine et année
 domain: subscriptions
-status: accepted
+status: draft
 criticality: high
 layer: [core, api]
 e2e: optional
@@ -311,7 +311,7 @@ depends_on: [REQ-SUB-003, REQ-SUB-012]
 id: REQ-SUB-014
 title: Rattrapage des échéances passées
 domain: subscriptions
-status: accepted
+status: draft
 criticality: high
 layer: [core, api]
 e2e: required
@@ -334,7 +334,7 @@ depends_on: [REQ-SUB-012, REQ-NOT-002]
 id: REQ-SUB-015
 title: Logo d'abonnement
 domain: subscriptions
-status: accepted
+status: draft
 criticality: low
 layer: [api, ui]
 e2e: optional
@@ -358,7 +358,7 @@ depends_on: [REQ-SUB-001]
 id: REQ-SUB-016
 title: Import et export des données
 domain: subscriptions
-status: accepted
+status: draft
 criticality: medium
 layer: [core, api, ui]
 e2e: required
@@ -381,7 +381,7 @@ depends_on: [REQ-SUB-001, REQ-CAT-001]
 id: REQ-SUB-017
 title: Rattachement à un payeur
 domain: subscriptions
-status: accepted
+status: draft
 criticality: medium
 layer: [core, api, ui]
 e2e: required

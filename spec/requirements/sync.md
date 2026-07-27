@@ -9,7 +9,7 @@
 id: REQ-SYN-001
 title: Horodatage de modification et identifiants stables
 domain: sync
-status: accepted
+status: draft
 criticality: high
 layer: [core, api]
 e2e: n-a
@@ -33,7 +33,7 @@ depends_on: []
 id: REQ-SYN-002
 title: Pierres tombales
 domain: sync
-status: accepted
+status: draft
 criticality: high
 layer: [core, api]
 e2e: required
@@ -56,7 +56,7 @@ depends_on: [REQ-SYN-001]
 id: REQ-SYN-003
 title: Récupération incrémentale par curseur
 domain: sync
-status: accepted
+status: draft
 criticality: high
 layer: [api]
 e2e: required
@@ -79,7 +79,7 @@ depends_on: [REQ-SYN-001, REQ-SYN-002]
 id: REQ-SYN-004
 title: Poussée des modifications locales
 domain: sync
-status: accepted
+status: draft
 criticality: high
 layer: [api, ui]
 e2e: required
@@ -102,7 +102,7 @@ depends_on: [REQ-SYN-001, REQ-SYN-006]
 id: REQ-SYN-005
 title: Résolution de conflit
 domain: sync
-status: accepted
+status: draft
 criticality: high
 layer: [core, api]
 e2e: required
@@ -130,7 +130,7 @@ depends_on: [REQ-SYN-001, REQ-SYN-002]
 id: REQ-SYN-006
 title: Idempotence des opérations d'écriture
 domain: sync
-status: accepted
+status: draft
 criticality: high
 layer: [api]
 e2e: required
@@ -153,7 +153,7 @@ depends_on: [REQ-SYN-001]
 id: REQ-SYN-007
 title: Fonctionnement hors ligne
 domain: sync
-status: accepted
+status: draft
 criticality: high
 layer: [ui]
 e2e: required
@@ -176,7 +176,7 @@ depends_on: [REQ-SYN-004, REQ-SYN-005]
 id: REQ-SYN-008
 title: Appairage et synchronisation initiale
 domain: sync
-status: accepted
+status: draft
 criticality: medium
 layer: [api, ui]
 e2e: required

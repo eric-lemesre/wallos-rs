@@ -193,12 +193,23 @@ mod trace {
             exit = 1;
         }
 
+        // Fichiers exemptés de TRC-06 (code sans logique annotable : racines de module, types
+        // d'erreur, crates stub). Chaque entrée est justifiée dans le fichier (ADR 0021).
+        let trace_exclusions = load_trace_exclusions(root);
         for entry in walkdir::WalkDir::new(root.join("crates"))
             .into_iter()
             .filter_map(Result::ok)
             .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("rs"))
         {
             let path = entry.path();
+            let rel = path
+                .strip_prefix(root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            if trace_exclusions.contains(&rel) {
+                continue;
+            }
             let content = std::fs::read_to_string(path).unwrap_or_default();
             if !content.contains("#[requirement(") && !content.contains("#[verifies(") {
                 eprintln!(
@@ -255,6 +266,30 @@ mod trace {
             }
         }
         false
+    }
+
+    /// Charge les chemins exemptés de TRC-06 depuis `xtask/trace-exclusions.toml`.
+    ///
+    /// Parseur minimal (pas de dépendance TOML) : chaque chemin `"…/x.rs"` entre guillemets est
+    /// collecté ; les commentaires `#` (y compris en fin de ligne) sont ignorés. Voir ADR 0021.
+    fn load_trace_exclusions(root: &Path) -> std::collections::HashSet<String> {
+        let content =
+            std::fs::read_to_string(root.join("xtask/trace-exclusions.toml")).unwrap_or_default();
+        let mut set = std::collections::HashSet::new();
+        for line in content.lines() {
+            let code = line.split('#').next().unwrap_or("");
+            let mut rest = code;
+            while let Some(start) = rest.find('"') {
+                let after = &rest[start + 1..];
+                let Some(end) = after.find('"') else { break };
+                let candidate = &after[..end];
+                if candidate.ends_with(".rs") {
+                    set.insert(candidate.to_string());
+                }
+                rest = &after[end + 1..];
+            }
+        }
+        set
     }
 }
 

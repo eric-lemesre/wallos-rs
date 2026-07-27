@@ -9,7 +9,7 @@
 id: REQ-STA-001
 title: Normalisation du coût mensuel
 domain: statistics
-status: accepted
+status: draft
 criticality: high
 layer: [core, api, ui]
 e2e: required
@@ -33,7 +33,7 @@ depends_on: [REQ-SUB-003, REQ-CUR-005]
 id: REQ-STA-002
 title: Coût annuel normalisé
 domain: statistics
-status: accepted
+status: draft
 criticality: high
 layer: [core, api, ui]
 e2e: required
@@ -53,7 +53,7 @@ depends_on: [REQ-STA-001]
 id: REQ-STA-003
 title: Exclusion des abonnements non actifs des agrégats
 domain: statistics
-status: accepted
+status: draft
 criticality: high
 layer: [core, api]
 e2e: required
@@ -76,7 +76,7 @@ depends_on: [REQ-SUB-008, REQ-SUB-009, REQ-SUB-010]
 id: REQ-STA-004
 title: Répartition par catégorie et par payeur
 domain: statistics
-status: accepted
+status: draft
 criticality: medium
 layer: [core, api, ui]
 e2e: required
@@ -99,7 +99,7 @@ depends_on: [REQ-STA-001, REQ-CAT-001]
 id: REQ-STA-005
 title: Échéancier des prochains paiements
 domain: statistics
-status: accepted
+status: draft
 criticality: medium
 layer: [core, api, ui]
 e2e: required
@@ -122,7 +122,7 @@ depends_on: [REQ-SUB-012, REQ-SUB-013, REQ-SUB-009]
 id: REQ-STA-006
 title: Évolution du coût sur douze mois
 domain: statistics
-status: accepted
+status: draft
 criticality: low
 layer: [core, api, ui]
 e2e: optional
@@ -142,7 +142,7 @@ depends_on: [REQ-STA-001]
 id: REQ-STA-007
 title: Cohérence entre les agrégats et les filtres actifs
 domain: statistics
-status: accepted
+status: draft
 criticality: medium
 layer: [ui]
 e2e: required

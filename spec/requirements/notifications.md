@@ -8,7 +8,7 @@
 id: REQ-NOT-001
 title: Rappel avant échéance
 domain: notifications
-status: accepted
+status: draft
 criticality: high
 layer: [core, api, ui]
 e2e: required
@@ -31,7 +31,7 @@ depends_on: [REQ-SUB-012]
 id: REQ-NOT-002
 title: Idempotence de l'ordonnanceur
 domain: notifications
-status: accepted
+status: draft
 criticality: high
 layer: [core, api]
 e2e: required
@@ -58,7 +58,7 @@ depends_on: [REQ-NOT-001, REQ-SUB-014]
 id: REQ-NOT-003
 title: Canal e-mail
 domain: notifications
-status: accepted
+status: draft
 criticality: high
 layer: [api, ui]
 e2e: required
@@ -81,7 +81,7 @@ depends_on: [REQ-NOT-001, REQ-I18N-001]
 id: REQ-NOT-004
 title: Canaux de messagerie tiers
 domain: notifications
-status: accepted
+status: draft
 criticality: medium
 layer: [api, ui]
 e2e: optional
@@ -104,7 +104,7 @@ depends_on: [REQ-NOT-001]
 id: REQ-NOT-005
 title: Webhook générique
 domain: notifications
-status: accepted
+status: draft
 criticality: medium
 layer: [api, ui]
 e2e: optional
@@ -127,7 +127,7 @@ depends_on: [REQ-NOT-001, REQ-SEC-005]
 id: REQ-NOT-006
 title: Test d'un canal de notification
 domain: notifications
-status: accepted
+status: draft
 criticality: medium
 layer: [api, ui]
 e2e: required
@@ -147,7 +147,7 @@ depends_on: [REQ-NOT-003, REQ-NOT-004]
 id: REQ-NOT-007
 title: Politique de réessai et d'abandon
 domain: notifications
-status: accepted
+status: draft
 criticality: medium
 layer: [core, api]
 e2e: optional
@@ -170,7 +170,7 @@ depends_on: [REQ-NOT-002]
 id: REQ-NOT-008
 title: Notification native sur desktop et mobile
 domain: notifications
-status: accepted
+status: draft
 criticality: low
 layer: [ui]
 e2e: optional

@@ -1,0 +1,22 @@
+# Exclusions de la règle TRC-06 (fichier de production sans annotation `#[requirement(...)]`).
+#
+# TRC-06 vise le **code orphelin** : de la logique métier non rattachée à une exigence. Certains
+# fichiers n'en contiennent aucune (racines de module, types d'erreur) et ne peuvent pas être
+# annotés — la macro `#[requirement]` ne s'applique qu'aux `fn`. D'autres sont des crates encore
+# **stub**. Ils sont exemptés ici, chacun avec une justification. Voir ADR 0021.
+#
+# Discipline : toute entrée porte une justification (commentaire) ; une entrée est **retirée** dès
+# qu'une exigence est réellement implémentée dans le fichier (le fichier portera alors une annotation).
+
+exclusions = [
+    # Racines de module : uniquement `pub mod` / `pub use`, aucune `fn` à annoter. [structurel]
+    "crates/core/src/lib.rs",
+    "crates/storage/src/lib.rs",
+    # Types d'erreur : `enum` + `#[derive(Error)]`, aucune logique métier ni `fn`. [structurel]
+    "crates/core/src/error.rs",
+    "crates/storage/src/error.rs",
+    # Crates stub : aucune exigence encore implémentée. À retirer quand le domaine est livré.
+    "crates/notifier/src/lib.rs", # notifications (REQ-NOT-*) non démarrées
+    "crates/client/src/lib.rs",   # SDK HTTP Rust — squelette, non implémenté
+    "crates/desktop/src/lib.rs",  # coquille Tauri — placeholder (OQ-008, natif différé)
+]

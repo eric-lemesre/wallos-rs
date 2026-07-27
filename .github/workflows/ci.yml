@@ -54,10 +54,17 @@ jobs:
       - name: openapi drift
         run: cargo xtask openapi --check
 
+      - name: install cargo-deny and cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny,cargo-audit
       - name: deny
         run: cargo deny check
+      # Advisories ignorés (cf. ADR 0020) : RUSTSEC-2024-0436 (`paste` non maintenu, proc-macro
+      # build-time) et RUSTSEC-2023-0071 (`rsa`, tiré par le driver MySQL de sqlx NON utilisé —
+      # absent du graphe compilé, cargo-deny le confirme). Aucun code exploitable dans notre binaire.
       - name: audit
-        run: cargo audit
+        run: cargo audit --ignore RUSTSEC-2024-0436 --ignore RUSTSEC-2023-0071
 
   frontend:
     runs-on: ubuntu-latest
@@ -108,6 +115,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # La coquille web importe les SOURCES de frontend/ui ; Vite résout leurs imports bare
+      # (i18next, react-hook-form, zod, @hookform/resolvers, openapi-fetch) via frontend/ui/node_modules
+      # (résolution Node = dossiers ancêtres du fichier). Ce dossier doit donc exister dans ce job.
+      - name: install ui deps
+        working-directory: frontend/ui
+        run: npm ci
       - name: install shell deps
         working-directory: frontend/shells/web
         run: npm ci
