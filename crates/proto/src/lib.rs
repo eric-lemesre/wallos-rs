@@ -116,6 +116,56 @@ pub struct DeviceSummary {
     pub current: bool,
 }
 
+/// Un montant en devise pour l'agrégation multi-devises (REQ-CUR-004).
+///
+/// `amount` est une **chaîne décimale** (règle R4 / REQ-CUR-002) : jamais un nombre JSON, qui
+/// introduirait une imprécision flottante sur un montant.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct MoneyInput {
+    /// Montant en chaîne décimale (ex. `"12.34"`).
+    #[schema(example = "12.34")]
+    pub amount: String,
+    /// Code devise ISO 4217 (ex. `"EUR"`).
+    #[schema(example = "EUR")]
+    pub currency: String,
+}
+
+/// Requête d'agrégation multi-devises vers une devise cible (REQ-CUR-004).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct AggregateRequest {
+    /// Devise cible de l'agrégat (code ISO 4217).
+    #[schema(example = "EUR")]
+    pub target: String,
+    /// Montants à convertir puis sommer.
+    pub amounts: Vec<MoneyInput>,
+}
+
+/// Résultat d'une agrégation convertie, en **mode dégradé** explicite (REQ-CUR-004).
+///
+/// `total` est une chaîne décimale (R4). `complete` est faux dès qu'un montant a été **exclu** faute
+/// de taux : un total incomplet n'est jamais présenté comme un zéro silencieux. `as_of` porte la
+/// date de validité **la plus ancienne** parmi les taux utilisés — la fraîcheur à afficher quand le
+/// fournisseur est indisponible et que l'on retombe sur le dernier taux connu.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct ConvertedTotalResponse {
+    /// Total converti dans la devise cible (chaîne décimale, précision exacte).
+    #[schema(example = "142.50")]
+    pub total: String,
+    /// Devise du total (code ISO 4217).
+    #[schema(example = "EUR")]
+    pub currency: String,
+    /// Nombre de montants effectivement convertis et inclus.
+    pub converted: u32,
+    /// Nombre de montants exclus faute de taux connu.
+    pub excluded: u32,
+    /// Vrai si tous les montants ont pu être convertis (agrégat complet).
+    pub complete: bool,
+    /// Date de validité la plus ancienne des taux utilisés (`YYYY-MM-DD`), ou absente si aucun taux
+    /// daté n'a servi (ensemble vide ou conversions en devise identique uniquement).
+    #[schema(example = "2026-07-20")]
+    pub as_of: Option<String>,
+}
+
 /// Détail d'erreur conforme à la RFC 9457 (`application/problem+json`).
 ///
 /// Schéma d'erreur unique de l'API : toute réponse d'erreur adopte ce format,

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { I18nextProvider } from "react-i18next";
 
 import { ChangePasswordForm } from "../../../ui/src/components/ChangePasswordForm";
+import { ConvertedTotalCard } from "../../../ui/src/components/ConvertedTotalCard";
 import { DevicesList } from "../../../ui/src/components/DevicesList";
 import { LoginForm } from "../../../ui/src/components/LoginForm";
 import { SignupForm } from "../../../ui/src/components/SignupForm";
@@ -20,6 +21,7 @@ if (root) {
           <LoginForm />
           <DevicesList />
           <ChangePasswordForm />
+          <ConvertedTotalCard />
         </main>
       </I18nextProvider>
     </StrictMode>,
