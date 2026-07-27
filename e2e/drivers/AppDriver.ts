@@ -31,4 +31,17 @@ export interface AppDriver {
   // Changement de mot de passe (REQ-AUT-007).
   changePassword(current: string, next: string): Promise<void>;
   passwordChangeSucceeded(): Promise<boolean>;
+
+  // Agrégation multi-devises en mode dégradé (REQ-CUR-004).
+  /** Saisit une devise cible et des montants, puis déclenche le calcul de l'agrégat. */
+  computeAggregate(target: string, amounts: MoneyInput[]): Promise<void>;
+  /** Vrai si l'agrégat est explicitement signalé incomplet (montants exclus faute de taux). */
+  aggregateIncompleteVisible(): Promise<boolean>;
+  /** Texte du total affiché (jamais un zéro silencieux : la part convertible reste visible). */
+  readAggregateTotal(): Promise<string>;
+}
+
+export interface MoneyInput {
+  amount: string;
+  currency: string;
 }

@@ -72,6 +72,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/exchange/aggregate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Agrège des montants multi-devises vers une devise cible, en **mode dégradé** explicite
+         *     (REQ-CUR-004).
+         * @description La table de taux est reconstruite depuis les **derniers taux connus** persistés
+         *     ([`load_rate_table`]) : sans fournisseur configuré (ou s'il est indisponible), l'app reste
+         *     fonctionnelle et retombe sur ces taux. Chaque montant sans taux est **exclu** et l'agrégat est
+         *     signalé incomplet (`complete = false`), jamais présenté comme un zéro silencieux ; `as_of` porte
+         *     la fraîcheur (date du taux le plus ancien utilisé) que l'interface doit afficher.
+         */
+        post: operations["aggregateConverted"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -154,6 +179,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Requête d'agrégation multi-devises vers une devise cible (REQ-CUR-004). */
+        AggregateRequest: {
+            /** @description Montants à convertir puis sommer. */
+            amounts: components["schemas"]["MoneyInput"][];
+            /**
+             * @description Devise cible de l'agrégat (code ISO 4217).
+             * @example EUR
+             */
+            target: string;
+        };
         /**
          * @description Requête de changement de mot de passe (REQ-AUT-007).
          *
@@ -170,6 +205,44 @@ export interface components {
              * @description Nouveau mot de passe (longueur minimale + non compromis, REQ-AUT-003).
              */
             new_password: string;
+        };
+        /**
+         * @description Résultat d'une agrégation convertie, en **mode dégradé** explicite (REQ-CUR-004).
+         *
+         *     `total` est une chaîne décimale (R4). `complete` est faux dès qu'un montant a été **exclu** faute
+         *     de taux : un total incomplet n'est jamais présenté comme un zéro silencieux. `as_of` porte la
+         *     date de validité **la plus ancienne** parmi les taux utilisés — la fraîcheur à afficher quand le
+         *     fournisseur est indisponible et que l'on retombe sur le dernier taux connu.
+         */
+        ConvertedTotalResponse: {
+            /**
+             * @description Date de validité la plus ancienne des taux utilisés (`YYYY-MM-DD`), ou absente si aucun taux
+             *     daté n'a servi (ensemble vide ou conversions en devise identique uniquement).
+             * @example 2026-07-20
+             */
+            as_of?: string | null;
+            /** @description Vrai si tous les montants ont pu être convertis (agrégat complet). */
+            complete: boolean;
+            /**
+             * Format: int32
+             * @description Nombre de montants effectivement convertis et inclus.
+             */
+            converted: number;
+            /**
+             * @description Devise du total (code ISO 4217).
+             * @example EUR
+             */
+            currency: string;
+            /**
+             * Format: int32
+             * @description Nombre de montants exclus faute de taux connu.
+             */
+            excluded: number;
+            /**
+             * @description Total converti dans la devise cible (chaîne décimale, précision exacte).
+             * @example 142.50
+             */
+            total: string;
         };
         /**
          * @description Requête de création de compte (REQ-AUT-001).
@@ -275,6 +348,24 @@ export interface components {
             status: string;
             /** @description Version semver. */
             version: string;
+        };
+        /**
+         * @description Un montant en devise pour l'agrégation multi-devises (REQ-CUR-004).
+         *
+         *     `amount` est une **chaîne décimale** (règle R4 / REQ-CUR-002) : jamais un nombre JSON, qui
+         *     introduirait une imprécision flottante sur un montant.
+         */
+        MoneyInput: {
+            /**
+             * @description Montant en chaîne décimale (ex. `"12.34"`).
+             * @example 12.34
+             */
+            amount: string;
+            /**
+             * @description Code devise ISO 4217 (ex. `"EUR"`).
+             * @example EUR
+             */
+            currency: string;
         };
         /**
          * @description Détail d'erreur conforme à la RFC 9457 (`application/problem+json`).
@@ -442,6 +533,48 @@ export interface operations {
             };
             /** @description Appareil inconnu ou hors du foyer */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    aggregateConverted: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AggregateRequest"];
+            };
+        };
+        responses: {
+            /** @description Agrégat converti (éventuellement partiel) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConvertedTotalResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Devise ou montant invalide */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

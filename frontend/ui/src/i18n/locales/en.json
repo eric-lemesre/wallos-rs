@@ -44,5 +44,19 @@
       "newTooShort": "Password must be at least 12 characters",
       "newCompromised": "This password is too common — choose another"
     }
+  },
+  "exchange": {
+    "title": "Converted total",
+    "target": "Target currency",
+    "amount": "Amount",
+    "currency": "Currency",
+    "addAmount": "Add amount",
+    "compute": "Compute total",
+    "total": "Total",
+    "converted": "Converted",
+    "excluded": "Excluded",
+    "asOf": "Rates as of {{date}}",
+    "incomplete": "Incomplete aggregate: some amounts were excluded (no known rate).",
+    "error": "Could not compute the total"
   }
 }

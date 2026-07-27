@@ -96,6 +96,21 @@ pub trait RateProvider {
     /// Nombre d'unités de `quote` par unité de `base`, ou `None` si le taux est inconnu.
     /// La conversion d'une devise vers elle-même vaut toujours `1`.
     fn rate(&self, base: CurrencyCode, quote: CurrencyCode) -> Option<Decimal>;
+
+    /// Taux **et sa date de validité** (fraîcheur, REQ-CUR-004) : `Some((taux, Some(date)))` pour un
+    /// taux persisté, `Some((1, None))` pour une conversion identité (pas de date), `None` si inconnu.
+    ///
+    /// Défaut : reprend [`rate`](Self::rate) sans date (un fournisseur qui n'expose pas de date ne
+    /// peut renseigner la fraîcheur). Les tables persistées le surchargent pour remonter `as_of`.
+    /// (La définition par défaut de méthode de trait ne peut porter `#[requirement]` — macro `fn` à
+    /// corps seul — ; les surcharges et les fonctions de conversion l'annotent.)
+    fn dated_rate(
+        &self,
+        base: CurrencyCode,
+        quote: CurrencyCode,
+    ) -> Option<(Decimal, Option<NaiveDate>)> {
+        self.rate(base, quote).map(|r| (r, None))
+    }
 }
 
 /// Table de taux en mémoire — l'adaptateur « dernier taux connu » (ADR 0014), **toujours
@@ -125,6 +140,22 @@ impl RateProvider for RateTable {
             .find(|r| r.base == base && r.quote == quote)
             .map(ExchangeRate::rate)
     }
+
+    /// Remonte la date de validité du dernier taux connu (REQ-CUR-004) : identité → pas de date.
+    #[requirement(REQ-CUR-004)]
+    fn dated_rate(
+        &self,
+        base: CurrencyCode,
+        quote: CurrencyCode,
+    ) -> Option<(Decimal, Option<NaiveDate>)> {
+        if base == quote {
+            return Some((Decimal::ONE, None));
+        }
+        self.rates
+            .iter()
+            .find(|r| r.base == base && r.quote == quote)
+            .map(|r| (r.rate, Some(r.as_of)))
+    }
 }
 
 /// Convertit un montant vers `target` en précision maximale (aucun arrondi).
@@ -142,6 +173,24 @@ pub fn convert(
     Money::new(amount.amount() * rate, target).ok()
 }
 
+/// Variante **datée** de [`convert`] (REQ-CUR-004) : renvoie aussi la date de validité du taux
+/// utilisé (`None` pour une conversion identité). Sert à remonter la **fraîcheur** jusqu'à l'agrégat.
+///
+/// Renvoie `None` si aucun taux n'est connu pour la paire (mode dégradé : l'appelant exclut et
+/// signale, jamais une mise à zéro silencieuse).
+#[requirement(REQ-CUR-004)]
+pub fn convert_dated(
+    amount: &Money,
+    target: CurrencyCode,
+    provider: &impl RateProvider,
+) -> Option<(Money, Option<NaiveDate>)> {
+    let (rate, as_of) = provider.dated_rate(amount.currency(), target)?;
+    // `Money::new` n'échoue pas : `amount` est positif ou nul et `rate` est positif.
+    Money::new(amount.amount() * rate, target)
+        .ok()
+        .map(|m| (m, as_of))
+}
+
 /// Résultat d'une agrégation multi-devises convertie vers une devise cible.
 ///
 /// `complete` est faux dès qu'un montant a été **exclu** faute de taux (signal de partialité,
@@ -152,6 +201,7 @@ pub struct ConvertedTotal {
     converted: usize,
     excluded: usize,
     complete: bool,
+    as_of: Option<NaiveDate>,
 }
 
 impl ConvertedTotal {
@@ -182,6 +232,15 @@ impl ConvertedTotal {
     pub const fn is_complete(&self) -> bool {
         self.complete
     }
+
+    /// Date de validité **la plus ancienne** parmi les taux réellement utilisés — la fraîcheur à
+    /// afficher en mode dégradé (REQ-CUR-004). `None` si aucun taux daté n'a servi (ensemble vide,
+    /// ou conversions en devise identique uniquement).
+    #[must_use]
+    #[requirement(REQ-CUR-004)]
+    pub const fn as_of(&self) -> Option<NaiveDate> {
+        self.as_of
+    }
 }
 
 /// Agrège des montants multi-devises vers `target`, en **excluant** ceux sans taux connu et en
@@ -198,11 +257,17 @@ pub fn aggregate_converted(
     let mut total = Decimal::ZERO;
     let mut converted = 0usize;
     let mut excluded = 0usize;
+    // Fraîcheur = date la plus ancienne (pire cas) parmi les taux datés effectivement utilisés
+    // (REQ-CUR-004). Les conversions identité ne portent pas de date et ne l'affectent pas.
+    let mut as_of: Option<NaiveDate> = None;
     for amount in amounts {
-        match convert(amount, target, provider) {
-            Some(m) => {
+        match convert_dated(amount, target, provider) {
+            Some((m, rate_as_of)) => {
                 total += m.amount();
                 converted += 1;
+                if let Some(d) = rate_as_of {
+                    as_of = Some(as_of.map_or(d, |cur| cur.min(d)));
+                }
             }
             None => excluded += 1,
         }
@@ -213,6 +278,7 @@ pub fn aggregate_converted(
         converted,
         excluded,
         complete: excluded == 0,
+        as_of,
     }
 }
 
@@ -292,6 +358,11 @@ mod tests {
         let t = table();
         assert_eq!(convert(&money("10", "GBP"), cur("EUR"), &t), None);
         assert_eq!(t.rate(cur("GBP"), cur("EUR")), None);
+        // Base connue mais cotation absente : la paire complète doit correspondre (base ET quote),
+        // jamais l'une OU l'autre — EUR est une base connue (EUR->USD) mais EUR->GBP est inconnu.
+        assert_eq!(t.rate(cur("EUR"), cur("GBP")), None);
+        // Symétrique : cotation connue (USD) mais base absente.
+        assert_eq!(t.rate(cur("GBP"), cur("USD")), None);
     }
 
     #[test]
@@ -328,5 +399,117 @@ mod tests {
         assert_eq!(agg.converted(), 0);
         assert_eq!(agg.excluded(), 0);
         assert!(agg.is_complete());
+    }
+
+    fn day(y: i32, m: u32, d: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
+    /// Table datée : EUR->USD au 20/07 (ancien), GBP->USD au 25/07 (récent).
+    fn dated_table() -> RateTable {
+        RateTable::new(vec![
+            ExchangeRate::new(cur("EUR"), cur("USD"), dec("1.10"), day(2026, 7, 20), "acme").unwrap(),
+            ExchangeRate::new(cur("GBP"), cur("USD"), dec("1.25"), day(2026, 7, 25), "acme").unwrap(),
+        ])
+    }
+
+    #[test]
+    #[verifies(REQ-CUR-004, case = "fraîcheur = date la plus ancienne utilisée")]
+    fn aggregate_surfaces_oldest_rate_date() {
+        // Deux taux datés utilisés (20/07 et 25/07) : la fraîcheur remontée est la PLUS ANCIENNE.
+        let agg = aggregate_converted(
+            &[money("10", "EUR"), money("4", "GBP")],
+            cur("USD"),
+            &dated_table(),
+        );
+        // 10 * 1.10 + 4 * 1.25 = 11 + 5 = 16 USD.
+        assert_eq!(agg.total(), &money("16.00", "USD"));
+        assert!(agg.is_complete());
+        assert_eq!(agg.as_of(), Some(day(2026, 7, 20)));
+    }
+
+    #[test]
+    #[verifies(REQ-CUR-004, case = "convert_dated remonte la date du taux")]
+    fn convert_dated_carries_rate_date() {
+        let t = dated_table();
+        let (m, as_of) = convert_dated(&money("10", "EUR"), cur("USD"), &t).unwrap();
+        assert_eq!(m, money("11.00", "USD"));
+        assert_eq!(as_of, Some(day(2026, 7, 20)));
+        // Paire inconnue : aucune conversion, aucune date.
+        assert_eq!(convert_dated(&money("10", "JPY"), cur("USD"), &t), None);
+    }
+
+    #[test]
+    #[verifies(REQ-CUR-004, case = "identité : convertie, sans date de fraîcheur")]
+    fn identity_conversion_has_no_staleness_date() {
+        let t = dated_table();
+        // Devise identique : taux 1, pas de taux daté -> as_of reste None mais l'agrégat est complet.
+        let (m, as_of) = convert_dated(&money("42", "USD"), cur("USD"), &t).unwrap();
+        assert_eq!(m, money("42", "USD"));
+        assert_eq!(as_of, None);
+
+        let agg = aggregate_converted(&[money("42", "USD")], cur("USD"), &t);
+        assert_eq!(agg.total(), &money("42", "USD"));
+        assert!(agg.is_complete());
+        assert_eq!(agg.as_of(), None);
+    }
+
+    #[test]
+    #[verifies(REQ-CUR-004, case = "mélange daté/identité : date du seul taux daté")]
+    fn mixed_dated_and_identity_uses_dated_date() {
+        let t = dated_table();
+        // Un montant USD (identité, sans date) + un montant EUR (taux daté 20/07).
+        let agg = aggregate_converted(
+            &[money("5", "USD"), money("10", "EUR")],
+            cur("USD"),
+            &t,
+        );
+        // 5 (identité) + 11 (10 EUR * 1.10) = 16 USD.
+        assert_eq!(agg.total(), &money("16.00", "USD"));
+        assert!(agg.is_complete());
+        assert_eq!(agg.as_of(), Some(day(2026, 7, 20)));
+    }
+
+    #[test]
+    #[verifies(REQ-CUR-004, case = "aucun taux : exclu et signalé, jamais zéro silencieux")]
+    fn all_unconvertible_is_flagged_never_silent_zero() {
+        // Table vide : aucun taux étranger connu (fournisseur indisponible / non configuré).
+        let empty = RateTable::default();
+        let agg = aggregate_converted(
+            &[money("10", "EUR"), money("20", "GBP")],
+            cur("USD"),
+            &empty,
+        );
+        // Le total est nul EN CHIFFRES, mais l'agrégat est EXPLICITEMENT incomplet : jamais présenté
+        // comme un zéro complet et silencieux (REQ-CUR-004, critère #2).
+        assert_eq!(agg.total(), &money("0", "USD"));
+        assert_eq!(agg.converted(), 0);
+        assert_eq!(agg.excluded(), 2);
+        assert!(!agg.is_complete());
+        assert_eq!(agg.as_of(), None);
+    }
+
+    #[test]
+    #[verifies(REQ-CUR-004, case = "dated_rate par défaut : taux sans date")]
+    fn default_dated_rate_has_no_date() {
+        // Un fournisseur qui n'implémente QUE `rate` hérite du défaut : taux repris, date absente.
+        struct BareProvider;
+        impl RateProvider for BareProvider {
+            fn rate(&self, base: CurrencyCode, quote: CurrencyCode) -> Option<Decimal> {
+                if base == cur("EUR") && quote == cur("USD") {
+                    Some(dec("1.10"))
+                } else {
+                    None
+                }
+            }
+        }
+        let p = BareProvider;
+        assert_eq!(p.dated_rate(cur("EUR"), cur("USD")), Some((dec("1.10"), None)));
+        assert_eq!(p.dated_rate(cur("GBP"), cur("USD")), None);
+        // L'agrégat reste complet (taux connu) mais sans date de fraîcheur remontée.
+        let agg = aggregate_converted(&[money("10", "EUR")], cur("USD"), &p);
+        assert_eq!(agg.total(), &money("11.00", "USD"));
+        assert!(agg.is_complete());
+        assert_eq!(agg.as_of(), None);
     }
 }

@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import type { AppDriver, SignupInput } from "./AppDriver";
+import type { AppDriver, MoneyInput, SignupInput } from "./AppDriver";
 import type { Credentials, Harness } from "./Harness";
 
 /**
@@ -167,5 +167,37 @@ export class TargetDriver implements AppDriver, Harness {
     } catch {
       return false;
     }
+  }
+
+  // --- Agrégation multi-devises en mode dégradé (REQ-CUR-004) ---
+
+  async computeAggregate(target: string, amounts: MoneyInput[]): Promise<void> {
+    await this.page.getByTestId("exchange-target").fill(target);
+    for (let i = 0; i < amounts.length; i++) {
+      if (i > 0) {
+        await this.page.getByTestId("exchange-add").click();
+      }
+      await this.page.getByTestId(`exchange-amount-${i}`).fill(amounts[i].amount);
+      await this.page.getByTestId(`exchange-currency-${i}`).fill(amounts[i].currency);
+    }
+    await this.page.getByTestId("exchange-submit").click();
+  }
+
+  async aggregateIncompleteVisible(): Promise<boolean> {
+    try {
+      await this.page
+        .getByTestId("exchange-incomplete")
+        .waitFor({ state: "visible", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async readAggregateTotal(): Promise<string> {
+    await this.page
+      .getByTestId("exchange-total")
+      .waitFor({ state: "visible", timeout: 5000 });
+    return (await this.page.getByTestId("exchange-total").textContent()) ?? "";
   }
 }

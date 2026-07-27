@@ -80,7 +80,7 @@ depends_on: [REQ-CUR-001]
 id: REQ-CUR-004
 title: Mode dégradé en cas d'échec du fournisseur de taux
 domain: currencies
-status: draft
+status: verified
 criticality: high
 layer: [core, api, ui]
 e2e: required

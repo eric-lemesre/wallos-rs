@@ -44,5 +44,19 @@
       "newTooShort": "Le mot de passe doit contenir au moins 12 caractères",
       "newCompromised": "Ce mot de passe est trop courant — choisissez-en un autre"
     }
+  },
+  "exchange": {
+    "title": "Total converti",
+    "target": "Devise cible",
+    "amount": "Montant",
+    "currency": "Devise",
+    "addAmount": "Ajouter un montant",
+    "compute": "Calculer le total",
+    "total": "Total",
+    "converted": "Convertis",
+    "excluded": "Exclus",
+    "asOf": "Taux au {{date}}",
+    "incomplete": "Agrégat incomplet : certains montants ont été exclus faute de taux connu.",
+    "error": "Impossible de calculer le total"
   }
 }
