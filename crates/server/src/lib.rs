@@ -17,6 +17,7 @@ use wallos_storage::Db;
 
 pub mod accounts;
 pub mod auth;
+pub mod exchange;
 
 /// API wallos-rs v1.
 #[derive(OpenApi)]

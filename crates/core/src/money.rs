@@ -32,6 +32,16 @@ impl Money {
         Ok(Self { amount, currency })
     }
 
+    /// Montant nul dans une devise donnée (élément neutre d'une somme).
+    #[must_use]
+    #[requirement(REQ-CUR-002)]
+    pub const fn zero(currency: CurrencyCode) -> Self {
+        Self {
+            amount: Decimal::ZERO,
+            currency,
+        }
+    }
+
     /// Montant brut (toujours positif ou nul).
     #[must_use]
     #[requirement(REQ-CUR-002)]
@@ -115,5 +125,19 @@ mod tests {
     fn currency_code_as_str_round_trip() {
         let code = CurrencyCode::new("EUR").unwrap();
         assert_eq!(code.as_str(), "EUR");
+    }
+
+    #[test]
+    #[verifies(REQ-CUR-001, case = "Display = code ISO")]
+    fn currency_code_display_matches_code() {
+        assert_eq!(format!("{}", CurrencyCode::new("USD").unwrap()), "USD");
+    }
+
+    #[test]
+    #[verifies(REQ-CUR-002, case = "zéro est neutre")]
+    fn money_zero_is_neutral() {
+        let z = Money::zero(CurrencyCode::new("EUR").unwrap());
+        assert_eq!(z.amount(), Decimal::ZERO);
+        assert_eq!(z.currency(), CurrencyCode::new("EUR").unwrap());
     }
 }

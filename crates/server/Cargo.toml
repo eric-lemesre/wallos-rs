@@ -27,6 +27,7 @@ dotenvy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
@@ -38,4 +39,5 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 reqwest = { workspace = true }
+rust_decimal = { workspace = true }
 tower = { workspace = true }
