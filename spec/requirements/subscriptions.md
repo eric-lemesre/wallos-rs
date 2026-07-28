@@ -32,7 +32,7 @@ depends_on: []
 id: REQ-SUB-002
 title: Création d'un abonnement
 domain: subscriptions
-status: draft
+status: verified
 criticality: high
 layer: [core, api, ui]
 e2e: required

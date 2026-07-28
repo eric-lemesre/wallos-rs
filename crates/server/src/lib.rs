@@ -12,8 +12,9 @@ use wallos_core::requirement;
 use wallos_proto::{
     AggregateRequest, CategoryDto, ChangePasswordRequest, ConvertedTotalResponse,
     CreateAccountRequest, CreateCategoryRequest, CreateDeviceSessionRequest, CreateSessionRequest,
-    CurrencyDto, CurrentUser, DeviceSummary, DeviceToken, HealthResponse, MoneyInput,
-    NextDueRequest, NextDueResponse, Problem, RenameCategoryRequest, problem,
+    CreateSubscriptionRequest, CurrencyDto, CurrentUser, DeviceSummary, DeviceToken,
+    HealthResponse, MoneyInput, NextDueRequest, NextDueResponse, Problem, RenameCategoryRequest,
+    SubscriptionDto, problem,
 };
 use wallos_storage::Db;
 
@@ -23,6 +24,7 @@ pub mod categories;
 pub mod currencies;
 pub mod exchange;
 pub mod schedule;
+pub mod subscriptions;
 
 /// API wallos-rs v1.
 #[derive(OpenApi)]
@@ -49,7 +51,8 @@ pub mod schedule;
         categories::list_categories,
         categories::rename_category,
         categories::delete_category,
-        schedule::compute_next_due
+        schedule::compute_next_due,
+        subscriptions::create_subscription
     ),
     components(schemas(
         HealthResponse,
@@ -69,7 +72,9 @@ pub mod schedule;
         CreateCategoryRequest,
         RenameCategoryRequest,
         NextDueRequest,
-        NextDueResponse
+        NextDueResponse,
+        CreateSubscriptionRequest,
+        SubscriptionDto
     ))
 )]
 pub struct ApiDoc;
@@ -147,6 +152,7 @@ pub fn app_with_db(db: Db) -> Router {
             categories::delete_category
         ))
         .routes(routes!(schedule::compute_next_due))
+        .routes(routes!(subscriptions::create_subscription))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))

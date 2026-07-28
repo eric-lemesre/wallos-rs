@@ -10,6 +10,7 @@ pub mod error;
 pub mod exchange_rates;
 pub mod login_attempts;
 pub mod sessions;
+pub mod subscriptions;
 pub mod users;
 
 pub use categories::{CategoryRepository, CategoryRow};
@@ -19,4 +20,5 @@ pub use error::StorageError;
 pub use exchange_rates::{ExchangeRateRepository, StoredRate};
 pub use login_attempts::LoginAttemptRepository;
 pub use sessions::SessionRepository;
+pub use subscriptions::{SubscriptionRepository, SubscriptionRow};
 pub use users::{CreatedAccount, Credentials, StoredUser, UserRepository};

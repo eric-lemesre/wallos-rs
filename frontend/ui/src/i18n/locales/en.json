@@ -87,5 +87,17 @@
       "month": "Month",
       "year": "Year"
     }
+  },
+  "subscription": {
+    "title": "New subscription",
+    "name": "Name",
+    "amount": "Amount",
+    "currency": "Currency",
+    "unit": "Cycle unit",
+    "interval": "Interval",
+    "firstPayment": "First payment",
+    "create": "Create subscription",
+    "created": "Created, next payment",
+    "error": "Could not create the subscription"
   }
 }
