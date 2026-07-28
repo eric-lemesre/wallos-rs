@@ -281,6 +281,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/settings/reference-currency": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lit la devise de référence du foyer de l'appelant. */
+        get: operations["getReferenceCurrency"];
+        /** Fixe la devise de référence du foyer de l'appelant. */
+        put: operations["setReferenceCurrency"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/subscriptions": {
         parameters: {
             query?: never;
@@ -687,6 +705,19 @@ export interface components {
              * @example about:blank
              */
             type: string;
+        };
+        /**
+         * @description Devise de référence du foyer (REQ-CUR-001) : devise cible de tous les agrégats.
+         *
+         *     Sert à la fois de **réponse** (`GET`) et de **corps de requête** (`PUT`). Le code est validé contre
+         *     le référentiel supporté côté serveur ; les montants saisis ne sont jamais altérés.
+         */
+        ReferenceCurrencyDto: {
+            /**
+             * @description Code ISO 4217 de la devise de référence.
+             * @example EUR
+             */
+            currency: string;
         };
         /** @description Requête de renommage d'une catégorie (REQ-CAT-001). */
         RenameCategoryRequest: {
@@ -1522,6 +1553,77 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    getReferenceCurrency: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Devise de référence du foyer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferenceCurrencyDto"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    setReferenceCurrency: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReferenceCurrencyDto"];
+            };
+        };
+        responses: {
+            /** @description Devise de référence mise à jour */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReferenceCurrencyDto"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Devise hors référentiel */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
             };
         };
     };

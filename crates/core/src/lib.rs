@@ -18,6 +18,7 @@ pub mod exchange;
 pub mod money;
 pub mod password_policy;
 pub mod payment_method;
+pub mod reference_currency;
 pub mod schedule;
 pub mod stats;
 pub mod subscription;
@@ -29,5 +30,6 @@ pub use exchange::{
     ConvertedTotal, ExchangeRate, RateProvider, RateTable, aggregate_converted, convert,
 };
 pub use payment_method::PaymentMethod;
+pub use reference_currency::ReferenceCurrency;
 pub use schedule::next_due;
 pub use subscription::Subscription;

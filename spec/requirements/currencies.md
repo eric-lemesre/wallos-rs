@@ -8,7 +8,7 @@
 id: REQ-CUR-001
 title: Devise de référence du compte
 domain: currencies
-status: draft
+status: verified
 criticality: high
 layer: [core, api, ui]
 e2e: required
