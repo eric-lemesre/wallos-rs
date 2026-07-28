@@ -229,6 +229,27 @@ export class TargetDriver implements AppDriver, Harness {
     return (await this.page.getByTestId("subscriptions-total").textContent()) ?? "";
   }
 
+  // --- Modification (REQ-SUB-004) ---
+
+  async editSubscriptionAmount(name: string, amount: string): Promise<void> {
+    const row = this.page.getByTestId("subscription-row").filter({ hasText: name });
+    await row.getByTestId("subscription-edit").click();
+    await row.getByTestId("subscription-amount-input").fill(amount);
+    await row.getByTestId("subscription-save").click();
+    // Attend que la liste rechargée reflète le nouveau montant (recalcul serveur appliqué).
+    await this.page
+      .getByTestId("subscription-amount")
+      .filter({ hasText: amount })
+      .first()
+      .waitFor({ state: "visible", timeout: 5000 });
+  }
+
+  async subscriptionAmount(name: string): Promise<string> {
+    const row = this.page.getByTestId("subscription-row").filter({ hasText: name });
+    await row.getByTestId("subscription-amount").waitFor({ state: "visible", timeout: 5000 });
+    return (await row.getByTestId("subscription-amount").textContent()) ?? "";
+  }
+
   // --- Calcul d'échéance (REQ-SUB-012) ---
 
   async computeNextDue(anchor: string, unit: string, interval: string, after: string): Promise<void> {

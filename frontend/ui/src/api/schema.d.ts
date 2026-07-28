@@ -263,6 +263,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/subscriptions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Modifie un abonnement du foyer de l'appelant ; recalcule la prochaine échéance (REQ-SUB-004).
+         * @description L'échéance est **ré-ancrée sur `first_payment`** avec le nouveau cycle (jamais dérivée de
+         *     l'ancienne). La résolution des modifications concurrentes (horodatage antérieur) relève de
+         *     REQ-SYN-005, hors de ce vertical : ici, la dernière écriture reçue fait foi.
+         */
+        put: operations["updateSubscription"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1351,6 +1373,60 @@ export interface operations {
             };
             /** @description Non authentifié */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation par champ */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    updateSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant (UUID) de l'abonnement */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Abonnement modifié (échéance recalculée) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionDto"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Abonnement inconnu ou hors du foyer */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

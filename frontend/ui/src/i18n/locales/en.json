@@ -103,6 +103,7 @@
   "subscriptions": {
     "title": "My subscriptions",
     "filterCategory": "Filter by category (UUID)",
+    "filterPayer": "Filter by payer (UUID)",
     "filterState": "State",
     "stateAll": "All",
     "stateActive": "Active",
@@ -112,6 +113,11 @@
     "nextPayment": "Next payment",
     "total": "Total",
     "incomplete": "Partial total: some amounts could not be converted",
-    "error": "Could not load subscriptions"
+    "error": "Could not load subscriptions",
+    "edit": "Edit",
+    "save": "Save",
+    "editAmount": "Amount",
+    "editUnit": "Cycle unit",
+    "editInterval": "Interval"
   }
 }

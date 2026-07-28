@@ -125,6 +125,43 @@ impl<'a> SubscriptionRepository<'a> {
         Ok(row)
     }
 
+    /// Met à jour un abonnement **du foyer de l'appelant** (REQ-SUB-004).
+    ///
+    /// Renvoie `true` si une ligne a été modifiée, `false` si l'abonnement est inconnu **ou** hors du
+    /// foyer (l'appelant traduit `false` en `404`, jamais `403` — §9). Tous les champs éditables sont
+    /// réécrits ; l'`id` et le `household_id` sont la clé de portée, jamais modifiés.
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de mise à jour.
+    #[requirement(REQ-SUB-004)]
+    pub async fn update(&self, actor: &Actor, sub: &Subscription) -> Result<bool, StorageError> {
+        let res = sqlx::query(
+            "update subscriptions set \
+                name = $3, amount = $4, currency = $5, cycle_unit = $6, cycle_interval = $7, \
+                first_payment = $8, category_id = $9, payment_method_id = $10, payer_id = $11, \
+                logo = $12, url = $13, notes = $14, active = $15 \
+             where id = $1 and household_id = $2",
+        )
+        .bind(sub.id())
+        .bind(actor.household_id())
+        .bind(sub.name())
+        .bind(sub.price().amount())
+        .bind(sub.price().currency().as_str())
+        .bind(sub.cycle().unit().as_str())
+        .bind(i32::try_from(sub.cycle().interval()).unwrap_or(i32::MAX))
+        .bind(sub.first_payment())
+        .bind(sub.category())
+        .bind(sub.payment_method())
+        .bind(sub.payer())
+        .bind(sub.logo())
+        .bind(sub.url())
+        .bind(sub.notes())
+        .bind(sub.is_active())
+        .execute(self.pool)
+        .await?;
+        Ok(res.rows_affected() > 0)
+    }
+
     /// Liste les abonnements **du foyer de l'appelant**, filtrés de façon **conjonctive** (REQ-SUB-006).
     ///
     /// Chaque filtre est un garde `paramètre IS NULL OR colonne = paramètre` : `None` n'exclut rien,
