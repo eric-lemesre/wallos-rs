@@ -472,6 +472,10 @@ impl CreateSubscriptionRequest {
             .map_err(|_| FieldError::new("amount", "montant négatif"))?;
         let unit = BillingUnit::parse(&self.cycle.unit)
             .map_err(|_| FieldError::new("cycle.unit", "unité inconnue"))?;
+        // Borne l'intervalle à la plage stockable (`integer` SQL) : jamais de clamp silencieux en base.
+        if i32::try_from(self.cycle.interval).is_err() {
+            return Err(FieldError::new("cycle.interval", "intervalle trop grand"));
+        }
         let cycle = BillingCycle::from_parts(unit, self.cycle.interval)
             .map_err(|_| FieldError::new("cycle.interval", "intervalle doit être > 0"))?;
         let first_payment = NaiveDate::parse_from_str(&self.first_payment, "%Y-%m-%d")
@@ -758,6 +762,58 @@ mod tests {
         let mut bad_date = SubscriptionDto::from_core(&sample_subscription());
         bad_date.first_payment = "31/01/2026".to_string();
         assert!(bad_date.into_core().is_err());
+    }
+
+    fn create_req() -> CreateSubscriptionRequest {
+        CreateSubscriptionRequest {
+            name: "Netflix".to_string(),
+            amount: "9.99".to_string(),
+            currency: "EUR".to_string(),
+            cycle: BillingCycleDto {
+                unit: "month".to_string(),
+                interval: 1,
+            },
+            first_payment: "2025-01-31".to_string(),
+            category: None,
+            payment_method: None,
+            payer: None,
+            logo: None,
+            url: None,
+            notes: None,
+            active: true,
+        }
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-002, case = "validation par champ : chaque champ fautif nommé")]
+    fn create_request_reports_the_faulty_field() {
+        let id = Uuid::from_u128(1);
+        let err = |mutate: &dyn Fn(&mut CreateSubscriptionRequest)| {
+            let mut r = create_req();
+            mutate(&mut r);
+            r.into_core(id).unwrap_err().field
+        };
+        assert_eq!(err(&|r| r.amount = "-1".to_string()), "amount");
+        assert_eq!(err(&|r| r.amount = "abc".to_string()), "amount");
+        assert_eq!(err(&|r| r.currency = "ZZZ".to_string()), "currency");
+        assert_eq!(
+            err(&|r| r.cycle.unit = "fortnight".to_string()),
+            "cycle.unit"
+        );
+        assert_eq!(err(&|r| r.cycle.interval = 0), "cycle.interval");
+        // CRIT-1 : intervalle hors plage stockable rejeté (jamais de clamp silencieux en base).
+        assert_eq!(err(&|r| r.cycle.interval = u32::MAX), "cycle.interval");
+        assert_eq!(
+            err(&|r| r.first_payment = "31/01/2025".to_string()),
+            "first_payment"
+        );
+        assert_eq!(err(&|r| r.name = "  ".to_string()), "name");
+        assert_eq!(
+            err(&|r| r.category = Some("not-a-uuid".to_string())),
+            "category"
+        );
+        // Cas valide : construit sans erreur.
+        assert!(create_req().into_core(id).is_ok());
     }
 
     #[test]

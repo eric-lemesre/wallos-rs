@@ -4,7 +4,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use serde_json::{Value, json};
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use tower::ServiceExt;
 use wallos_req_macros::verifies;
 use wallos_server::app_with_db;
@@ -101,6 +101,61 @@ async fn creates_subscription_with_next_payment(pool: PgPool) {
     assert!(body["id"].as_str().is_some());
     // Prochaine échéance calculée immédiatement : first_payment futur -> lui-même.
     assert_eq!(body["next_payment"], "2030-01-31");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-002)]
+async fn create_persists_the_row_with_a_household(pool: PgPool) {
+    // HIGH-2 : la persistance réelle est vérifiée (pas seulement la réponse HTTP).
+    let web = account(&pool, "persist@example.com").await;
+    let body = body_json(create(&pool, &web, valid_body()).await).await;
+    let id: uuid::Uuid = body["id"].as_str().unwrap().parse().unwrap();
+
+    let row = sqlx::query(
+        "select name, amount, currency, cycle_unit, cycle_interval, household_id \
+         from subscriptions where id = $1",
+    )
+    .bind(id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(row.get::<String, _>("name"), "Netflix");
+    assert_eq!(
+        row.get::<rust_decimal::Decimal, _>("amount"),
+        "9.99".parse().unwrap()
+    );
+    assert_eq!(row.get::<String, _>("currency"), "EUR");
+    assert_eq!(row.get::<String, _>("cycle_unit"), "month");
+    assert_eq!(row.get::<i32, _>("cycle_interval"), 1);
+    // Rattaché à un foyer (isolation §9 : la ligne porte un `household_id` non nul).
+    let _household: uuid::Uuid = row.get("household_id");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-002)]
+async fn unknown_cycle_unit_and_empty_name_rejected_per_field(pool: PgPool) {
+    let web = account(&pool, "sub-fields@example.com").await;
+    let mut unit = valid_body();
+    unit["cycle"]["unit"] = json!("fortnight");
+    let r = create(&pool, &web, unit).await;
+    assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        body_json(r).await["detail"]
+            .as_str()
+            .unwrap()
+            .contains("cycle.unit")
+    );
+
+    let mut empty = valid_body();
+    empty["name"] = json!("   ");
+    let r = create(&pool, &web, empty).await;
+    assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        body_json(r).await["detail"]
+            .as_str()
+            .unwrap()
+            .contains("name")
+    );
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
