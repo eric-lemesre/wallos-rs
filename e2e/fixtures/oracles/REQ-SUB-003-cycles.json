@@ -1,0 +1,13 @@
+{
+  "_source": "Wallos 5.4.2 (bellamy/wallos:5.4.2@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f), table `cycles` et `frequencies`",
+  "_requirement": "REQ-SUB-003",
+  "_note": "Oracle figé du modèle de cycle de facturation (§8.1). Le cycle Wallos = (cycle unit, frequency interval). « One-time » (days=0) est un abonnement non récurrent, hors du type BillingCycle récurrent.",
+  "cycles": [
+    { "id": 1, "days": 1, "name": "Daily", "unit": "day" },
+    { "id": 2, "days": 7, "name": "Weekly", "unit": "week" },
+    { "id": 3, "days": 30, "name": "Monthly", "unit": "month" },
+    { "id": 4, "days": 365, "name": "Yearly", "unit": "year" },
+    { "id": 5, "days": 0, "name": "One-time", "unit": null }
+  ],
+  "frequency_range": { "min": 1, "max": 31 }
+}
