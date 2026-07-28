@@ -99,5 +99,19 @@
     "create": "Créer l'abonnement",
     "created": "Créé, prochaine échéance",
     "error": "Impossible de créer l'abonnement"
+  },
+  "subscriptions": {
+    "title": "Mes abonnements",
+    "filterCategory": "Filtrer par catégorie (UUID)",
+    "filterState": "État",
+    "stateAll": "Tous",
+    "stateActive": "Actifs",
+    "stateInactive": "Inactifs",
+    "apply": "Appliquer",
+    "empty": "Aucun abonnement",
+    "nextPayment": "Prochaine échéance",
+    "total": "Total",
+    "incomplete": "Total partiel : certains montants n'ont pas pu être convertis",
+    "error": "Impossible de charger les abonnements"
   }
 }

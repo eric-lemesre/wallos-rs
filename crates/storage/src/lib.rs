@@ -20,5 +20,5 @@ pub use error::StorageError;
 pub use exchange_rates::{ExchangeRateRepository, StoredRate};
 pub use login_attempts::LoginAttemptRepository;
 pub use sessions::SessionRepository;
-pub use subscriptions::{SubscriptionRepository, SubscriptionRow};
+pub use subscriptions::{SubscriptionFilter, SubscriptionRepository, SubscriptionRow};
 pub use users::{CreatedAccount, Credentials, StoredUser, UserRepository};

@@ -125,7 +125,7 @@ depends_on: [REQ-SYN-002]
 id: REQ-SUB-006
 title: Liste des abonnements et filtres
 domain: subscriptions
-status: draft
+status: verified
 criticality: high
 layer: [api, ui]
 e2e: required

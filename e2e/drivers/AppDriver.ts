@@ -47,6 +47,18 @@ export interface AppDriver {
   /** Prochaine échéance affichée après création (chaîne vide si absente). */
   subscriptionNextPayment(): Promise<string>;
 
+  // Liste et filtres (REQ-SUB-006).
+  /** Recharge la liste des abonnements (bouton « Appliquer », filtres courants). */
+  refreshSubscriptions(): Promise<void>;
+  /** Renseigne le filtre catégorie (UUID) puis recharge la liste. */
+  filterSubscriptionsByCategory(category: string): Promise<void>;
+  /** Vrai si un abonnement de ce nom apparaît dans la liste. */
+  subscriptionListed(name: string): Promise<boolean>;
+  /** Vrai si la liste est explicitement vide. */
+  subscriptionsEmpty(): Promise<boolean>;
+  /** Texte du total affiché (reflète le filtre courant). */
+  subscriptionsTotal(): Promise<string>;
+
   // Calcul d'échéance (REQ-SUB-012).
   /** Renseigne ancre/unité/intervalle/date de référence et déclenche le calcul. */
   computeNextDue(anchor: string, unit: string, interval: string, after: string): Promise<void>;

@@ -99,5 +99,19 @@
     "create": "Create subscription",
     "created": "Created, next payment",
     "error": "Could not create the subscription"
+  },
+  "subscriptions": {
+    "title": "My subscriptions",
+    "filterCategory": "Filter by category (UUID)",
+    "filterState": "State",
+    "stateAll": "All",
+    "stateActive": "Active",
+    "stateInactive": "Inactive",
+    "apply": "Apply",
+    "empty": "No subscriptions",
+    "nextPayment": "Next payment",
+    "total": "Total",
+    "incomplete": "Partial total: some amounts could not be converted",
+    "error": "Could not load subscriptions"
   }
 }

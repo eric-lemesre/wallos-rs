@@ -7,6 +7,7 @@ import { ConvertedTotalCard } from "../../../ui/src/components/ConvertedTotalCar
 import { CategoriesList } from "../../../ui/src/components/CategoriesList";
 import { NextDueCard } from "../../../ui/src/components/NextDueCard";
 import { SubscriptionForm } from "../../../ui/src/components/SubscriptionForm";
+import { SubscriptionsList } from "../../../ui/src/components/SubscriptionsList";
 import { CurrenciesList } from "../../../ui/src/components/CurrenciesList";
 import { DevicesList } from "../../../ui/src/components/DevicesList";
 import { LoginForm } from "../../../ui/src/components/LoginForm";
@@ -30,6 +31,7 @@ if (root) {
           <CategoriesList />
           <NextDueCard />
           <SubscriptionForm />
+          <SubscriptionsList />
         </main>
       </I18nextProvider>
     </StrictMode>,
