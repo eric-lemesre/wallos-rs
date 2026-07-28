@@ -52,8 +52,8 @@ impl Subscription {
         cycle: BillingCycle,
         first_payment: NaiveDate,
     ) -> Result<Self, DomainError> {
-        let name = name.into();
-        if name.trim().is_empty() {
+        let name = name.into().trim().to_string();
+        if name.is_empty() {
             return Err(DomainError::InvalidArgument(
                 "subscription name must not be empty".to_string(),
             ));
@@ -270,6 +270,21 @@ mod tests {
             Subscription::new(Uuid::from_u128(1), "   ", money("1", "EUR"), cycle(), day())
                 .is_err()
         );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-001, case = "nom normalisé (trim)")]
+    fn name_is_trimmed() {
+        // Espaces de bord retirés avant stockage (cohérent avec les catégories).
+        let sub = Subscription::new(
+            Uuid::from_u128(1),
+            "  Netflix  ",
+            money("1", "EUR"),
+            cycle(),
+            day(),
+        )
+        .unwrap();
+        assert_eq!(sub.name(), "Netflix");
     }
 
     #[test]
