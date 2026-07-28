@@ -10,6 +10,29 @@ Le domaine fait correctement le choix de `rust_decimal`, expose une volonté de 
 
 ---
 
+## Statut de traitement (mis à jour après triage)
+
+Légende : ✅ CORRIGÉ · ❌ REJETÉ (faux positif) · ⏳ DIFFÉRÉ (exigence future / backlog `.hermes`).
+
+| Finding | Statut | Détail |
+|---|---|---|
+| HIGH-1 (validation devise hors référentiel) | ✅ CORRIGÉ | `CurrencyCode::new` valide référentiel + majuscules — PR #31 (`374a341`). Test bout-en-bout `target=ZZZ → 422`. |
+| HIGH-2 (routes sans `/api/v1`) | ❌ REJETÉ | Faux positif : routes nichées sous `/api/v1` via `Router::nest("/api/v1", …)` dans `lib.rs`. |
+| HIGH-3 (`first_payment` `NaiveDate` sans heure/fuseau) | ⏳ DIFFÉRÉ | À trancher pour **REQ-SUB-012** (Wallos stocke une DATE ; réconcilier « heure locale préservée »). |
+| HIGH-4 (modèle `Subscription` incomplet) | ⏳ DIFFÉRÉ | Étendre au fil de **SUB-009/010**, **NOT**, **SYN** (pas spéculativement). |
+| HIGH-5 (pas d'`owner_id`) | ⏳ DIFFÉRÉ | À ajouter avec la persistance (**SUB-002**) ; repo filtrant par `Actor` (§9). Pas de repo abonnement encore → non exploitable. |
+| MEDIUM-1 (minuscules acceptées) | ✅ CORRIGÉ | `is_ascii_uppercase` — PR #31 (`374a341`). |
+| MEDIUM-2 (taux corrompus ignorés en silence) | ⏳ DIFFÉRÉ | Ajouter `tracing::warn` sur ligne ignorée (`.hermes`). |
+| MEDIUM-3 (422 sans `detail`) | ⏳ DIFFÉRÉ | Enrichir `Problem.detail` (champ fautif) (`.hermes`). |
+| MEDIUM-4 (`Money` sans `Add`/`Sum` contrôlé) | ⏳ DIFFÉRÉ | Ajouter `Money::add`→`Result` quand l'agrégation métier (**STA**) en aura besoin. |
+| LOW-1 (`u32` vs `usize` compteurs) | ⏳ DIFFÉRÉ | `.hermes`. |
+| LOW-2 (`Secret` ne zeroize pas la mémoire) | ⏳ DIFFÉRÉ | SEC-003 = masquage logs (satisfait) ; durcissement mémoire optionnel (`secrecy`/`zeroize`). |
+| NIT-1 (`InvalidMoney` pour taux ≤0) | ⏳ DIFFÉRÉ | Taxonomie d'erreur (`InvalidArgument`/`InvalidRate`) (`.hermes`). |
+| NIT-2 (dédup `rate`/`dated_rate`) | ⏳ DIFFÉRÉ | Refactor mineur `RateTable` (`.hermes`). |
+| NIT-3 (`SubscriptionDto.active` sans défaut) | ✅ CORRIGÉ | `#[serde(default)]` (actif) — PR #31 (`374a341`). |
+
+---
+
 ## Findings
 
 ### CRITICAL
