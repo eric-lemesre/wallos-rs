@@ -252,7 +252,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Liste les abonnements du foyer, filtrés (conjonctifs), avec le total agrégé du sous-ensemble actif. */
+        get: operations["listSubscriptions"];
         put?: never;
         /** Crée un abonnement dans le foyer de l'appelant ; renvoie l'abonnement et sa prochaine échéance. */
         post: operations["createSubscription"];
@@ -670,6 +671,19 @@ export interface components {
             payment_method?: string | null;
             /** @description URL du service, le cas échéant. */
             url?: string | null;
+        };
+        /**
+         * @description Liste d'abonnements filtrée avec son **total agrégé** (REQ-SUB-006).
+         *
+         *     Le `total` reflète le filtre : il agrège les montants des abonnements **actifs** retournés,
+         *     convertis dans la devise cible (réutilise l'agrégat multi-devises en mode dégradé, REQ-CUR-004) —
+         *     un abonnement désactivé est exclu du total (REQ-SUB-008) même s'il figure dans la liste.
+         */
+        SubscriptionListResponse: {
+            /** @description Abonnements du foyer correspondant au filtre (ordre stable : nom puis id). */
+            subscriptions: components["schemas"]["SubscriptionDto"][];
+            /** @description Total agrégé des abonnements actifs de la liste, dans la devise cible. */
+            total: components["schemas"]["ConvertedTotalResponse"];
         };
     };
     responses: never;
@@ -1260,6 +1274,56 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    listSubscriptions: {
+        parameters: {
+            query?: {
+                /** @description Restreint à une catégorie (UUID). */
+                category?: string;
+                /** @description Restreint à un payeur (UUID). */
+                payer?: string;
+                /** @description Restreint à l'état actif (`true`) ou inactif (`false`). */
+                active?: boolean;
+                /**
+                 * @description Devise cible du total agrégé (code ISO 4217 ; défaut `EUR`).
+                 * @example EUR
+                 */
+                currency?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Abonnements filtrés et total agrégé */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionListResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Filtre invalide */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
             };
         };
     };

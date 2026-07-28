@@ -9,7 +9,7 @@ use std::fmt;
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use wallos_core::billing::{BillingCycle, BillingUnit};
 use wallos_core::currencies::SupportedCurrency;
@@ -413,6 +413,40 @@ impl SubscriptionDto {
         }
         Ok(sub.with_active(self.active))
     }
+}
+
+/// Filtres de la liste d'abonnements (REQ-SUB-006), passés en **query string**, tous optionnels et
+/// **conjonctifs**. `category`/`payer` sont des UUID ; `active` restreint à l'état ; `currency` est la
+/// devise cible du total agrégé (défaut : `EUR`, en attendant la devise de référence REQ-CUR-001).
+#[derive(Debug, Clone, Default, Deserialize, Serialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct SubscriptionListQuery {
+    /// Restreint à une catégorie (UUID).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    /// Restreint à un payeur (UUID).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payer: Option<String>,
+    /// Restreint à l'état actif (`true`) ou inactif (`false`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active: Option<bool>,
+    /// Devise cible du total agrégé (code ISO 4217 ; défaut `EUR`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[param(example = "EUR")]
+    pub currency: Option<String>,
+}
+
+/// Liste d'abonnements filtrée avec son **total agrégé** (REQ-SUB-006).
+///
+/// Le `total` reflète le filtre : il agrège les montants des abonnements **actifs** retournés,
+/// convertis dans la devise cible (réutilise l'agrégat multi-devises en mode dégradé, REQ-CUR-004) —
+/// un abonnement désactivé est exclu du total (REQ-SUB-008) même s'il figure dans la liste.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct SubscriptionListResponse {
+    /// Abonnements du foyer correspondant au filtre (ordre stable : nom puis id).
+    pub subscriptions: Vec<SubscriptionDto>,
+    /// Total agrégé des abonnements actifs de la liste, dans la devise cible.
+    pub total: ConvertedTotalResponse,
 }
 
 /// Requête de création d'un abonnement (REQ-SUB-002). Mêmes champs que [`SubscriptionDto`] sans `id`

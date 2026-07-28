@@ -45,6 +45,19 @@ pub struct SubscriptionRow {
     pub active: bool,
 }
 
+/// Filtres de liste (REQ-SUB-006), tous optionnels et **conjonctifs** : un critère absent (`None`)
+/// n'exclut rien ; deux critères présents sont combinés par `ET`. Aucun filtre → tous les abonnements
+/// du foyer.
+#[derive(Debug, Clone, Default)]
+pub struct SubscriptionFilter {
+    /// Restreint à une catégorie (UUID) le cas échéant.
+    pub category: Option<Uuid>,
+    /// Restreint à un payeur (UUID) le cas échéant.
+    pub payer: Option<Uuid>,
+    /// Restreint à l'état actif/inactif le cas échéant.
+    pub active: Option<bool>,
+}
+
 /// Accès aux abonnements.
 pub struct SubscriptionRepository<'a> {
     pool: &'a sqlx::PgPool,
@@ -110,5 +123,38 @@ impl<'a> SubscriptionRepository<'a> {
         .fetch_optional(self.pool)
         .await?;
         Ok(row)
+    }
+
+    /// Liste les abonnements **du foyer de l'appelant**, filtrés de façon **conjonctive** (REQ-SUB-006).
+    ///
+    /// Chaque filtre est un garde `paramètre IS NULL OR colonne = paramètre` : `None` n'exclut rien,
+    /// les critères présents se combinent par `ET`. Ordre déterministe (nom, puis id) pour une vue
+    /// stable. La portée par `household_id` garantit qu'aucun abonnement d'un autre foyer n'apparaît (§9).
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-SUB-006)]
+    pub async fn list(
+        &self,
+        actor: &Actor,
+        filter: &SubscriptionFilter,
+    ) -> Result<Vec<SubscriptionRow>, StorageError> {
+        let rows = sqlx::query_as::<_, SubscriptionRow>(
+            "select id, name, amount, currency, cycle_unit, cycle_interval, first_payment, \
+                    category_id, payment_method_id, payer_id, logo, url, notes, active \
+             from subscriptions \
+             where household_id = $1 \
+               and ($2::uuid is null or category_id = $2) \
+               and ($3::uuid is null or payer_id = $3) \
+               and ($4::bool is null or active = $4) \
+             order by name asc, id asc",
+        )
+        .bind(actor.household_id())
+        .bind(filter.category)
+        .bind(filter.payer)
+        .bind(filter.active)
+        .fetch_all(self.pool)
+        .await?;
+        Ok(rows)
     }
 }

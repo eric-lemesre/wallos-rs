@@ -14,7 +14,7 @@ use wallos_proto::{
     CreateAccountRequest, CreateCategoryRequest, CreateDeviceSessionRequest, CreateSessionRequest,
     CreateSubscriptionRequest, CurrencyDto, CurrentUser, DeviceSummary, DeviceToken,
     HealthResponse, MoneyInput, NextDueRequest, NextDueResponse, Problem, RenameCategoryRequest,
-    SubscriptionDto, problem,
+    SubscriptionDto, SubscriptionListResponse, problem,
 };
 use wallos_storage::Db;
 
@@ -52,7 +52,8 @@ pub mod subscriptions;
         categories::rename_category,
         categories::delete_category,
         schedule::compute_next_due,
-        subscriptions::create_subscription
+        subscriptions::create_subscription,
+        subscriptions::list_subscriptions
     ),
     components(schemas(
         HealthResponse,
@@ -74,7 +75,8 @@ pub mod subscriptions;
         NextDueRequest,
         NextDueResponse,
         CreateSubscriptionRequest,
-        SubscriptionDto
+        SubscriptionDto,
+        SubscriptionListResponse
     ))
 )]
 pub struct ApiDoc;
@@ -152,7 +154,10 @@ pub fn app_with_db(db: Db) -> Router {
             categories::delete_category
         ))
         .routes(routes!(schedule::compute_next_due))
-        .routes(routes!(subscriptions::create_subscription))
+        .routes(routes!(
+            subscriptions::create_subscription,
+            subscriptions::list_subscriptions
+        ))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))

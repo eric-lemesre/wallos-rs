@@ -188,6 +188,47 @@ export class TargetDriver implements AppDriver, Harness {
     return (await this.page.getByTestId("sub-success").textContent()) ?? "";
   }
 
+  // --- Liste et filtres (REQ-SUB-006) ---
+
+  async refreshSubscriptions(): Promise<void> {
+    await this.page.getByTestId("subscriptions-apply").click();
+    await this.page.getByTestId("subscriptions-total").waitFor({ state: "visible", timeout: 5000 });
+  }
+
+  async filterSubscriptionsByCategory(category: string): Promise<void> {
+    await this.page.getByTestId("subscriptions-filter-category").fill(category);
+    await this.page.getByTestId("subscriptions-apply").click();
+  }
+
+  async subscriptionListed(name: string): Promise<boolean> {
+    try {
+      await this.page
+        .getByTestId("subscription-name")
+        .filter({ hasText: name })
+        .first()
+        .waitFor({ state: "visible", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async subscriptionsEmpty(): Promise<boolean> {
+    try {
+      await this.page
+        .getByTestId("subscriptions-empty")
+        .waitFor({ state: "visible", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async subscriptionsTotal(): Promise<string> {
+    await this.page.getByTestId("subscriptions-total").waitFor({ state: "visible", timeout: 5000 });
+    return (await this.page.getByTestId("subscriptions-total").textContent()) ?? "";
+  }
+
   // --- Calcul d'échéance (REQ-SUB-012) ---
 
   async computeNextDue(anchor: string, unit: string, interval: string, after: string): Promise<void> {
