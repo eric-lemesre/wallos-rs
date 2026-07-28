@@ -314,6 +314,10 @@ pub struct SubscriptionDto {
     /// Absent à la désérialisation ⇒ actif par défaut, aligné sur le domaine (`Subscription::new`).
     #[serde(default = "default_active")]
     pub active: bool,
+    /// Prochaine échéance calculée (`YYYY-MM-DD`, REQ-SUB-002/012), champ **dérivé** : présent dans les
+    /// réponses de lecture/création, absent du modèle pur (calculé avec l'horloge serveur).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_payment: Option<String>,
 }
 
 /// Valeur par défaut de `active` (aligne le DTO sur le défaut du domaine : actif).
@@ -353,7 +357,17 @@ impl SubscriptionDto {
             url: sub.url().map(String::from),
             notes: sub.notes().map(String::from),
             active: sub.is_active(),
+            next_payment: None,
         }
+    }
+
+    /// Comme [`from_core`](Self::from_core), en renseignant la prochaine échéance dérivée.
+    #[must_use]
+    #[requirement(REQ-SUB-002)]
+    pub fn from_core_with_next_payment(sub: &Subscription, next_payment: NaiveDate) -> Self {
+        let mut dto = Self::from_core(sub);
+        dto.next_payment = Some(next_payment.to_string());
+        dto
     }
 
     /// Reconstruit un abonnement du domaine depuis le DTO, en validant chaque champ.
@@ -398,6 +412,115 @@ impl SubscriptionDto {
             sub = sub.with_notes(notes);
         }
         Ok(sub.with_active(self.active))
+    }
+}
+
+/// Requête de création d'un abonnement (REQ-SUB-002). Mêmes champs que [`SubscriptionDto`] sans `id`
+/// (généré par le serveur) ni `next_payment` (dérivé). Montant en **chaîne** décimale (R4).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct CreateSubscriptionRequest {
+    /// Nom de l'abonnement.
+    pub name: String,
+    /// Montant du prix (chaîne décimale).
+    #[schema(example = "9.99")]
+    pub amount: String,
+    /// Code devise ISO 4217.
+    #[schema(example = "EUR")]
+    pub currency: String,
+    /// Cycle de facturation.
+    pub cycle: BillingCycleDto,
+    /// Date de premier paiement (`YYYY-MM-DD`).
+    #[schema(example = "2025-01-31")]
+    pub first_payment: String,
+    /// Catégorie rattachée (UUID), le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    /// Moyen de paiement rattaché (UUID), le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payment_method: Option<String>,
+    /// Payeur rattaché (UUID), le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payer: Option<String>,
+    /// Logo, le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logo: Option<String>,
+    /// URL du service, le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// Notes libres, le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    /// État actif (défaut : actif).
+    #[serde(default = "default_active")]
+    pub active: bool,
+}
+
+impl CreateSubscriptionRequest {
+    /// Construit l'abonnement du domaine avec l'`id` fourni, en **validant chaque champ**.
+    ///
+    /// # Errors
+    /// [`FieldError`] identifiant le **champ fautif** (montant, devise, cycle, date, id de référence).
+    #[requirement(REQ-SUB-002)]
+    pub fn into_core(self, id: Uuid) -> Result<Subscription, FieldError> {
+        let amount = self
+            .amount
+            .parse::<Decimal>()
+            .map_err(|_| FieldError::new("amount", "montant décimal invalide"))?;
+        let currency = CurrencyCode::new(&self.currency)
+            .map_err(|_| FieldError::new("currency", "devise hors référentiel"))?;
+        let price = Money::new(amount, currency)
+            .map_err(|_| FieldError::new("amount", "montant négatif"))?;
+        let unit = BillingUnit::parse(&self.cycle.unit)
+            .map_err(|_| FieldError::new("cycle.unit", "unité inconnue"))?;
+        let cycle = BillingCycle::from_parts(unit, self.cycle.interval)
+            .map_err(|_| FieldError::new("cycle.interval", "intervalle doit être > 0"))?;
+        let first_payment = NaiveDate::parse_from_str(&self.first_payment, "%Y-%m-%d")
+            .map_err(|_| FieldError::new("first_payment", "date YYYY-MM-DD invalide"))?;
+
+        let mut sub = Subscription::new(id, self.name, price, cycle, first_payment)
+            .map_err(|_| FieldError::new("name", "nom obligatoire"))?;
+        if let Some(c) = parse_optional_uuid(self.category, "category")
+            .map_err(|_| FieldError::new("category", "identifiant invalide"))?
+        {
+            sub = sub.with_category(c);
+        }
+        if let Some(p) = parse_optional_uuid(self.payment_method, "payment_method")
+            .map_err(|_| FieldError::new("payment_method", "identifiant invalide"))?
+        {
+            sub = sub.with_payment_method(p);
+        }
+        if let Some(p) = parse_optional_uuid(self.payer, "payer")
+            .map_err(|_| FieldError::new("payer", "identifiant invalide"))?
+        {
+            sub = sub.with_payer(p);
+        }
+        if let Some(logo) = self.logo {
+            sub = sub.with_logo(logo);
+        }
+        if let Some(url) = self.url {
+            sub = sub.with_url(url);
+        }
+        if let Some(notes) = self.notes {
+            sub = sub.with_notes(notes);
+        }
+        Ok(sub.with_active(self.active))
+    }
+}
+
+/// Erreur de validation **par champ** (REQ-SUB-002, critère #2) : identifie le champ fautif.
+#[derive(Debug, Clone)]
+pub struct FieldError {
+    /// Nom du champ en défaut.
+    pub field: &'static str,
+    /// Message lisible.
+    pub message: &'static str,
+}
+
+impl FieldError {
+    /// Construit une erreur de champ.
+    #[must_use]
+    pub const fn new(field: &'static str, message: &'static str) -> Self {
+        Self { field, message }
     }
 }
 

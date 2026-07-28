@@ -40,6 +40,13 @@ export interface AppDriver {
   /** Vrai si aucune catégorie de ce nom n'apparaît (isolation / suppression). */
   categoryAbsent(name: string): Promise<boolean>;
 
+  // Création d'abonnement (REQ-SUB-002).
+  createSubscription(input: {
+    name: string; amount: string; currency: string; unit: string; interval: string; firstPayment: string;
+  }): Promise<void>;
+  /** Prochaine échéance affichée après création (chaîne vide si absente). */
+  subscriptionNextPayment(): Promise<string>;
+
   // Calcul d'échéance (REQ-SUB-012).
   /** Renseigne ancre/unité/intervalle/date de référence et déclenche le calcul. */
   computeNextDue(anchor: string, unit: string, interval: string, after: string): Promise<void>;

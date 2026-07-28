@@ -87,5 +87,17 @@
       "month": "Mois",
       "year": "Année"
     }
+  },
+  "subscription": {
+    "title": "Nouvel abonnement",
+    "name": "Nom",
+    "amount": "Montant",
+    "currency": "Devise",
+    "unit": "Unité de cycle",
+    "interval": "Intervalle",
+    "firstPayment": "Premier paiement",
+    "create": "Créer l'abonnement",
+    "created": "Créé, prochaine échéance",
+    "error": "Impossible de créer l'abonnement"
   }
 }

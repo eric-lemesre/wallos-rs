@@ -245,6 +245,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Crée un abonnement dans le foyer de l'appelant ; renvoie l'abonnement et sa prochaine échéance. */
+        post: operations["createSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -415,6 +432,45 @@ export interface components {
             password: string;
         };
         /**
+         * @description Requête de création d'un abonnement (REQ-SUB-002). Mêmes champs que [`SubscriptionDto`] sans `id`
+         *     (généré par le serveur) ni `next_payment` (dérivé). Montant en **chaîne** décimale (R4).
+         */
+        CreateSubscriptionRequest: {
+            /** @description État actif (défaut : actif). */
+            active?: boolean;
+            /**
+             * @description Montant du prix (chaîne décimale).
+             * @example 9.99
+             */
+            amount: string;
+            /** @description Catégorie rattachée (UUID), le cas échéant. */
+            category?: string | null;
+            /**
+             * @description Code devise ISO 4217.
+             * @example EUR
+             */
+            currency: string;
+            /** @description Cycle de facturation. */
+            cycle: components["schemas"]["BillingCycleDto"];
+            /**
+             * @description Date de premier paiement (`YYYY-MM-DD`).
+             * @example 2025-01-31
+             */
+            first_payment: string;
+            /** @description Logo, le cas échéant. */
+            logo?: string | null;
+            /** @description Nom de l'abonnement. */
+            name: string;
+            /** @description Notes libres, le cas échéant. */
+            notes?: string | null;
+            /** @description Payeur rattaché (UUID), le cas échéant. */
+            payer?: string | null;
+            /** @description Moyen de paiement rattaché (UUID), le cas échéant. */
+            payment_method?: string | null;
+            /** @description URL du service, le cas échéant. */
+            url?: string | null;
+        };
+        /**
          * @description Une devise du référentiel supporté exposée à l'interface (REQ-CUR-007).
          *
          *     `name` est le libellé par défaut (anglais) ; l'UI affiche le nom **localisé** par code (i18n).
@@ -562,6 +618,58 @@ export interface components {
              * @example Musique
              */
             name: string;
+        };
+        /**
+         * @description Représentation d'un abonnement dans le contrat API (REQ-SUB-001).
+         *
+         *     Reflet 1:1 du modèle [`Subscription`] du domaine : aucun champ n'est perdu ni normalisé
+         *     silencieusement. Montant en **chaîne** décimale (R4/CUR-002) ; identifiants et date en chaînes
+         *     (indépendants des features `utoipa`) ; cycle imbriqué (REQ-SUB-003).
+         */
+        SubscriptionDto: {
+            /**
+             * @description État actif (un abonnement désactivé est conservé mais exclu des agrégats, REQ-SUB-008).
+             *     Absent à la désérialisation ⇒ actif par défaut, aligné sur le domaine (`Subscription::new`).
+             */
+            active?: boolean;
+            /**
+             * @description Montant du prix (chaîne décimale).
+             * @example 9.99
+             */
+            amount: string;
+            /** @description Catégorie rattachée (UUID), le cas échéant. */
+            category?: string | null;
+            /**
+             * @description Code devise ISO 4217 du prix.
+             * @example EUR
+             */
+            currency: string;
+            /** @description Cycle de facturation. */
+            cycle: components["schemas"]["BillingCycleDto"];
+            /**
+             * @description Date de premier paiement (`YYYY-MM-DD`).
+             * @example 2026-01-31
+             */
+            first_payment: string;
+            /** @description Identifiant stable (UUID). */
+            id: string;
+            /** @description Logo (référence d'image ou substitut), le cas échéant. */
+            logo?: string | null;
+            /** @description Nom de l'abonnement. */
+            name: string;
+            /**
+             * @description Prochaine échéance calculée (`YYYY-MM-DD`, REQ-SUB-002/012), champ **dérivé** : présent dans les
+             *     réponses de lecture/création, absent du modèle pur (calculé avec l'horloge serveur).
+             */
+            next_payment?: string | null;
+            /** @description Notes libres, le cas échéant. */
+            notes?: string | null;
+            /** @description Payeur rattaché (UUID), le cas échéant. */
+            payer?: string | null;
+            /** @description Moyen de paiement rattaché (UUID), le cas échéant. */
+            payment_method?: string | null;
+            /** @description URL du service, le cas échéant. */
+            url?: string | null;
         };
     };
     responses: never;
@@ -1152,6 +1260,48 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    createSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description Abonnement créé (avec prochaine échéance) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionDto"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Validation par champ */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
             };
         };
     };

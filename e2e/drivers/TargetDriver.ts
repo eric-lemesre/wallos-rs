@@ -169,6 +169,25 @@ export class TargetDriver implements AppDriver, Harness {
     }
   }
 
+  // --- Création d'abonnement (REQ-SUB-002) ---
+
+  async createSubscription(input: {
+    name: string; amount: string; currency: string; unit: string; interval: string; firstPayment: string;
+  }): Promise<void> {
+    await this.page.getByTestId("sub-name").fill(input.name);
+    await this.page.getByTestId("sub-amount").fill(input.amount);
+    await this.page.getByTestId("sub-currency").fill(input.currency);
+    await this.page.getByTestId("sub-cycle-unit").selectOption(input.unit);
+    await this.page.getByTestId("sub-cycle-interval").fill(input.interval);
+    await this.page.getByTestId("sub-first-payment").fill(input.firstPayment);
+    await this.page.getByTestId("sub-submit").click();
+  }
+
+  async subscriptionNextPayment(): Promise<string> {
+    await this.page.getByTestId("sub-success").waitFor({ state: "visible", timeout: 5000 });
+    return (await this.page.getByTestId("sub-success").textContent()) ?? "";
+  }
+
   // --- Calcul d'échéance (REQ-SUB-012) ---
 
   async computeNextDue(anchor: string, unit: string, interval: string, after: string): Promise<void> {
