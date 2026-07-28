@@ -121,6 +121,63 @@ async fn created_category_is_listed_immediately(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-004)]
+async fn duplicate_name_in_same_household_is_rejected(pool: PgPool) {
+    let web = account(&pool, "cat-dup@example.com").await;
+    assert_eq!(
+        create_category(&pool, &web, "Streaming").await.status(),
+        StatusCode::CREATED
+    );
+    // Même nom -> refusé (422).
+    let dup = create_category(&pool, &web, "Streaming").await;
+    assert_eq!(dup.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    // Insensible à la casse : « streaming » entre aussi en collision.
+    assert_eq!(
+        create_category(&pool, &web, "streaming").await.status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    // Une seule catégorie a été créée.
+    assert_eq!(categories(&pool, &web).await.len(), 1);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-004)]
+async fn same_name_in_other_household_is_allowed(pool: PgPool) {
+    let a = account(&pool, "cat-a@example.com").await;
+    assert_eq!(
+        create_category(&pool, &a, "Streaming").await.status(),
+        StatusCode::CREATED
+    );
+    // Un autre foyer peut avoir sa propre catégorie du même nom (isolation §9).
+    let b = account(&pool, "cat-b@example.com").await;
+    assert_eq!(
+        create_category(&pool, &b, "Streaming").await.status(),
+        StatusCode::CREATED
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-004)]
+async fn rename_to_existing_name_is_rejected(pool: PgPool) {
+    let web = account(&pool, "cat-rendup@example.com").await;
+    assert_eq!(
+        create_category(&pool, &web, "Streaming").await.status(),
+        StatusCode::CREATED
+    );
+    let musique_id = created_id(create_category(&pool, &web, "Musique").await).await;
+    // Renommer « Musique » en « Streaming » (déjà pris) -> 422.
+    let r = send(
+        &pool,
+        "PUT",
+        &format!("/api/v1/categories/{musique_id}"),
+        Some(&web),
+        Some(json!({ "name": "Streaming" })),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
 #[verifies(REQ-CAT-001)]
 async fn rename_and_delete_own_category(pool: PgPool) {
     let web = account(&pool, "cat2@example.com").await;

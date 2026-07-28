@@ -15,7 +15,7 @@ pub mod settings;
 pub mod subscriptions;
 pub mod users;
 
-pub use categories::{CategoryRepository, CategoryRow};
+pub use categories::{CategoryRepository, CategoryRow, RenameOutcome};
 pub use db::Db;
 pub use device_tokens::DeviceTokenRepository;
 pub use error::StorageError;

@@ -527,9 +527,22 @@ async fn end_date_is_persisted_and_bounds_next_payment(pool: PgPool) {
 #[verifies(REQ-SUB-009)]
 async fn invalid_end_date_is_rejected_per_field(pool: PgPool) {
     let web = account(&pool, "sub009-bad@example.com").await;
+    // Format invalide.
     let mut body = valid_body();
     body["end_date"] = json!("31/12/2030");
     let r = create(&pool, &web, body).await;
+    assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        body_json(r).await["detail"]
+            .as_str()
+            .unwrap()
+            .contains("end_date")
+    );
+
+    // Revue SUB-009 : date de fin antérieure au premier paiement (2030-01-31) -> 422 champ end_date.
+    let mut before = valid_body();
+    before["end_date"] = json!("2029-12-31");
+    let r = create(&pool, &web, before).await;
     assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
     assert!(
         body_json(r).await["detail"]

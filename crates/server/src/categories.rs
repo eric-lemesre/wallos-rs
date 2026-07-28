@@ -12,7 +12,7 @@ use uuid::Uuid;
 use wallos_core::Category;
 use wallos_core::requirement;
 use wallos_proto::{CategoryDto, CreateCategoryRequest, RenameCategoryRequest, problem};
-use wallos_storage::{CategoryRepository, Db};
+use wallos_storage::{CategoryRepository, Db, RenameOutcome};
 
 use crate::auth::AuthActor;
 use crate::problem_response;
@@ -32,6 +32,16 @@ fn invalid_category() -> Response {
     problem_response(
         StatusCode::UNPROCESSABLE_ENTITY,
         problem(422, "about:blank", "Unprocessable Entity"),
+    )
+}
+
+/// `422` pour un nom de catégorie déjà utilisé dans le foyer (unicité REQ-CAT-004).
+#[requirement(REQ-CAT-004)]
+fn duplicate_category() -> Response {
+    problem_response(
+        StatusCode::UNPROCESSABLE_ENTITY,
+        problem(422, "about:blank", "Unprocessable Entity")
+            .with_detail("name: déjà utilisé dans ce foyer"),
     )
 }
 
@@ -61,7 +71,7 @@ pub async fn create_category(
         .create(&actor, category.id(), category.name())
         .await
     {
-        Ok(()) => (
+        Ok(true) => (
             StatusCode::CREATED,
             Json(CategoryDto {
                 id: category.id().to_string(),
@@ -69,6 +79,8 @@ pub async fn create_category(
             }),
         )
             .into_response(),
+        // Nom déjà utilisé dans le foyer (unicité CAT-004) : erreur de validation par champ.
+        Ok(false) => duplicate_category(),
         _ => problem_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             problem(500, "about:blank", "Internal Server Error"),
@@ -140,12 +152,14 @@ pub async fn rename_category(
         .rename(&actor, category_id, category.name())
         .await
     {
-        Ok(true) => Json(CategoryDto {
+        Ok(RenameOutcome::Renamed) => Json(CategoryDto {
             id: category_id.to_string(),
             name: category.name().to_string(),
         })
         .into_response(),
-        Ok(false) => category_not_found(),
+        Ok(RenameOutcome::NotFound) => category_not_found(),
+        // Renommage vers un nom déjà pris dans le foyer (unicité CAT-004).
+        Ok(RenameOutcome::Duplicate) => duplicate_category(),
         _ => problem_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             problem(500, "about:blank", "Internal Server Error"),

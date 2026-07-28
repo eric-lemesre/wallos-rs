@@ -54,6 +54,17 @@ impl Category {
     pub fn name(&self) -> &str {
         &self.name
     }
+
+    /// Forme **canonique** du nom pour la comparaison d'unicité (REQ-CAT-004) : normalisée en minuscules.
+    ///
+    /// Deux catégories du même foyer dont le nom canonique coïncide sont considérées homonymes (l'unicité
+    /// est **insensible à la casse** : « Streaming » et « streaming » entrent en collision). Aligné sur
+    /// l'index unique `(household_id, lower(name))` de la base.
+    #[must_use]
+    #[requirement(REQ-CAT-004)]
+    pub fn canonical_name(&self) -> String {
+        self.name.to_lowercase()
+    }
 }
 
 #[cfg(test)]
@@ -76,6 +87,19 @@ mod tests {
     fn empty_name_is_rejected() {
         assert!(Category::new(Uuid::from_u128(1), "").is_err());
         assert!(Category::new(Uuid::from_u128(1), "   ").is_err());
+    }
+
+    #[test]
+    #[verifies(REQ-CAT-004, case = "nom canonique insensible à la casse")]
+    fn canonical_name_is_case_insensitive() {
+        let a = Category::new(Uuid::from_u128(1), "Streaming").unwrap();
+        let b = Category::new(Uuid::from_u128(2), "streaming").unwrap();
+        // Deux graphies de casse différente partagent la même forme canonique (homonymes).
+        assert_eq!(a.canonical_name(), b.canonical_name());
+        assert_eq!(a.canonical_name(), "streaming");
+        // Un nom distinct a une forme canonique distincte.
+        let c = Category::new(Uuid::from_u128(3), "Musique").unwrap();
+        assert_ne!(a.canonical_name(), c.canonical_name());
     }
 
     #[test]

@@ -71,7 +71,7 @@ depends_on: [REQ-CAT-001]
 id: REQ-CAT-004
 title: Unicité du nom de catégorie par compte
 domain: categories
-status: draft
+status: verified
 criticality: low
 layer: [core, api]
 e2e: optional
