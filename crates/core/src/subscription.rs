@@ -213,6 +213,18 @@ impl Subscription {
     pub const fn is_active(&self) -> bool {
         self.active
     }
+
+    /// Prochaine échéance après modification (REQ-SUB-004), strictement postérieure à `after`.
+    ///
+    /// **Recalculée à partir de la date de premier paiement et du cycle courant** (dérivée pure via
+    /// [`next_due`](crate::schedule::next_due)) : après un changement de cycle ou de date de départ,
+    /// l'échéance est **ré-ancrée** sur `first_payment`, jamais dérivée de l'ancienne échéance.
+    /// `None` si le calcul déborde la plage représentable.
+    #[must_use]
+    #[requirement(REQ-SUB-004)]
+    pub fn next_due_after(&self, after: NaiveDate) -> Option<NaiveDate> {
+        crate::schedule::next_due(self.first_payment, self.cycle, after)
+    }
 }
 
 #[cfg(test)]
@@ -285,6 +297,60 @@ mod tests {
         )
         .unwrap();
         assert_eq!(sub.name(), "Netflix");
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-004, case = "échéance recalculée depuis first_payment + nouveau cycle")]
+    fn next_due_recomputed_from_first_payment_on_cycle_change() {
+        let start = day();
+        // Cycle initial mensuel : après le 2026-06-20, prochaine échéance mensuelle ancrée au 31.
+        let monthly = Subscription::new(
+            Uuid::from_u128(1),
+            "Netflix",
+            money("9.99", "EUR"),
+            BillingCycle::from_parts(BillingUnit::Month, 1).unwrap(),
+            start,
+        )
+        .unwrap();
+        let after = NaiveDate::from_ymd_opt(2026, 6, 20).unwrap();
+        assert_eq!(
+            monthly.next_due_after(after),
+            NaiveDate::from_ymd_opt(2026, 6, 30) // 31 juin -> clamp 30 (ancré sur le 31 de départ)
+        );
+
+        // Passage à un cycle ANNUEL, même first_payment : l'échéance est ré-ancrée sur le 31 janvier,
+        // pas dérivée de l'ancienne échéance mensuelle.
+        let yearly = Subscription::new(
+            Uuid::from_u128(1),
+            "Netflix",
+            money("9.99", "EUR"),
+            BillingCycle::from_parts(BillingUnit::Year, 1).unwrap(),
+            start,
+        )
+        .unwrap();
+        assert_eq!(
+            yearly.next_due_after(after),
+            NaiveDate::from_ymd_opt(2027, 1, 31)
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-004, case = "recalcul déterministe")]
+    fn next_due_after_is_deterministic() {
+        let sub = Subscription::new(
+            Uuid::from_u128(1),
+            "Netflix",
+            money("9.99", "EUR"),
+            BillingCycle::from_parts(BillingUnit::Month, 1).unwrap(),
+            day(),
+        )
+        .unwrap();
+        let after = NaiveDate::from_ymd_opt(2026, 3, 1).unwrap();
+        assert_eq!(sub.next_due_after(after), sub.next_due_after(after));
+        assert_eq!(
+            sub.next_due_after(after),
+            NaiveDate::from_ymd_opt(2026, 3, 31)
+        );
     }
 
     #[test]

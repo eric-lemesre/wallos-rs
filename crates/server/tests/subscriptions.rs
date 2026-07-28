@@ -350,6 +350,55 @@ async fn filters_are_conjunctive_and_total_reflects_the_filter(pool: PgPool) {
 
 #[sqlx::test(migrations = "../storage/migrations")]
 #[verifies(REQ-SUB-006)]
+async fn active_filter_selects_inactive_only_with_zero_total(pool: PgPool) {
+    // Revue SUB-006 #5 : le filtre `active=false` retourne uniquement les inactifs, total nul
+    // (un abonnement désactivé est exclu de l'agrégat, SUB-008).
+    let web = account(&pool, "list-inactive@example.com").await;
+    for body in [
+        sub_body("Actif", "10.00", None, true),
+        sub_body("Inactif", "5.00", None, false),
+    ] {
+        assert_eq!(
+            create(&pool, &web, body).await.status(),
+            StatusCode::CREATED
+        );
+    }
+
+    let inactive = list(&pool, &web, "?active=false").await;
+    assert_eq!(names(&inactive), vec!["Inactif"]);
+    assert_eq!(inactive["total"]["total"], "0");
+
+    let active = list(&pool, &web, "?active=true").await;
+    assert_eq!(names(&active), vec!["Actif"]);
+    assert_eq!(active["total"]["total"], "10.00");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-006)]
+async fn payer_filter_selects_matching_subscriptions(pool: PgPool) {
+    // Revue SUB-006 #6 : le filtre `payer` sélectionne les abonnements du payeur.
+    const PAYER1: &str = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const PAYER2: &str = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    let web = account(&pool, "list-payer@example.com").await;
+
+    let mut p1 = sub_body("P1", "10.00", None, true);
+    p1["payer"] = json!(PAYER1);
+    let mut p2 = sub_body("P2", "20.00", None, true);
+    p2["payer"] = json!(PAYER2);
+    for body in [p1, p2] {
+        assert_eq!(
+            create(&pool, &web, body).await.status(),
+            StatusCode::CREATED
+        );
+    }
+
+    let only_p1 = list(&pool, &web, &format!("?payer={PAYER1}")).await;
+    assert_eq!(names(&only_p1), vec!["P1"]);
+    assert_eq!(only_p1["total"]["total"], "10.00");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-006)]
 async fn invalid_filter_is_rejected_per_field(pool: PgPool) {
     let web = account(&pool, "list-bad@example.com").await;
     let r = get(
@@ -400,6 +449,147 @@ async fn authz_other_list_subscriptions(pool: PgPool) {
 async fn authz_anon_list_subscriptions(pool: PgPool) {
     assert_eq!(
         get(&pool, "/api/v1/subscriptions", None).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+// --- REQ-SUB-004 : modification ---
+
+async fn put(
+    pool: &PgPool,
+    uri: &str,
+    body: Value,
+    cookie: Option<&str>,
+) -> axum::http::Response<Body> {
+    let mut b = Request::builder()
+        .method("PUT")
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/json");
+    if let Some(c) = cookie {
+        b = b.header(header::COOKIE, c);
+    }
+    app(pool.clone())
+        .oneshot(b.body(Body::from(body.to_string())).unwrap())
+        .await
+        .unwrap()
+}
+
+/// Crée un abonnement et renvoie son id.
+async fn create_id(pool: &PgPool, cookie: &str, body: Value) -> String {
+    let created = body_json(create(pool, cookie, body).await).await;
+    created["id"].as_str().unwrap().to_string()
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-004)]
+async fn update_recomputes_next_payment_on_cycle_change(pool: PgPool) {
+    let web = account(&pool, "sub-upd@example.com").await;
+    // Créé mensuel, first_payment 2030-01-31 (futur -> prochaine échéance = lui-même).
+    let id = create_id(&pool, &web, valid_body()).await;
+
+    // Modifie : cycle annuel + montant. L'échéance est ré-ancrée sur first_payment (inchangé).
+    let mut body = valid_body();
+    body["cycle"] = json!({ "unit": "year", "interval": 1 });
+    body["amount"] = json!("19.99");
+    let r = put(
+        &pool,
+        &format!("/api/v1/subscriptions/{id}"),
+        body,
+        Some(&web),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::OK);
+    let updated = body_json(r).await;
+    assert_eq!(updated["amount"], "19.99");
+    assert_eq!(updated["cycle"]["unit"], "year");
+    // first_payment 2030-01-31 est futur -> la prochaine échéance reste ancrée à cette date.
+    assert_eq!(updated["next_payment"], "2030-01-31");
+
+    // Persistance : la relecture via la liste reflète la modification.
+    let all = list(&pool, &web, "").await;
+    assert_eq!(all["subscriptions"][0]["amount"], "19.99");
+    assert_eq!(all["subscriptions"][0]["cycle"]["unit"], "year");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-004)]
+async fn update_rejects_invalid_field(pool: PgPool) {
+    let web = account(&pool, "sub-upd-bad@example.com").await;
+    let id = create_id(&pool, &web, valid_body()).await;
+    let mut body = valid_body();
+    body["amount"] = json!("-5.00");
+    let r = put(
+        &pool,
+        &format!("/api/v1/subscriptions/{id}"),
+        body,
+        Some(&web),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        body_json(r).await["detail"]
+            .as_str()
+            .unwrap()
+            .contains("amount")
+    );
+}
+
+// --- Autorisation §9 : updateSubscription ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-004)]
+async fn authz_owner_update_subscription(pool: PgPool) {
+    let web = account(&pool, "own-us@example.com").await;
+    let id = create_id(&pool, &web, valid_body()).await;
+    let mut body = valid_body();
+    body["amount"] = json!("12.00");
+    assert_eq!(
+        put(
+            &pool,
+            &format!("/api/v1/subscriptions/{id}"),
+            body,
+            Some(&web)
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-004)]
+async fn authz_other_update_subscription(pool: PgPool) {
+    // L'abonnement d'un autre foyer est traité comme inexistant : 404 (jamais 403), sans le modifier.
+    let owner = account(&pool, "owner-us@example.com").await;
+    let id = create_id(&pool, &owner, valid_body()).await;
+    let other = account(&pool, "other-us@example.com").await;
+    let mut body = valid_body();
+    body["amount"] = json!("999.00");
+    let r = put(
+        &pool,
+        &format!("/api/v1/subscriptions/{id}"),
+        body,
+        Some(&other),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::NOT_FOUND);
+    // L'abonnement du propriétaire est intact (montant d'origine).
+    let all = list(&pool, &owner, "").await;
+    assert_eq!(all["subscriptions"][0]["amount"], "9.99");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-004)]
+async fn authz_anon_update_subscription(pool: PgPool) {
+    assert_eq!(
+        put(
+            &pool,
+            "/api/v1/subscriptions/00000000-0000-0000-0000-000000000001",
+            valid_body(),
+            None
+        )
+        .await
+        .status(),
         StatusCode::UNAUTHORIZED
     );
 }

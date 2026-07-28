@@ -5,7 +5,7 @@
 //! est calculée immédiatement** (dérivée, `next_due`). Validation **par champ** (critère #2).
 
 use axum::Json;
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use chrono::{NaiveDate, Utc};
@@ -13,7 +13,7 @@ use uuid::Uuid;
 use wallos_core::billing::{BillingCycle, BillingUnit};
 use wallos_core::money::{CurrencyCode, Money};
 use wallos_core::requirement;
-use wallos_core::{aggregate_converted, next_due};
+use wallos_core::{RateTable, aggregate_converted, next_due};
 use wallos_proto::{
     BillingCycleDto, ConvertedTotalResponse, CreateSubscriptionRequest, FieldError,
     SubscriptionDto, SubscriptionListQuery, SubscriptionListResponse, problem,
@@ -33,6 +33,15 @@ fn field_error(err: &FieldError) -> Response {
         StatusCode::UNPROCESSABLE_ENTITY,
         problem(422, "about:blank", "Unprocessable Entity")
             .with_detail(format!("{}: {}", err.field, err.message)),
+    )
+}
+
+/// `404` générique pour un abonnement inconnu ou hors du foyer — ne divulgue rien (§9).
+#[requirement(REQ-SUB-004)]
+fn subscription_not_found() -> Response {
+    problem_response(
+        StatusCode::NOT_FOUND,
+        problem(404, "about:blank", "Not Found"),
     )
 }
 
@@ -91,6 +100,63 @@ pub async fn create_subscription(
     }
 }
 
+/// Modifie un abonnement du foyer de l'appelant ; recalcule la prochaine échéance (REQ-SUB-004).
+///
+/// L'échéance est **ré-ancrée sur `first_payment`** avec le nouveau cycle (jamais dérivée de
+/// l'ancienne). La résolution des modifications concurrentes (horodatage antérieur) relève de
+/// REQ-SYN-005, hors de ce vertical : ici, la dernière écriture reçue fait foi.
+#[utoipa::path(
+    put,
+    path = "/subscriptions/{id}",
+    operation_id = "updateSubscription",
+    params(("id" = String, Path, description = "Identifiant (UUID) de l'abonnement")),
+    extensions(("x-requirements" = json!(["REQ-SUB-004"]))),
+    request_body = CreateSubscriptionRequest,
+    responses(
+        (status = 200, description = "Abonnement modifié (échéance recalculée)", body = SubscriptionDto, content_type = "application/json"),
+        (status = 401, description = "Non authentifié", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Abonnement inconnu ou hors du foyer", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 422, description = "Validation par champ", body = wallos_proto::Problem, content_type = "application/problem+json")
+    )
+)]
+#[requirement(REQ-SUB-004)]
+pub async fn update_subscription(
+    AuthActor(actor): AuthActor,
+    State(db): State<Db>,
+    Path(id): Path<String>,
+    Json(req): Json<CreateSubscriptionRequest>,
+) -> Response {
+    let Ok(uuid) = Uuid::parse_str(&id) else {
+        return subscription_not_found();
+    };
+    let subscription = match req.into_core(uuid) {
+        Ok(sub) => sub,
+        Err(err) => return field_error(&err),
+    };
+
+    let today = Utc::now().date_naive();
+    let reference = today.pred_opt().unwrap_or(today);
+    let Some(next) = subscription.next_due_after(reference) else {
+        return field_error(&FieldError::new("first_payment", "échéance hors plage"));
+    };
+
+    match SubscriptionRepository::new(db.pool())
+        .update(&actor, &subscription)
+        .await
+    {
+        Ok(true) => Json(SubscriptionDto::from_core_with_next_payment(
+            &subscription,
+            next,
+        ))
+        .into_response(),
+        Ok(false) => subscription_not_found(),
+        _ => problem_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            problem(500, "about:blank", "Internal Server Error"),
+        ),
+    }
+}
+
 /// Reconstruit le cycle stocké (jamais silencieusement altéré : un intervalle non stockable est écarté).
 #[requirement(REQ-SUB-006)]
 fn row_cycle(row: &SubscriptionRow) -> Option<BillingCycle> {
@@ -103,8 +169,11 @@ fn row_cycle(row: &SubscriptionRow) -> Option<BillingCycle> {
 #[requirement(REQ-SUB-006)]
 fn row_to_dto(row: SubscriptionRow, today: NaiveDate) -> SubscriptionDto {
     let reference = today.pred_opt().unwrap_or(today);
-    let next_payment = row_cycle(&row)
-        .and_then(|cycle| next_due(row.first_payment, cycle, reference))
+    // Cycle dérivé une seule fois : `next_payment` et l'intervalle affiché restent cohérents (revue
+    // SUB-006 #3 — jamais un intervalle=0 exposé pendant que le calcul d'échéance est abandonné).
+    let cycle = row_cycle(&row);
+    let next_payment = cycle
+        .and_then(|c| next_due(row.first_payment, c, reference))
         .map(|d| d.to_string());
     SubscriptionDto {
         id: row.id.to_string(),
@@ -113,7 +182,7 @@ fn row_to_dto(row: SubscriptionRow, today: NaiveDate) -> SubscriptionDto {
         currency: row.currency,
         cycle: BillingCycleDto {
             unit: row.cycle_unit,
-            interval: u32::try_from(row.cycle_interval).unwrap_or_default(),
+            interval: cycle.map_or(0, |c| c.interval()),
         },
         first_payment: row.first_payment.to_string(),
         category: row.category_id.map(|u| u.to_string()),
@@ -197,13 +266,19 @@ pub async fn list_subscriptions(
                 .and_then(|c| Money::new(r.amount, c).ok())
         })
         .collect();
-    let table = match load_rate_table(&ExchangeRateRepository::new(db.pool())).await {
-        Ok(t) => t,
-        Err(_) => {
-            return problem_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                problem(500, "about:blank", "Internal Server Error"),
-            );
+    // Pas de montant actif à agréger (ex. filtre `active=false`) : total nul sans charger les taux
+    // (revue SUB-006 #8 — évite un aller-retour base inutile).
+    let table = if amounts.is_empty() {
+        RateTable::new(Vec::new())
+    } else {
+        match load_rate_table(&ExchangeRateRepository::new(db.pool())).await {
+            Ok(t) => t,
+            Err(_) => {
+                return problem_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    problem(500, "about:blank", "Internal Server Error"),
+                );
+            }
         }
     };
     let agg = aggregate_converted(&amounts, target, &table);

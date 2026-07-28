@@ -53,7 +53,8 @@ pub mod subscriptions;
         categories::delete_category,
         schedule::compute_next_due,
         subscriptions::create_subscription,
-        subscriptions::list_subscriptions
+        subscriptions::list_subscriptions,
+        subscriptions::update_subscription
     ),
     components(schemas(
         HealthResponse,
@@ -158,6 +159,7 @@ pub fn app_with_db(db: Db) -> Router {
             subscriptions::create_subscription,
             subscriptions::list_subscriptions
         ))
+        .routes(routes!(subscriptions::update_subscription))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))

@@ -59,6 +59,12 @@ export interface AppDriver {
   /** Texte du total affiché (reflète le filtre courant). */
   subscriptionsTotal(): Promise<string>;
 
+  // Modification (REQ-SUB-004).
+  /** Édite en place le montant d'un abonnement (par nom) et enregistre ; attend le rechargement. */
+  editSubscriptionAmount(name: string, amount: string): Promise<void>;
+  /** Texte du montant affiché pour un abonnement (par nom). */
+  subscriptionAmount(name: string): Promise<string>;
+
   // Calcul d'échéance (REQ-SUB-012).
   /** Renseigne ancre/unité/intervalle/date de référence et déclenche le calcul. */
   computeNextDue(anchor: string, unit: string, interval: string, after: string): Promise<void>;

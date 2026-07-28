@@ -103,6 +103,7 @@
   "subscriptions": {
     "title": "Mes abonnements",
     "filterCategory": "Filtrer par catégorie (UUID)",
+    "filterPayer": "Filtrer par payeur (UUID)",
     "filterState": "État",
     "stateAll": "Tous",
     "stateActive": "Actifs",
@@ -112,6 +113,11 @@
     "nextPayment": "Prochaine échéance",
     "total": "Total",
     "incomplete": "Total partiel : certains montants n'ont pas pu être convertis",
-    "error": "Impossible de charger les abonnements"
+    "error": "Impossible de charger les abonnements",
+    "edit": "Modifier",
+    "save": "Enregistrer",
+    "editAmount": "Montant",
+    "editUnit": "Unité de cycle",
+    "editInterval": "Intervalle"
   }
 }
