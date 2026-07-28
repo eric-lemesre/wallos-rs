@@ -20,6 +20,7 @@ export function SubscriptionForm() {
   const [unit, setUnit] = useState<(typeof UNITS)[number]>("month");
   const [interval, setInterval] = useState("1");
   const [firstPayment, setFirstPayment] = useState("2030-01-31");
+  const [endDate, setEndDate] = useState("");
   const [nextPayment, setNextPayment] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,6 +32,8 @@ export function SubscriptionForm() {
         currency,
         cycle: { unit, interval: Number(interval) },
         first_payment: firstPayment,
+        // Date de fin optionnelle (annulation programmée, REQ-SUB-009).
+        ...(endDate.trim() !== "" ? { end_date: endDate.trim() } : {}),
       },
     });
     if (data) {
@@ -80,6 +83,10 @@ export function SubscriptionForm() {
       <label>
         {t("subscription.firstPayment")}
         <input data-testid="sub-first-payment" value={firstPayment} onChange={(e) => setFirstPayment(e.target.value)} />
+      </label>
+      <label>
+        {t("subscription.endDate")}
+        <input data-testid="sub-end-date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
       </label>
 
       <button type="button" data-testid="sub-submit" onClick={() => void submit()}>

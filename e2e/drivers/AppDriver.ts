@@ -62,8 +62,10 @@ export interface AppDriver {
 
   // Création d'abonnement (REQ-SUB-002).
   createSubscription(input: {
-    name: string; amount: string; currency: string; unit: string; interval: string; firstPayment: string;
+    name: string; amount: string; currency: string; unit: string; interval: string; firstPayment: string; endDate?: string;
   }): Promise<void>;
+  /** Vrai si un abonnement (par nom) est marqué « terminé » (REQ-SUB-009). */
+  subscriptionEnded(name: string): Promise<boolean>;
   /** Prochaine échéance affichée après création (chaîne vide si absente). */
   subscriptionNextPayment(): Promise<string>;
 

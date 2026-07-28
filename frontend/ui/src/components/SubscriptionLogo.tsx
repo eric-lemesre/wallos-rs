@@ -8,15 +8,24 @@ import { logoSubstitute } from "../lib/logoSubstitute";
  * @implements REQ-SUB-015
  */
 export function SubscriptionLogo({ name, logo }: { name: string; logo?: string | null }) {
-  if (logo) {
+  // Revue SUB-015 #2 : un logo « blanc » (espaces) n'est pas un logo -> on affiche le substitut.
+  if (logo?.trim()) {
     return <img data-testid="subscription-logo-image" src={logo} alt={name} width={32} height={32} />;
   }
   const { initials, color } = logoSubstitute(name);
   return (
     <span
       data-testid="subscription-logo-substitute"
-      style={{ backgroundColor: color }}
       aria-hidden="true"
+      style={{
+        backgroundColor: color,
+        color: "#fff",
+        width: 32,
+        height: 32,
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
     >
       {initials}
     </span>

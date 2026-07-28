@@ -70,17 +70,17 @@ pub async fn create_subscription(
         Err(err) => return field_error(&err),
     };
 
-    // Prochaine échéance : première occurrence à partir d'aujourd'hui (inclus). Horloge serveur —
-    // le domaine reste pur (l'instant est injecté ici).
+    // Prochaine échéance : première occurrence à partir d'aujourd'hui (inclus), bornée par la date de
+    // fin (REQ-SUB-009). Horloge serveur — le domaine reste pur (l'instant est injecté ici).
     let today = Utc::now().date_naive();
     let reference = today.pred_opt().unwrap_or(today);
-    let Some(next) = next_due(
-        subscription.first_payment(),
-        subscription.cycle(),
-        reference,
-    ) else {
+    let next = subscription.next_due_after(reference);
+    let ended = subscription.has_ended(today);
+    // Un abonnement déjà terminé n'a pas de prochaine échéance (légitime) ; sinon l'absence d'échéance
+    // signale une date hors plage.
+    if next.is_none() && !ended {
         return field_error(&FieldError::new("first_payment", "échéance hors plage"));
-    };
+    }
 
     match SubscriptionRepository::new(db.pool())
         .create(&actor, &subscription)
@@ -88,9 +88,10 @@ pub async fn create_subscription(
     {
         Ok(()) => (
             StatusCode::CREATED,
-            Json(SubscriptionDto::from_core_with_next_payment(
+            Json(SubscriptionDto::from_core_derived(
                 &subscription,
                 next,
+                ended,
             )),
         )
             .into_response(),
@@ -137,17 +138,20 @@ pub async fn update_subscription(
 
     let today = Utc::now().date_naive();
     let reference = today.pred_opt().unwrap_or(today);
-    let Some(next) = subscription.next_due_after(reference) else {
+    let next = subscription.next_due_after(reference);
+    let ended = subscription.has_ended(today);
+    if next.is_none() && !ended {
         return field_error(&FieldError::new("first_payment", "échéance hors plage"));
-    };
+    }
 
     match SubscriptionRepository::new(db.pool())
         .update(&actor, &subscription)
         .await
     {
-        Ok(true) => Json(SubscriptionDto::from_core_with_next_payment(
+        Ok(true) => Json(SubscriptionDto::from_core_derived(
             &subscription,
             next,
+            ended,
         ))
         .into_response(),
         Ok(false) => subscription_not_found(),
@@ -173,9 +177,13 @@ fn row_to_dto(row: SubscriptionRow, today: NaiveDate) -> SubscriptionDto {
     // Cycle dérivé une seule fois : `next_payment` et l'intervalle affiché restent cohérents (revue
     // SUB-006 #3 — jamais un intervalle=0 exposé pendant que le calcul d'échéance est abandonné).
     let cycle = row_cycle(&row);
+    // Prochaine échéance bornée par la date de fin (REQ-SUB-009) : aucune échéance au-delà de `end_date`.
     let next_payment = cycle
         .and_then(|c| next_due(row.first_payment, c, reference))
+        .filter(|d| row.end_date.is_none_or(|end| *d <= end))
         .map(|d| d.to_string());
+    // Terminé si la date de fin est strictement dépassée à la date du jour (REQ-SUB-009).
+    let ended = row.end_date.is_some_and(|end| today > end);
     SubscriptionDto {
         id: row.id.to_string(),
         name: row.name,
@@ -194,16 +202,20 @@ fn row_to_dto(row: SubscriptionRow, today: NaiveDate) -> SubscriptionDto {
         notes: row.notes,
         active: row.active,
         next_payment,
+        end_date: row.end_date.map(|d| d.to_string()),
+        ended,
     }
 }
 
-/// Montants des abonnements **actifs** d'un lot (REQ-SUB-008) : un abonnement désactivé est exclu de
-/// l'agrégat (conservé dans la liste, mais ne pèse sur aucun total). Une ligne à la devise ou au montant
-/// illisible est ignorée du total (jamais traitée comme zéro silencieux dans le calcul).
+/// Montants entrant dans le total d'un lot à la date `today` (REQ-SUB-008 / REQ-SUB-009) : un abonnement
+/// **désactivé** ou **terminé** (date de fin dépassée) est exclu de l'agrégat (conservé dans la liste,
+/// mais ne pèse sur aucun total). Une ligne à la devise/au montant illisible est ignorée du total
+/// (jamais traitée comme zéro silencieux dans le calcul).
 #[requirement(REQ-SUB-008)]
-fn active_amounts(rows: &[SubscriptionRow]) -> Vec<Money> {
+#[requirement(REQ-SUB-009)]
+fn active_amounts(rows: &[SubscriptionRow], today: NaiveDate) -> Vec<Money> {
     rows.iter()
-        .filter(|r| r.active)
+        .filter(|r| r.active && r.end_date.is_none_or(|end| today <= end))
         .filter_map(|r| {
             CurrencyCode::new(&r.currency)
                 .ok()
@@ -284,8 +296,10 @@ pub async fn list_subscriptions(
         );
     };
 
-    // Total = somme convertie des abonnements **actifs** du sous-ensemble filtré (REQ-SUB-008).
-    let amounts = active_amounts(&rows);
+    // Total = somme convertie des abonnements **actifs et non terminés** du sous-ensemble filtré
+    // (REQ-SUB-008/009). Horloge serveur pour décider « terminé » et la prochaine échéance.
+    let today = Utc::now().date_naive();
+    let amounts = active_amounts(&rows, today);
     // Pas de montant actif à agréger (ex. filtre `active=false`) : total nul sans charger les taux
     // (revue SUB-006 #8 — évite un aller-retour base inutile).
     let table = if amounts.is_empty() {
@@ -303,7 +317,6 @@ pub async fn list_subscriptions(
     };
     let agg = aggregate_converted(&amounts, target, &table);
 
-    let today = Utc::now().date_naive();
     let subscriptions: Vec<SubscriptionDto> =
         rows.into_iter().map(|r| row_to_dto(r, today)).collect();
     Json(SubscriptionListResponse {

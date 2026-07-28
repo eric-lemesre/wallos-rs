@@ -16,17 +16,19 @@ use crate::DomainError;
 use crate::Subscription;
 use crate::money::{CurrencyCode, Money};
 
-/// Montants entrant dans les agrégats statistiques (REQ-SUB-008).
+/// Montants entrant dans les agrégats statistiques à la date `reference` (REQ-SUB-008 / REQ-SUB-009).
 ///
-/// Un abonnement **désactivé** est **exclu de tous les agrégats** : il est conservé mais ne pèse sur
-/// aucun total. Seuls les abonnements actifs contribuent leur prix. C'est la primitive de domaine que
-/// les exigences `REQ-STA-*` (normalisation, répartitions) consomment ; côté API, la vue liste applique
-/// la même règle (`active`) au niveau des lignes stockées (`server::subscriptions::active_amounts`).
+/// Un abonnement **désactivé** (REQ-SUB-008) ou **terminé** (date de fin dépassée à `reference`,
+/// REQ-SUB-009) est **exclu de tous les agrégats** : il est conservé mais ne pèse sur aucun total.
+/// Seuls les abonnements actifs et non terminés contribuent leur prix. C'est la primitive de domaine
+/// que les exigences `REQ-STA-*` consomment ; côté API, la vue liste applique la même règle au niveau
+/// des lignes stockées (`server::subscriptions::active_amounts`).
 #[requirement(REQ-SUB-008)]
-pub fn billable_amounts(subscriptions: &[Subscription]) -> Vec<Money> {
+#[requirement(REQ-SUB-009)]
+pub fn billable_amounts(subscriptions: &[Subscription], reference: NaiveDate) -> Vec<Money> {
     subscriptions
         .iter()
-        .filter(|s| s.is_active())
+        .filter(|s| s.is_active() && !s.has_ended(reference))
         .map(|s| *s.price())
         .collect()
 }
@@ -140,6 +142,10 @@ mod tests {
         CurrencyCode::new("EUR").unwrap()
     }
 
+    fn ref_day() -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, 6, 1).unwrap()
+    }
+
     fn subscription(name: &str, price: &str, active: bool) -> Subscription {
         let sub = Subscription::new(
             uuid::Uuid::new_v4(),
@@ -160,7 +166,7 @@ mod tests {
             subscription("Désactivé", "5.00", false),
             subscription("Actif B", "20.00", true),
         ];
-        let amounts = billable_amounts(&subs);
+        let amounts = billable_amounts(&subs, ref_day());
         // Seuls les deux actifs contribuent ; le désactivé (5.00) est exclu.
         assert_eq!(amounts.len(), 2);
         let total: Decimal = amounts.iter().map(Money::amount).sum();
@@ -174,7 +180,20 @@ mod tests {
             subscription("X", "10.00", false),
             subscription("Y", "20.00", false),
         ];
-        assert!(billable_amounts(&subs).is_empty());
+        assert!(billable_amounts(&subs, ref_day()).is_empty());
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-009, case = "abonnement terminé exclu des agrégats")]
+    fn billable_amounts_excludes_ended() {
+        // Terminé au 2026-05-31 (< reference 2026-06-01) -> exclu ; l'autre a une fin future -> inclus.
+        let ended = subscription("Terminé", "5.00", true)
+            .with_end_date(NaiveDate::from_ymd_opt(2026, 5, 31).unwrap());
+        let ongoing = subscription("En cours", "20.00", true)
+            .with_end_date(NaiveDate::from_ymd_opt(2027, 1, 1).unwrap());
+        let amounts = billable_amounts(&[ended, ongoing], ref_day());
+        assert_eq!(amounts.len(), 1);
+        assert_eq!(amounts[0].amount(), "20.00".parse().unwrap());
     }
 
     fn usd() -> CurrencyCode {

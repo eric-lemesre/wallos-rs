@@ -678,7 +678,7 @@ requirements:
 - id: REQ-SUB-009
   title: Date de fin et annulation programmée
   domain: subscriptions
-  status: draft
+  status: verified
   criticality: medium
   layer:
   - core

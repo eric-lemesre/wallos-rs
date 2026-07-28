@@ -172,7 +172,7 @@ export class TargetDriver implements AppDriver, Harness {
   // --- Création d'abonnement (REQ-SUB-002) ---
 
   async createSubscription(input: {
-    name: string; amount: string; currency: string; unit: string; interval: string; firstPayment: string;
+    name: string; amount: string; currency: string; unit: string; interval: string; firstPayment: string; endDate?: string;
   }): Promise<void> {
     await this.page.getByTestId("sub-name").fill(input.name);
     await this.page.getByTestId("sub-amount").fill(input.amount);
@@ -180,7 +180,20 @@ export class TargetDriver implements AppDriver, Harness {
     await this.page.getByTestId("sub-cycle-unit").selectOption(input.unit);
     await this.page.getByTestId("sub-cycle-interval").fill(input.interval);
     await this.page.getByTestId("sub-first-payment").fill(input.firstPayment);
+    if (input.endDate !== undefined) {
+      await this.page.getByTestId("sub-end-date").fill(input.endDate);
+    }
     await this.page.getByTestId("sub-submit").click();
+  }
+
+  async subscriptionEnded(name: string): Promise<boolean> {
+    const row = this.page.getByTestId("subscription-row").filter({ hasText: name });
+    try {
+      await row.getByTestId("subscription-ended").waitFor({ state: "visible", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async subscriptionNextPayment(): Promise<string> {

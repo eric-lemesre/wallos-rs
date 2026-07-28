@@ -555,6 +555,8 @@ export interface components {
             currency: string;
             /** @description Cycle de facturation. */
             cycle: components["schemas"]["BillingCycleDto"];
+            /** @description Date de fin (annulation programmée, `YYYY-MM-DD`, REQ-SUB-009), le cas échéant. */
+            end_date?: string | null;
             /**
              * @description Date de premier paiement (`YYYY-MM-DD`).
              * @example 2025-01-31
@@ -801,6 +803,13 @@ export interface components {
             currency: string;
             /** @description Cycle de facturation. */
             cycle: components["schemas"]["BillingCycleDto"];
+            /** @description Date de fin (annulation programmée, `YYYY-MM-DD`, REQ-SUB-009), le cas échéant. */
+            end_date?: string | null;
+            /**
+             * @description Vrai si l'abonnement est **terminé** (date de fin dépassée) — champ **dérivé** (horloge serveur),
+             *     REQ-SUB-009. Un abonnement terminé est conservé mais exclu des agrégats.
+             */
+            ended?: boolean;
             /**
              * @description Date de premier paiement (`YYYY-MM-DD`).
              * @example 2026-01-31

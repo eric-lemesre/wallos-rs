@@ -98,7 +98,8 @@
     "firstPayment": "Premier paiement",
     "create": "Créer l'abonnement",
     "created": "Créé, prochaine échéance",
-    "error": "Impossible de créer l'abonnement"
+    "error": "Impossible de créer l'abonnement",
+    "endDate": "Date de fin (optionnelle)"
   },
   "subscriptions": {
     "title": "Mes abonnements",
@@ -120,7 +121,8 @@
     "editUnit": "Unité de cycle",
     "editInterval": "Intervalle",
     "editActive": "Actif",
-    "saveError": "Impossible d'enregistrer la modification"
+    "saveError": "Impossible d'enregistrer la modification",
+    "ended": "Terminé"
   },
   "paymentMethods": {
     "title": "Moyens de paiement",

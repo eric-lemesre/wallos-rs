@@ -19,4 +19,10 @@ describe("SubscriptionLogo", () => {
     expect(screen.getByTestId("subscription-logo-image")).toHaveAttribute("src", "netflix.png");
     expect(screen.queryByTestId("subscription-logo-substitute")).toBeNull();
   });
+
+  it("traite un logo blanc (espaces) comme absent (revue SUB-015 #2)", () => {
+    render(<SubscriptionLogo name="Netflix" logo="   " />);
+    expect(screen.getByTestId("subscription-logo-substitute")).toBeInTheDocument();
+    expect(screen.queryByTestId("subscription-logo-image")).toBeNull();
+  });
 });

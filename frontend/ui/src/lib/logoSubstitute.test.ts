@@ -15,13 +15,20 @@ describe("logoSubstitute", () => {
     expect(logoSubstitute("  disney plus channel  ").initials).toBe("DP");
   });
 
-  it("gère un nom vide sans échouer", () => {
+  it("gère un nom vide ou blanc sans échouer", () => {
+    expect(logoSubstitute("").initials).toBe("?");
     expect(logoSubstitute("   ").initials).toBe("?");
+  });
+
+  it("préserve les initiales emoji / hors-BMP (revue #1)", () => {
+    // 🎵 est hors du plan multilingue de base : son initiale ne doit pas être un demi-surrogate cassé.
+    expect(logoSubstitute("🎵 Music").initials).toBe("🎵M");
+    expect(logoSubstitute("Ötzi").initials).toBe("Ö");
   });
 
   it("produit une couleur CSS stable dérivée du nom", () => {
     const { color } = logoSubstitute("Spotify");
-    expect(color).toMatch(/^hsl\(\d+, 65%, 45%\)$/);
+    expect(color).toMatch(/^hsl\(\d+, 65%, 40%\)$/);
     // Stable d'un appel à l'autre.
     expect(logoSubstitute("Spotify").color).toBe(color);
   });

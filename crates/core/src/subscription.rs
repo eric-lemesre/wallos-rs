@@ -36,6 +36,7 @@ pub struct Subscription {
     url: Option<String>,
     notes: Option<String>,
     active: bool,
+    end_date: Option<NaiveDate>,
 }
 
 impl Subscription {
@@ -71,7 +72,17 @@ impl Subscription {
             url: None,
             notes: None,
             active: true,
+            end_date: None,
         })
+    }
+
+    /// Fixe une **date de fin** (annulation programmée, REQ-SUB-009) : aucune échéance n'est produite
+    /// au-delà de cette date, et l'abonnement est considéré « terminé » une fois la date dépassée.
+    #[must_use]
+    #[requirement(REQ-SUB-009)]
+    pub const fn with_end_date(mut self, end_date: NaiveDate) -> Self {
+        self.end_date = Some(end_date);
+        self
     }
 
     /// Rattache une catégorie.
@@ -225,16 +236,39 @@ impl Subscription {
         self.active
     }
 
-    /// Prochaine échéance après modification (REQ-SUB-004), strictement postérieure à `after`.
+    /// Date de fin (annulation programmée), le cas échéant.
+    #[must_use]
+    #[requirement(REQ-SUB-009)]
+    pub const fn end_date(&self) -> Option<NaiveDate> {
+        self.end_date
+    }
+
+    /// Vrai si l'abonnement est **terminé** à la date `reference` (date de fin **strictement** dépassée).
+    ///
+    /// Un abonnement terminé est conservé mais apparaît « terminé » et est exclu des agrégats (REQ-SUB-009).
+    #[must_use]
+    #[requirement(REQ-SUB-009)]
+    pub fn has_ended(&self, reference: NaiveDate) -> bool {
+        self.end_date.is_some_and(|end| reference > end)
+    }
+
+    /// Prochaine échéance après modification (REQ-SUB-004), strictement postérieure à `after`, et
+    /// **bornée par la date de fin** (REQ-SUB-009) : aucune échéance postérieure à `end_date` n'est
+    /// produite.
     ///
     /// **Recalculée à partir de la date de premier paiement et du cycle courant** (dérivée pure via
     /// [`next_due`](crate::schedule::next_due)) : après un changement de cycle ou de date de départ,
     /// l'échéance est **ré-ancrée** sur `first_payment`, jamais dérivée de l'ancienne échéance.
-    /// `None` si le calcul déborde la plage représentable.
+    /// `None` si le calcul déborde la plage représentable **ou** si la prochaine échéance tomberait
+    /// après la date de fin.
     #[must_use]
     #[requirement(REQ-SUB-004)]
     pub fn next_due_after(&self, after: NaiveDate) -> Option<NaiveDate> {
-        crate::schedule::next_due(self.first_payment, self.cycle, after)
+        let occ = crate::schedule::next_due(self.first_payment, self.cycle, after)?;
+        match self.end_date {
+            Some(end) if occ > end => None, // aucune échéance au-delà de la date de fin (SUB-009)
+            _ => Some(occ),
+        }
     }
 }
 
@@ -343,6 +377,82 @@ mod tests {
             yearly.next_due_after(after),
             NaiveDate::from_ymd_opt(2027, 1, 31)
         );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-009, case = "aucune échéance au-delà de la date de fin")]
+    fn no_due_date_after_end_date() {
+        // Mensuel depuis le 2026-01-15, fin au 2026-03-31 : après le 2026-03-01 -> 2026-03-15 (<= fin, OK).
+        let sub = Subscription::new(
+            Uuid::from_u128(1),
+            "N",
+            money("1", "EUR"),
+            BillingCycle::from_parts(BillingUnit::Month, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 1, 15).unwrap(),
+        )
+        .unwrap()
+        .with_end_date(NaiveDate::from_ymd_opt(2026, 3, 31).unwrap());
+        assert_eq!(
+            sub.next_due_after(NaiveDate::from_ymd_opt(2026, 3, 1).unwrap()),
+            NaiveDate::from_ymd_opt(2026, 3, 15)
+        );
+        // Après le 2026-03-15, la prochaine occurrence (2026-04-15) tombe APRÈS la fin -> aucune échéance.
+        assert_eq!(
+            sub.next_due_after(NaiveDate::from_ymd_opt(2026, 3, 15).unwrap()),
+            None
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-009, case = "échéance tombant exactement sur la date de fin conservée")]
+    fn due_date_exactly_on_end_date_is_kept() {
+        // « aucune échéance POSTÉRIEURE à la date de fin » : une échéance le jour même de la fin est valide.
+        let sub = Subscription::new(
+            Uuid::from_u128(1),
+            "N",
+            money("1", "EUR"),
+            BillingCycle::from_parts(BillingUnit::Month, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2030, 1, 15).unwrap(),
+        )
+        .unwrap()
+        .with_end_date(NaiveDate::from_ymd_opt(2030, 2, 15).unwrap());
+        // Après le 2030-01-20, la prochaine occurrence est le 2030-02-15, **égale** à la date de fin.
+        assert_eq!(
+            sub.next_due_after(NaiveDate::from_ymd_opt(2030, 1, 20).unwrap()),
+            NaiveDate::from_ymd_opt(2030, 2, 15)
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-009, case = "accesseur de date de fin")]
+    fn end_date_accessor_returns_the_set_value() {
+        let d = NaiveDate::from_ymd_opt(2030, 6, 30).unwrap();
+        let sub = Subscription::new(Uuid::from_u128(1), "N", money("1", "EUR"), cycle(), day())
+            .unwrap()
+            .with_end_date(d);
+        assert_eq!(sub.end_date(), Some(d));
+        // Sans date de fin : None.
+        assert_eq!(
+            Subscription::new(Uuid::from_u128(2), "N", money("1", "EUR"), cycle(), day())
+                .unwrap()
+                .end_date(),
+            None
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-009, case = "terminé une fois la date de fin dépassée")]
+    fn has_ended_after_end_date() {
+        let sub = Subscription::new(Uuid::from_u128(1), "N", money("1", "EUR"), cycle(), day())
+            .unwrap()
+            .with_end_date(NaiveDate::from_ymd_opt(2026, 6, 30).unwrap());
+        // Le jour de la fin : pas encore terminé ; le lendemain : terminé.
+        assert!(!sub.has_ended(NaiveDate::from_ymd_opt(2026, 6, 30).unwrap()));
+        assert!(sub.has_ended(NaiveDate::from_ymd_opt(2026, 7, 1).unwrap()));
+        // Sans date de fin : jamais terminé.
+        let perpetual =
+            Subscription::new(Uuid::from_u128(2), "P", money("1", "EUR"), cycle(), day()).unwrap();
+        assert!(!perpetual.has_ended(NaiveDate::from_ymd_opt(2999, 1, 1).unwrap()));
     }
 
     #[test]

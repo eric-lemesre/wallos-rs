@@ -455,6 +455,90 @@ async fn deactivating_then_reactivating_via_put_toggles_the_total(pool: PgPool) 
     assert_eq!(list(&pool, &web, "").await["total"]["total"], "9.99");
 }
 
+// --- REQ-SUB-009 : date de fin et annulation programmée ---
+
+fn sub_body_ending(name: &str, amount: &str, end_date: &str) -> Value {
+    json!({
+        "name": name, "amount": amount, "currency": "EUR",
+        "cycle": { "unit": "month", "interval": 1 },
+        "first_payment": "2020-01-15", "end_date": end_date
+    })
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-009)]
+async fn ended_subscription_is_marked_and_excluded_from_total(pool: PgPool) {
+    let web = account(&pool, "sub009@example.com").await;
+    // Terminé (fin au 2020-12-31, dépassée) + un actif non terminé (fin lointaine).
+    assert_eq!(
+        create(
+            &pool,
+            &web,
+            sub_body_ending("Terminé", "5.00", "2020-12-31")
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+    assert_eq!(
+        create(
+            &pool,
+            &web,
+            sub_body_ending("En cours", "10.00", "2999-12-31")
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+
+    let all = list(&pool, &web, "").await;
+    let subs = all["subscriptions"].as_array().unwrap();
+    // Les deux sont listés (le terminé est conservé).
+    assert_eq!(subs.len(), 2);
+    let ended = subs.iter().find(|s| s["name"] == "Terminé").unwrap();
+    assert_eq!(ended["ended"], true);
+    // Aucune prochaine échéance produite au-delà de la date de fin (SUB-009 acceptance #1).
+    assert!(ended.get("next_payment").is_none() || ended["next_payment"].is_null());
+    // Le total ne compte que l'actif non terminé (10.00), pas le terminé (5.00).
+    assert_eq!(all["total"]["total"], "10.00");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-009)]
+async fn end_date_is_persisted_and_bounds_next_payment(pool: PgPool) {
+    let web = account(&pool, "sub009-b@example.com").await;
+    // first_payment futur 2030-01-15, fin au 2030-01-31 : prochaine échéance = 2030-01-15 (<= fin).
+    let body = json!({
+        "name": "Borné", "amount": "9.99", "currency": "EUR",
+        "cycle": { "unit": "month", "interval": 1 },
+        "first_payment": "2030-01-15", "end_date": "2030-01-31"
+    });
+    let created = body_json(create(&pool, &web, body).await).await;
+    assert_eq!(created["end_date"], "2030-01-31");
+    assert_eq!(created["ended"], false);
+    assert_eq!(created["next_payment"], "2030-01-15");
+
+    // Persistance : relu via la liste.
+    let all = list(&pool, &web, "").await;
+    assert_eq!(all["subscriptions"][0]["end_date"], "2030-01-31");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-009)]
+async fn invalid_end_date_is_rejected_per_field(pool: PgPool) {
+    let web = account(&pool, "sub009-bad@example.com").await;
+    let mut body = valid_body();
+    body["end_date"] = json!("31/12/2030");
+    let r = create(&pool, &web, body).await;
+    assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        body_json(r).await["detail"]
+            .as_str()
+            .unwrap()
+            .contains("end_date")
+    );
+}
+
 #[sqlx::test(migrations = "../storage/migrations")]
 #[verifies(REQ-SUB-006)]
 async fn invalid_filter_is_rejected_per_field(pool: PgPool) {
