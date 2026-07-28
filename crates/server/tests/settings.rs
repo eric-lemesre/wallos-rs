@@ -302,15 +302,22 @@ async fn language_defaults_absent_then_persists_a_choice(pool: PgPool) {
 #[verifies(REQ-I18N-001)]
 async fn unsupported_language_is_rejected(pool: PgPool) {
     let web = account(&pool, "lang-bad@example.com").await;
-    let r = send(
-        &pool,
-        "PUT",
-        LANG_URI,
-        Some(&web),
-        Some(json!({ "language": "de" })),
-    )
-    .await;
-    assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    // Revue I18N-001 #5 : divers codes non supportés rejetés (casse, vide, code long, locale).
+    for bad in ["de", "FR", "", "english", "fr-FR"] {
+        assert_eq!(
+            send(
+                &pool,
+                "PUT",
+                LANG_URI,
+                Some(&web),
+                Some(json!({ "language": bad })),
+            )
+            .await
+            .status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "code non supporté accepté à tort: {bad:?}"
+        );
+    }
     // Reste non renseignée (inchangée).
     let r = send(&pool, "GET", LANG_URI, Some(&web), None).await;
     assert!(body_json(r).await.get("language").is_none());

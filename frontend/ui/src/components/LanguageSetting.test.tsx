@@ -35,6 +35,14 @@ describe("LanguageSetting", () => {
     expect(screen.getByTestId("language-current")).toHaveTextContent("fr");
   });
 
+  it("applique la langue système si supportée quand aucune langue n'est persistée (acceptance #2)", async () => {
+    Object.defineProperty(navigator, "language", { value: "fr-FR", configurable: true });
+    vi.spyOn(api, "GET").mockResolvedValue(ok(null));
+    renderIt();
+    await waitFor(() => expect(i18n.language).toBe("fr"));
+    Object.defineProperty(navigator, "language", { value: "en-US", configurable: true });
+  });
+
   it("enregistre un choix (PUT) et applique la langue immédiatement", async () => {
     vi.spyOn(api, "GET").mockResolvedValue(ok(null));
     const put = vi.spyOn(api, "PUT").mockResolvedValue(ok("fr"));

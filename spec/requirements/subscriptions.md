@@ -334,7 +334,7 @@ depends_on: [REQ-SUB-012, REQ-NOT-002]
 id: REQ-SUB-015
 title: Logo d'abonnement
 domain: subscriptions
-status: draft
+status: verified
 criticality: low
 layer: [api, ui]
 e2e: optional

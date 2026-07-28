@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
@@ -23,24 +23,31 @@ function systemLanguage(): string | null {
  */
 export function LanguageSetting() {
   const { t, i18n } = useTranslation();
-  const [current, setCurrent] = useState(i18n.language);
+  // Affichage initial : langue système si supportée (évite un flash en anglais, acceptance #2).
+  const [current, setCurrent] = useState(systemLanguage() ?? i18n.language);
   const [failed, setFailed] = useState(false);
+  // Revue I18N-001 #1 : une fois que l'utilisateur a choisi, un GET de montage tardif ne doit pas
+  // réappliquer l'ancienne valeur.
+  const chosen = useRef(false);
 
   useEffect(() => {
     void (async () => {
       const { data, response } = await api.GET("/settings/language");
-      if (response.ok && data) {
-        // Langue persistée si choisie, sinon repli sur la langue système supportée.
-        const chosen = data.language ?? systemLanguage();
-        if (chosen) {
-          await i18n.changeLanguage(chosen);
-          setCurrent(chosen);
-        }
+      if (chosen.current) {
+        return;
+      }
+      // Langue persistée si disponible, sinon **repli système** — y compris si la requête échoue
+      // (401 avant connexion, 500) : l'acceptance #2 s'applique indépendamment du succès du GET.
+      const applied = (response.ok && data?.language) || systemLanguage();
+      if (applied) {
+        await i18n.changeLanguage(applied);
+        setCurrent(applied);
       }
     })();
   }, [i18n]);
 
   async function choose(code: string) {
+    chosen.current = true;
     const { data, response } = await api.PUT("/settings/language", {
       body: { language: code },
     });
