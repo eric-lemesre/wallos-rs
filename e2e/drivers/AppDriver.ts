@@ -65,6 +65,10 @@ export interface AppDriver {
   /** Texte du montant affiché pour un abonnement (par nom). */
   subscriptionAmount(name: string): Promise<string>;
 
+  // Abonnement désactivé (REQ-SUB-008).
+  /** Désactive un abonnement (par nom) via l'édition en place et enregistre. */
+  deactivateSubscription(name: string): Promise<void>;
+
   // Calcul d'échéance (REQ-SUB-012).
   /** Renseigne ancre/unité/intervalle/date de référence et déclenche le calcul. */
   computeNextDue(anchor: string, unit: string, interval: string, after: string): Promise<void>;

@@ -118,6 +118,8 @@
     "save": "Save",
     "editAmount": "Amount",
     "editUnit": "Cycle unit",
-    "editInterval": "Interval"
+    "editInterval": "Interval",
+    "editActive": "Active",
+    "saveError": "Could not save the change"
   }
 }

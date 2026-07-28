@@ -13,7 +13,22 @@ use rust_decimal::Decimal;
 use wallos_req_macros::requirement;
 
 use crate::DomainError;
+use crate::Subscription;
 use crate::money::{CurrencyCode, Money};
+
+/// Montants entrant dans les agrégats statistiques (REQ-SUB-008).
+///
+/// Un abonnement **désactivé** est **exclu de tous les agrégats** : il est conservé mais ne pèse sur
+/// aucun total. Seuls les abonnements actifs contribuent leur prix. C'est le point de sélection unique
+/// que les exigences `REQ-STA-*` (normalisation, répartitions) et la vue liste (REQ-SUB-006) partagent.
+#[requirement(REQ-SUB-008)]
+pub fn billable_amounts(subscriptions: &[Subscription]) -> Vec<Money> {
+    subscriptions
+        .iter()
+        .filter(|s| s.is_active())
+        .map(|s| *s.price())
+        .collect()
+}
 
 /// Date de référence explicite d'un calcul d'agrégat.
 ///
@@ -118,9 +133,47 @@ mod tests {
     use wallos_req_macros::verifies;
 
     use super::*;
+    use crate::billing::{BillingCycle, BillingUnit};
 
     fn eur() -> CurrencyCode {
         CurrencyCode::new("EUR").unwrap()
+    }
+
+    fn subscription(name: &str, price: &str, active: bool) -> Subscription {
+        let sub = Subscription::new(
+            uuid::Uuid::new_v4(),
+            name,
+            Money::new(price.parse().unwrap(), eur()).unwrap(),
+            BillingCycle::from_parts(BillingUnit::Month, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 1, 15).unwrap(),
+        )
+        .unwrap();
+        sub.with_active(active)
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-008, case = "abonnement désactivé exclu des agrégats")]
+    fn billable_amounts_excludes_inactive() {
+        let subs = [
+            subscription("Actif A", "10.00", true),
+            subscription("Désactivé", "5.00", false),
+            subscription("Actif B", "20.00", true),
+        ];
+        let amounts = billable_amounts(&subs);
+        // Seuls les deux actifs contribuent ; le désactivé (5.00) est exclu.
+        assert_eq!(amounts.len(), 2);
+        let total: Decimal = amounts.iter().map(Money::amount).sum();
+        assert_eq!(total, "30.00".parse().unwrap());
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-008, case = "tous désactivés -> agrégat vide")]
+    fn billable_amounts_all_inactive_is_empty() {
+        let subs = [
+            subscription("X", "10.00", false),
+            subscription("Y", "20.00", false),
+        ];
+        assert!(billable_amounts(&subs).is_empty());
     }
 
     fn usd() -> CurrencyCode {

@@ -112,6 +112,28 @@ describe("SubscriptionsList", () => {
     );
   });
 
+  it("désactive un abonnement (PUT active=false, REQ-SUB-008)", async () => {
+    vi.spyOn(api, "GET").mockResolvedValue(response([sub("1", "Netflix", "9.99")], "9.99"));
+    const put = vi.spyOn(api, "PUT").mockResolvedValue({
+      data: { ...sub("1", "Netflix", "9.99"), active: false },
+      response: new Response(null, { status: 200 }),
+    } as never);
+    const user = userEvent.setup();
+    renderList();
+
+    await screen.findByTestId("subscription-name");
+    await user.click(screen.getByTestId("subscription-edit"));
+    await user.click(screen.getByTestId("subscription-active")); // décoche (actif -> inactif)
+    await user.click(screen.getByTestId("subscription-save"));
+
+    await waitFor(() =>
+      expect(put).toHaveBeenCalledWith("/subscriptions/{id}", {
+        params: { path: { id: "1" } },
+        body: expect.objectContaining({ active: false }),
+      }),
+    );
+  });
+
   it("filtre par payeur (query conjonctive)", async () => {
     const get = vi
       .spyOn(api, "GET")
@@ -130,6 +152,23 @@ describe("SubscriptionsList", () => {
         params: { query: { payer: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" } },
       }),
     );
+  });
+
+  it("signale un échec d'enregistrement (PUT en erreur, revue SUB-004 #2)", async () => {
+    vi.spyOn(api, "GET").mockResolvedValue(response([sub("1", "Netflix", "9.99")], "9.99"));
+    vi.spyOn(api, "PUT").mockResolvedValue({
+      data: undefined,
+      response: new Response(null, { status: 422 }),
+    } as never);
+    const user = userEvent.setup();
+    renderList();
+
+    await screen.findByTestId("subscription-name");
+    await user.click(screen.getByTestId("subscription-edit"));
+    await user.click(screen.getByTestId("subscription-save"));
+    // L'erreur est visible et le mode édition reste ouvert (champ montant toujours présent).
+    expect(await screen.findByTestId("subscriptions-save-error")).toBeInTheDocument();
+    expect(screen.getByTestId("subscription-amount-input")).toBeInTheDocument();
   });
 
   it("affiche un message quand la liste est vide", async () => {

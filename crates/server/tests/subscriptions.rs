@@ -398,6 +398,27 @@ async fn payer_filter_selects_matching_subscriptions(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-008)]
+async fn inactive_subscription_is_excluded_from_total(pool: PgPool) {
+    // REQ-SUB-008 : un abonnement désactivé est conservé dans la liste mais exclu de l'agrégat.
+    let web = account(&pool, "sub008@example.com").await;
+    for body in [
+        sub_body("Actif", "10.00", None, true),
+        sub_body("Désactivé", "5.00", None, false),
+    ] {
+        assert_eq!(
+            create(&pool, &web, body).await.status(),
+            StatusCode::CREATED
+        );
+    }
+    let all = list(&pool, &web, "").await;
+    // Les deux sont listés (le désactivé est conservé)...
+    assert_eq!(all["subscriptions"].as_array().unwrap().len(), 2);
+    // ...mais le total ne compte que l'actif (10.00), pas le désactivé (5.00).
+    assert_eq!(all["total"]["total"], "10.00");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
 #[verifies(REQ-SUB-006)]
 async fn invalid_filter_is_rejected_per_field(pool: PgPool) {
     let web = account(&pool, "list-bad@example.com").await;
@@ -532,6 +553,30 @@ async fn update_rejects_invalid_field(pool: PgPool) {
             .unwrap()
             .contains("amount")
     );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-004)]
+async fn update_unknown_or_invalid_id_is_404(pool: PgPool) {
+    // Revue SUB-004 #3 : un id absent (mais valide) et un id malformé donnent tous deux 404.
+    let web = account(&pool, "sub-upd-404@example.com").await;
+    let absent = put(
+        &pool,
+        "/api/v1/subscriptions/00000000-0000-0000-0000-000000000009",
+        valid_body(),
+        Some(&web),
+    )
+    .await;
+    assert_eq!(absent.status(), StatusCode::NOT_FOUND);
+
+    let malformed = put(
+        &pool,
+        "/api/v1/subscriptions/not-a-uuid",
+        valid_body(),
+        Some(&web),
+    )
+    .await;
+    assert_eq!(malformed.status(), StatusCode::NOT_FOUND);
 }
 
 // --- Autorisation §9 : updateSubscription ---

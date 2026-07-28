@@ -29,6 +29,7 @@ export function SubscriptionsList() {
   const [state, setState] = useState<StateFilter>("all");
   const [data, setData] = useState<SubscriptionListResponse | null>(null);
   const [failed, setFailed] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   // Chargement paramétré (jamais dans les deps d'un effet réactif : on ne recharge qu'au montage et
   // sur « Appliquer », pas à chaque frappe de filtre). Filtres conjonctifs : catégorie ET payeur ET état.
@@ -59,7 +60,10 @@ export function SubscriptionsList() {
   }, [load]);
 
   const save = useCallback(
-    async (sub: SubscriptionDto, patch: { amount: string; unit: string; interval: number }) => {
+    async (
+      sub: SubscriptionDto,
+      patch: { amount: string; unit: string; interval: number; active: boolean },
+    ) => {
       const body: CreateSubscriptionRequest = {
         name: sub.name,
         amount: patch.amount,
@@ -72,13 +76,20 @@ export function SubscriptionsList() {
         logo: sub.logo,
         url: sub.url,
         notes: sub.notes,
-        active: sub.active,
+        active: patch.active,
       };
-      await api.PUT("/subscriptions/{id}", {
+      const { response } = await api.PUT("/subscriptions/{id}", {
         params: { path: { id: sub.id } },
         body,
       });
+      // Revue SUB-004 #2 : un échec du PUT est signalé (jamais un rechargement silencieux).
+      if (!response.ok) {
+        setSaveFailed(true);
+        return false;
+      }
+      setSaveFailed(false);
       await load(category, payer, state);
+      return true;
     },
     [load, category, payer, state],
   );
@@ -127,6 +138,12 @@ export function SubscriptionsList() {
         </p>
       )}
 
+      {saveFailed && (
+        <p data-testid="subscriptions-save-error" role="alert">
+          {t("subscriptions.saveError")}
+        </p>
+      )}
+
       {subscriptions.length === 0 ? (
         <p data-testid="subscriptions-empty">{t("subscriptions.empty")}</p>
       ) : (
@@ -158,22 +175,27 @@ function SubscriptionRow({
   sub: SubscriptionDto;
   onSave: (
     sub: SubscriptionDto,
-    patch: { amount: string; unit: string; interval: number },
-  ) => Promise<void>;
+    patch: { amount: string; unit: string; interval: number; active: boolean },
+  ) => Promise<boolean>;
 }) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [amount, setAmount] = useState(sub.amount);
   const [unit, setUnit] = useState(sub.cycle.unit);
   const [interval, setInterval] = useState(String(sub.cycle.interval));
+  const [active, setActive] = useState(sub.active ?? true);
 
   async function submit() {
-    await onSave(sub, {
+    const ok = await onSave(sub, {
       amount,
       unit,
       interval: Number.parseInt(interval, 10) || sub.cycle.interval,
+      active,
     });
-    setEditing(false);
+    // On ne quitte le mode édition qu'en cas de succès (l'erreur reste visible pour correction).
+    if (ok) {
+      setEditing(false);
+    }
   }
 
   return (
@@ -214,6 +236,15 @@ function SubscriptionRow({
             value={interval}
             onChange={(e) => setInterval(e.target.value)}
           />
+          <label>
+            {t("subscriptions.editActive")}
+            <input
+              type="checkbox"
+              data-testid="subscription-active"
+              checked={active}
+              onChange={(e) => setActive(e.target.checked)}
+            />
+          </label>
           <button type="button" data-testid="subscription-save" onClick={() => void submit()}>
             {t("subscriptions.save")}
           </button>
