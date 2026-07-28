@@ -28,20 +28,20 @@ fn occurrence(anchor: NaiveDate, cycle: BillingCycle, k: u32) -> Option<NaiveDat
     }
 }
 
-/// Prochaine échéance strictement postérieure à `after`, pour un abonnement démarré à `anchor`.
-///
-/// Rattrapage inclus : si plusieurs échéances sont passées, renvoie la première encore future (les
-/// occurrences sont strictement croissantes, donc la boucle termine toujours).
-///
-/// Renvoie `None` uniquement en cas de débordement de plage (non atteignable pour des dates réelles).
-/// Borne d'itération : garde-fou contre une entrée dégénérée (occurrences non croissantes) — bien
-/// au-delà de tout rattrapage réel (100 000 jours ≈ 273 ans). Au-delà, on renvoie `None`.
+/// Borne d'itération : garde-fou contre un rattrapage démesuré (100 000 occurrences ≈ 273 ans en
+/// cycle quotidien) ou une entrée pathologique. Au-delà, `next_due` renvoie `None`.
 const MAX_STEPS: u32 = 100_000;
 
+/// Prochaine échéance strictement postérieure à `after`, pour un abonnement démarré à `anchor`.
+///
+/// Rattrapage inclus : si plusieurs échéances sont passées, renvoie la première encore future.
+///
+/// Renvoie `None` si le calcul déborde la plage de dates représentable **ou** si la borne
+/// [`MAX_STEPS`] est atteinte (rattrapage démesuré / entrée pathologique).
 #[requirement(REQ-SUB-012)]
 pub fn next_due(anchor: NaiveDate, cycle: BillingCycle, after: NaiveDate) -> Option<NaiveDate> {
-    // Boucle bornée par construction (garde-fou anti-boucle infinie sur entrée dégénérée). Les
-    // occurrences sont strictement croissantes, donc pour une entrée réelle on sort bien avant la borne.
+    // Boucle bornée par construction. Les occurrences sont strictement croissantes ; pour une entrée
+    // réelle on sort bien avant la borne (celle-ci ne mord que sur un rattrapage de plusieurs siècles).
     for k in 0..MAX_STEPS {
         let occ = occurrence(anchor, cycle, k)?;
         if occ > after {
@@ -177,6 +177,34 @@ mod tests {
             ),
             Some(day(2025, 2, 28))
         );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-012, case = "date de référence antérieure à l'ancre -> ancre")]
+    fn after_before_anchor_returns_anchor() {
+        // Si `after` précède l'ancre, la première échéance est l'ancre elle-même (occurrence k=0).
+        assert_eq!(
+            next_due(day(2025, 1, 31), monthly(1), day(2024, 12, 31)),
+            Some(day(2025, 1, 31))
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-012, case = "date de référence = occurrence exacte -> suivante (strict)")]
+    fn after_equal_to_occurrence_skips_to_next() {
+        // after = 31 mars (= occurrence k=2) : « strictement postérieure » -> 30 avril, pas 31 mars.
+        assert_eq!(
+            next_due(day(2025, 1, 31), monthly(1), day(2025, 3, 31)),
+            Some(day(2025, 4, 30))
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-012, case = "intervalle annuel démesuré -> None (overflow borné)")]
+    fn huge_yearly_interval_overflows_to_none() {
+        // interval × 12 déborde u32 -> occurrence renvoie None -> next_due renvoie None (jamais un panic).
+        let cycle = cycle(BillingUnit::Year, u32::MAX);
+        assert_eq!(next_due(day(2025, 1, 1), cycle, day(2025, 1, 1)), None);
     }
 
     #[test]
