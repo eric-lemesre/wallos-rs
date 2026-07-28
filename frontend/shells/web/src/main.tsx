@@ -5,6 +5,7 @@ import { I18nextProvider } from "react-i18next";
 import { ChangePasswordForm } from "../../../ui/src/components/ChangePasswordForm";
 import { ConvertedTotalCard } from "../../../ui/src/components/ConvertedTotalCard";
 import { CategoriesList } from "../../../ui/src/components/CategoriesList";
+import { NextDueCard } from "../../../ui/src/components/NextDueCard";
 import { CurrenciesList } from "../../../ui/src/components/CurrenciesList";
 import { DevicesList } from "../../../ui/src/components/DevicesList";
 import { LoginForm } from "../../../ui/src/components/LoginForm";
@@ -26,6 +27,7 @@ if (root) {
           <ConvertedTotalCard />
           <CurrenciesList />
           <CategoriesList />
+          <NextDueCard />
         </main>
       </I18nextProvider>
     </StrictMode>,

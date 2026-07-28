@@ -12,8 +12,8 @@ use wallos_core::requirement;
 use wallos_proto::{
     AggregateRequest, CategoryDto, ChangePasswordRequest, ConvertedTotalResponse,
     CreateAccountRequest, CreateCategoryRequest, CreateDeviceSessionRequest, CreateSessionRequest,
-    CurrencyDto, CurrentUser, DeviceSummary, DeviceToken, HealthResponse, MoneyInput, Problem,
-    RenameCategoryRequest, problem,
+    CurrencyDto, CurrentUser, DeviceSummary, DeviceToken, HealthResponse, MoneyInput,
+    NextDueRequest, NextDueResponse, Problem, RenameCategoryRequest, problem,
 };
 use wallos_storage::Db;
 
@@ -22,6 +22,7 @@ pub mod auth;
 pub mod categories;
 pub mod currencies;
 pub mod exchange;
+pub mod schedule;
 
 /// API wallos-rs v1.
 #[derive(OpenApi)]
@@ -47,7 +48,8 @@ pub mod exchange;
         categories::create_category,
         categories::list_categories,
         categories::rename_category,
-        categories::delete_category
+        categories::delete_category,
+        schedule::compute_next_due
     ),
     components(schemas(
         HealthResponse,
@@ -65,7 +67,9 @@ pub mod exchange;
         CurrencyDto,
         CategoryDto,
         CreateCategoryRequest,
-        RenameCategoryRequest
+        RenameCategoryRequest,
+        NextDueRequest,
+        NextDueResponse
     ))
 )]
 pub struct ApiDoc;
@@ -142,6 +146,7 @@ pub fn app_with_db(db: Db) -> Router {
             categories::rename_category,
             categories::delete_category
         ))
+        .routes(routes!(schedule::compute_next_due))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))

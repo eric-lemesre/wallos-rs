@@ -207,6 +207,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/schedule/next-due": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Calcule la prochaine échéance strictement postérieure à `after`, pour l'ancre et le cycle donnés. */
+        post: operations["computeNextDue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sessions": {
         parameters: {
             query?: never;
@@ -241,6 +258,25 @@ export interface components {
              * @example EUR
              */
             target: string;
+        };
+        /**
+         * @description Cycle de facturation d'un abonnement (REQ-SUB-003) : couple (unité, intervalle).
+         *
+         *     `unit` est un code stable (`day`/`week`/`month`/`year`) ; `interval` est le nombre d'unités entre
+         *     deux échéances, strictement positif. Modèle capturé sur l'application d'origine (table `cycles`).
+         */
+        BillingCycleDto: {
+            /**
+             * Format: int32
+             * @description Nombre d'unités entre deux échéances (strictement positif).
+             * @example 1
+             */
+            interval: number;
+            /**
+             * @description Unité de récurrence : `day`, `week`, `month` ou `year`.
+             * @example month
+             */
+            unit: string;
         };
         /** @description Une catégorie d'abonnements exposée à l'interface (REQ-CAT-001). */
         CategoryDto: {
@@ -465,6 +501,34 @@ export interface components {
              * @example EUR
              */
             currency: string;
+        };
+        /**
+         * @description Requête de calcul de la prochaine échéance (REQ-SUB-012).
+         *
+         *     `first_payment` est l'**ancre** (date de premier paiement) ; `after` est la date de référence — la
+         *     réponse est la première échéance strictement postérieure. Dates en `YYYY-MM-DD`.
+         */
+        NextDueRequest: {
+            /**
+             * @description Date de référence : la prochaine échéance est strictement postérieure, `YYYY-MM-DD`.
+             * @example 2025-01-31
+             */
+            after: string;
+            /** @description Cycle de facturation. */
+            cycle: components["schemas"]["BillingCycleDto"];
+            /**
+             * @description Date de premier paiement (ancre), `YYYY-MM-DD`.
+             * @example 2025-01-31
+             */
+            first_payment: string;
+        };
+        /** @description Prochaine échéance calculée (REQ-SUB-012). */
+        NextDueResponse: {
+            /**
+             * @description Prochaine échéance, `YYYY-MM-DD`.
+             * @example 2025-02-28
+             */
+            next_payment: string;
         };
         /**
          * @description Détail d'erreur conforme à la RFC 9457 (`application/problem+json`).
@@ -982,6 +1046,48 @@ export interface operations {
             };
             /** @description Trop de tentatives ; réessayer après l'en-tête Retry-After */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    computeNextDue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NextDueRequest"];
+            };
+        };
+        responses: {
+            /** @description Prochaine échéance */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NextDueResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Entrée invalide */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

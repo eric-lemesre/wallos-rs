@@ -71,5 +71,21 @@
     "rename": "Renommer",
     "delete": "Supprimer",
     "loadError": "Impossible de charger les catégories"
+  },
+  "nextDue": {
+    "title": "Prochaine échéance",
+    "firstPayment": "Premier paiement",
+    "unit": "Unité",
+    "interval": "Intervalle",
+    "after": "Après le",
+    "compute": "Calculer",
+    "result": "Prochaine échéance",
+    "error": "Impossible de calculer la prochaine échéance",
+    "units": {
+      "day": "Jour",
+      "week": "Semaine",
+      "month": "Mois",
+      "year": "Année"
+    }
   }
 }
