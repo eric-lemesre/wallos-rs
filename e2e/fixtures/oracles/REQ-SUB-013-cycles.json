@@ -1,0 +1,19 @@
+{
+  "_requirement": "REQ-SUB-013",
+  "_decision": "ADR 0022 (étendu) — subtrack applique l'ancrage+clamp à TOUTES les unités par cohérence avec SUB-012 ; le débordement PHP de Wallos est rejeté (année 29 févr). Hebdomadaire : +7 jours, pas de dérive (identique à Wallos).",
+  "wallos_captured": {
+    "_source": "Wallos 5.4.2 (DateInterval P{n}D/W/Y à la date courante), vérifié en exécutant le PHP.",
+    "yearly_from_2024_02_29": "2025-03-01",
+    "weekly_from_2025_01_01": "2025-01-08"
+  },
+  "subtrack_rule": {
+    "_rule": "occurrence(k) = ancre + k × intervalle (unité), ancré + clamp ; hebdo/quotidien = arithmétique de jours (pas de clamp requis).",
+    "vectors": [
+      { "anchor": "2024-02-29", "unit": "year", "interval": 1, "after": "2024-02-29", "next": "2025-02-28", "why": "29 févr -> 28 févr (clamp ancré, PAS le débordement Wallos au 1er mars)" },
+      { "anchor": "2025-01-01", "unit": "week", "interval": 1, "after": "2025-01-01", "next": "2025-01-08", "why": "+7 jours" },
+      { "anchor": "2025-01-01", "unit": "week", "interval": 1, "after": "2025-12-30", "next": "2025-12-31", "why": "52 semaines : même jour de semaine (mercredi), aucune dérive" },
+      { "anchor": "2025-01-01", "unit": "day", "interval": 10, "after": "2025-01-01", "next": "2025-01-11", "why": "+10 jours" },
+      { "anchor": "2025-03-15", "unit": "year", "interval": 2, "after": "2025-03-15", "next": "2027-03-15", "why": "bisannuel" }
+    ]
+  }
+}
