@@ -121,6 +121,34 @@ async fn created_category_is_listed_immediately(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-005)]
+async fn categories_are_listed_in_a_deterministic_order(pool: PgPool) {
+    // REQ-CAT-005 : l'ordre est déterministe (par nom, départage par id) et identique d'un appel à
+    // l'autre — donc identique sur les trois modalités (elles consomment la même liste API).
+    let web = account(&pool, "cat-order@example.com").await;
+    for name in ["Gamma", "Alpha", "Beta"] {
+        assert_eq!(
+            create_category(&pool, &web, name).await.status(),
+            StatusCode::CREATED
+        );
+    }
+    let first: Vec<String> = categories(&pool, &web)
+        .await
+        .iter()
+        .map(|c| c["name"].as_str().unwrap().to_string())
+        .collect();
+    // Ordre alphabétique déterministe, indépendant de l'ordre d'insertion.
+    assert_eq!(first, vec!["Alpha", "Beta", "Gamma"]);
+    // Stable : un second appel renvoie exactement le même ordre.
+    let second: Vec<String> = categories(&pool, &web)
+        .await
+        .iter()
+        .map(|c| c["name"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(first, second);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
 #[verifies(REQ-CAT-004)]
 async fn duplicate_name_in_same_household_is_rejected(pool: PgPool) {
     let web = account(&pool, "cat-dup@example.com").await;

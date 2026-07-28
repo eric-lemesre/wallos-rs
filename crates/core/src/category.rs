@@ -55,11 +55,13 @@ impl Category {
         &self.name
     }
 
-    /// Forme **canonique** du nom pour la comparaison d'unicité (REQ-CAT-004) : normalisée en minuscules.
+    /// Forme **canonique** du nom (REQ-CAT-004) : normalisée en minuscules, à titre **illustratif** de
+    /// la règle d'unicité insensible à la casse (« Streaming » et « streaming » sont homonymes).
     ///
-    /// Deux catégories du même foyer dont le nom canonique coïncide sont considérées homonymes (l'unicité
-    /// est **insensible à la casse** : « Streaming » et « streaming » entrent en collision). Aligné sur
-    /// l'index unique `(household_id, lower(name))` de la base.
+    /// **L'enforcement fait autorité est l'index unique `(household_id, lower(name))` de la base** : c'est
+    /// lui qui rejette les doublons. Ce helper core exprime la même intention côté domaine ; il peut
+    /// diverger de `lower()` PostgreSQL sur des cas Unicode exotiques (I turc, NFC/NFD) — raison pour
+    /// laquelle l'unicité est tranchée par la base (locale unique), jamais par une comparaison en `core`.
     #[must_use]
     #[requirement(REQ-CAT-004)]
     pub fn canonical_name(&self) -> String {

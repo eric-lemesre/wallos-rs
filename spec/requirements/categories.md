@@ -94,7 +94,7 @@ depends_on: [REQ-CAT-001]
 id: REQ-CAT-005
 title: Ordre d'affichage des catégories
 domain: categories
-status: draft
+status: verified
 criticality: low
 layer: [api, ui]
 e2e: optional
