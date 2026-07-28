@@ -136,5 +136,15 @@
     "label": "New currency (ISO code)",
     "save": "Save",
     "error": "Could not update the reference currency"
+  },
+  "language": {
+    "title": "Language",
+    "current": "Current language",
+    "choose": "Choose language",
+    "error": "Could not change the language",
+    "names": {
+      "en": "English",
+      "fr": "French"
+    }
   }
 }

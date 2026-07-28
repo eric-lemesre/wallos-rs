@@ -281,6 +281,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/settings/language": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lit la langue de l'utilisateur appelant (absente si non renseignée). */
+        get: operations["getLanguage"];
+        /** Fixe la langue de l'utilisateur appelant. */
+        put: operations["setLanguage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/settings/reference-currency": {
         parameters: {
             query?: never;
@@ -626,6 +644,19 @@ export interface components {
             version: string;
         };
         /**
+         * @description Langue de l'utilisateur (REQ-I18N-001), en **réponse** de lecture.
+         *
+         *     `language` est absent (`None`) si l'utilisateur n'a rien choisi : l'UI applique alors la langue
+         *     système si elle est supportée (acceptance #2).
+         */
+        LanguageResponse: {
+            /**
+             * @description Code de langue (`en`, `fr`), ou absent si non renseigné.
+             * @example fr
+             */
+            language?: string | null;
+        };
+        /**
          * @description Un montant en devise pour l'agrégation multi-devises (REQ-CUR-004).
          *
          *     `amount` est une **chaîne décimale** (règle R4 / REQ-CUR-002) : jamais un nombre JSON, qui
@@ -734,6 +765,14 @@ export interface components {
              * @example PayPal
              */
             name: string;
+        };
+        /** @description Requête de choix de langue (REQ-I18N-001) : le code doit être une langue supportée. */
+        SetLanguageRequest: {
+            /**
+             * @description Code de langue souhaité (`en`, `fr`).
+             * @example fr
+             */
+            language: string;
         };
         /**
          * @description Représentation d'un abonnement dans le contrat API (REQ-SUB-001).
@@ -1553,6 +1592,77 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    getLanguage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Langue de l'utilisateur (ou absente) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LanguageResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    setLanguage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetLanguageRequest"];
+            };
+        };
+        responses: {
+            /** @description Langue mise à jour */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LanguageResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Langue non supportée */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
             };
         };
     };

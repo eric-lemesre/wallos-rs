@@ -136,5 +136,15 @@
     "label": "Nouvelle devise (code ISO)",
     "save": "Enregistrer",
     "error": "Impossible de modifier la devise de référence"
+  },
+  "language": {
+    "title": "Langue",
+    "current": "Langue actuelle",
+    "choose": "Choisir la langue",
+    "error": "Impossible de modifier la langue",
+    "names": {
+      "en": "Anglais",
+      "fr": "Français"
+    }
   }
 }

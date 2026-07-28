@@ -166,6 +166,10 @@ async fn subscription_total_is_expressed_in_the_reference_currency(pool: PgPool)
     );
     let list = body_json(send(&pool, "GET", "/api/v1/subscriptions", Some(&web), None).await).await;
     assert_eq!(list["total"]["currency"], "USD");
+    // Revue CUR-001 : le total est **recalculé**, pas seulement réétiqueté. Sans taux EUR->USD connu,
+    // le montant EUR est exclu de l'agrégat (jamais réétiqueté "9.99 USD") -> total nul + incomplet.
+    assert_eq!(list["total"]["total"], "0");
+    assert_eq!(list["total"]["complete"], false);
     // Acceptance #2 : le montant/devise d'origine de l'abonnement sont conservés à l'identique.
     assert_eq!(list["subscriptions"][0]["amount"], "9.99");
     assert_eq!(list["subscriptions"][0]["currency"], "EUR");
@@ -262,6 +266,157 @@ async fn authz_anon_set_reference_currency(pool: PgPool) {
         send(&pool, "PUT", URI, None, Some(json!({ "currency": "USD" })))
             .await
             .status(),
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+// --- REQ-I18N-001 : langue de l'utilisateur ---
+
+const LANG_URI: &str = "/api/v1/settings/language";
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-I18N-001)]
+async fn language_defaults_absent_then_persists_a_choice(pool: PgPool) {
+    let web = account(&pool, "lang1@example.com").await;
+    // Non renseignée au départ : la réponse n'a pas de champ `language` (l'UI applique le système).
+    let r = send(&pool, "GET", LANG_URI, Some(&web), None).await;
+    assert_eq!(r.status(), StatusCode::OK);
+    assert!(body_json(r).await.get("language").is_none());
+
+    // Choix `fr` : persisté, relu à l'identique.
+    let r = send(
+        &pool,
+        "PUT",
+        LANG_URI,
+        Some(&web),
+        Some(json!({ "language": "fr" })),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::OK);
+    assert_eq!(body_json(r).await["language"], "fr");
+    let r = send(&pool, "GET", LANG_URI, Some(&web), None).await;
+    assert_eq!(body_json(r).await["language"], "fr");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-I18N-001)]
+async fn unsupported_language_is_rejected(pool: PgPool) {
+    let web = account(&pool, "lang-bad@example.com").await;
+    let r = send(
+        &pool,
+        "PUT",
+        LANG_URI,
+        Some(&web),
+        Some(json!({ "language": "de" })),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    // Reste non renseignée (inchangée).
+    let r = send(&pool, "GET", LANG_URI, Some(&web), None).await;
+    assert!(body_json(r).await.get("language").is_none());
+}
+
+// --- Autorisation §9 : getLanguage ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-I18N-001)]
+async fn authz_owner_get_language(pool: PgPool) {
+    let web = account(&pool, "own-gl@example.com").await;
+    assert_eq!(
+        send(&pool, "GET", LANG_URI, Some(&web), None)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-I18N-001)]
+async fn authz_other_get_language(pool: PgPool) {
+    // Chaque utilisateur lit **sa propre** langue : un autre ne voit jamais le choix d'autrui.
+    let owner = account(&pool, "owner-gl@example.com").await;
+    assert_eq!(
+        send(
+            &pool,
+            "PUT",
+            LANG_URI,
+            Some(&owner),
+            Some(json!({ "language": "fr" }))
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    let other = account(&pool, "other-gl@example.com").await;
+    let r = send(&pool, "GET", LANG_URI, Some(&other), None).await;
+    assert_eq!(r.status(), StatusCode::OK);
+    assert!(body_json(r).await.get("language").is_none()); // son propre défaut, pas le `fr` du owner
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-I18N-001)]
+async fn authz_anon_get_language(pool: PgPool) {
+    assert_eq!(
+        send(&pool, "GET", LANG_URI, None, None).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+// --- Autorisation §9 : setLanguage ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-I18N-001)]
+async fn authz_owner_set_language(pool: PgPool) {
+    let web = account(&pool, "own-sl@example.com").await;
+    assert_eq!(
+        send(
+            &pool,
+            "PUT",
+            LANG_URI,
+            Some(&web),
+            Some(json!({ "language": "en" }))
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-I18N-001)]
+async fn authz_other_set_language(pool: PgPool) {
+    // Chaque utilisateur ne modifie que sa propre langue ; celle du owner reste inchangée.
+    let owner = account(&pool, "owner-sl@example.com").await;
+    let other = account(&pool, "other-sl@example.com").await;
+    assert_eq!(
+        send(
+            &pool,
+            "PUT",
+            LANG_URI,
+            Some(&other),
+            Some(json!({ "language": "fr" }))
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    let r = send(&pool, "GET", LANG_URI, Some(&owner), None).await;
+    assert!(body_json(r).await.get("language").is_none());
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-I18N-001)]
+async fn authz_anon_set_language(pool: PgPool) {
+    assert_eq!(
+        send(
+            &pool,
+            "PUT",
+            LANG_URI,
+            None,
+            Some(json!({ "language": "fr" }))
+        )
+        .await
+        .status(),
         StatusCode::UNAUTHORIZED
     );
 }
