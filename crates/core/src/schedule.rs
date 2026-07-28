@@ -1,0 +1,192 @@
+//! Calcul des échéances (REQ-SUB-012 — cycle mensuel).
+//!
+//! **Ancrage + clamp** (ADR 0022, override délibéré du débordement PHP de Wallos) : l'occurrence *k*
+//! est calculée depuis l'**ancre** (date de premier paiement), `ancre + k × intervalle`, avec clamp
+//! au dernier jour du mois quand le jour d'origine n'existe pas (`checked_add_months`). La prochaine
+//! échéance est la plus petite occurrence **strictement postérieure** à la date de référence — le
+//! calcul depuis l'ancre garantit le retour au 31 mars après un clamp au 28 février (jamais ancré au 28).
+//!
+//! Le modèle est une **date** (`NaiveDate`) : immunisé aux changements d'heure par construction (une
+//! date calendaire n'a pas d'heure). La facturation à l'heure près est hors périmètre (cf. revue).
+
+use chrono::{Days, Months, NaiveDate};
+use wallos_req_macros::requirement;
+
+use crate::billing::{BillingCycle, BillingUnit};
+
+/// `k`-ième occurrence depuis l'ancre : `ancre + k × intervalle` (unité du cycle), ancrée et clampée.
+///
+/// `None` si le calcul déborde la plage représentable (date astronomiquement lointaine).
+#[requirement(REQ-SUB-012)]
+fn occurrence(anchor: NaiveDate, cycle: BillingCycle, k: u32) -> Option<NaiveDate> {
+    let steps = cycle.interval().checked_mul(k)?;
+    match cycle.unit() {
+        BillingUnit::Day => anchor.checked_add_days(Days::new(u64::from(steps))),
+        BillingUnit::Week => anchor.checked_add_days(Days::new(u64::from(steps) * 7)),
+        BillingUnit::Month => anchor.checked_add_months(Months::new(steps)),
+        BillingUnit::Year => anchor.checked_add_months(Months::new(steps.checked_mul(12)?)),
+    }
+}
+
+/// Prochaine échéance strictement postérieure à `after`, pour un abonnement démarré à `anchor`.
+///
+/// Rattrapage inclus : si plusieurs échéances sont passées, renvoie la première encore future (les
+/// occurrences sont strictement croissantes, donc la boucle termine toujours).
+///
+/// Renvoie `None` uniquement en cas de débordement de plage (non atteignable pour des dates réelles).
+/// Borne d'itération : garde-fou contre une entrée dégénérée (occurrences non croissantes) — bien
+/// au-delà de tout rattrapage réel (100 000 jours ≈ 273 ans). Au-delà, on renvoie `None`.
+const MAX_STEPS: u32 = 100_000;
+
+#[requirement(REQ-SUB-012)]
+pub fn next_due(anchor: NaiveDate, cycle: BillingCycle, after: NaiveDate) -> Option<NaiveDate> {
+    // Boucle bornée par construction (garde-fou anti-boucle infinie sur entrée dégénérée). Les
+    // occurrences sont strictement croissantes, donc pour une entrée réelle on sort bien avant la borne.
+    for k in 0..MAX_STEPS {
+        let occ = occurrence(anchor, cycle, k)?;
+        if occ > after {
+            return Some(occ);
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use wallos_req_macros::verifies;
+
+    use super::*;
+    use crate::billing::BillingUnit;
+
+    fn day(y: i32, m: u32, d: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
+    fn monthly(interval: u32) -> BillingCycle {
+        BillingCycle::from_parts(BillingUnit::Month, interval).unwrap()
+    }
+
+    fn cycle(unit: BillingUnit, interval: u32) -> BillingCycle {
+        BillingCycle::from_parts(unit, interval).unwrap()
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-012, case = "31 janv -> 28 févr (clamp, non bissextile)")]
+    fn end_of_month_clamps_to_february() {
+        assert_eq!(
+            next_due(day(2025, 1, 31), monthly(1), day(2025, 1, 31)),
+            Some(day(2025, 2, 28))
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-012, case = "31 janv -> 29 févr (bissextile)")]
+    fn end_of_month_clamps_to_leap_february() {
+        assert_eq!(
+            next_due(day(2024, 1, 31), monthly(1), day(2024, 1, 31)),
+            Some(day(2024, 2, 29))
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-012, case = "revient au 31 mars, pas ancré au 28 févr")]
+    fn returns_to_31_after_clamp() {
+        // Depuis l'échéance clampée au 28 févr, la suivante est le 31 mars (recalcul depuis l'ancre).
+        assert_eq!(
+            next_due(day(2025, 1, 31), monthly(1), day(2025, 2, 28)),
+            Some(day(2025, 3, 31))
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-012, case = "prochaine après une date en cours de mois")]
+    fn next_after_mid_month() {
+        assert_eq!(
+            next_due(day(2025, 1, 31), monthly(1), day(2025, 2, 15)),
+            Some(day(2025, 2, 28))
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-012, case = "intervalle 3 (trimestriel) clampé")]
+    fn quarterly_clamps() {
+        // 31 janv + 3 mois -> 30 avril (avril n'a pas de 31).
+        assert_eq!(
+            next_due(day(2025, 1, 31), monthly(3), day(2025, 1, 31)),
+            Some(day(2025, 4, 30))
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-012, case = "rattrapage : strictement postérieure")]
+    fn catches_up_to_first_future_occurrence() {
+        // Plusieurs échéances passées : renvoie la première future (31 mai), pas une date passée.
+        assert_eq!(
+            next_due(day(2025, 1, 31), monthly(1), day(2025, 5, 15)),
+            Some(day(2025, 5, 31))
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-012, case = "autres unités : jour/semaine/année (branches de next_due)")]
+    fn day_week_year_units() {
+        // Jour : +1 et +10 jours.
+        assert_eq!(
+            next_due(day(2025, 1, 1), cycle(BillingUnit::Day, 1), day(2025, 1, 1)),
+            Some(day(2025, 1, 2))
+        );
+        assert_eq!(
+            next_due(
+                day(2025, 1, 1),
+                cycle(BillingUnit::Day, 10),
+                day(2025, 1, 1)
+            ),
+            Some(day(2025, 1, 11))
+        );
+        // Semaine : +1 semaine = +7 jours (pas +1, ni /7).
+        assert_eq!(
+            next_due(
+                day(2025, 1, 1),
+                cycle(BillingUnit::Week, 1),
+                day(2025, 1, 1)
+            ),
+            Some(day(2025, 1, 8))
+        );
+        assert_eq!(
+            next_due(
+                day(2025, 1, 1),
+                cycle(BillingUnit::Week, 2),
+                day(2025, 1, 1)
+            ),
+            Some(day(2025, 1, 15))
+        );
+        // Année : +1 an, avec clamp du 29 févr bissextile vers 28 févr.
+        assert_eq!(
+            next_due(
+                day(2025, 1, 1),
+                cycle(BillingUnit::Year, 1),
+                day(2025, 1, 1)
+            ),
+            Some(day(2026, 1, 1))
+        );
+        assert_eq!(
+            next_due(
+                day(2024, 2, 29),
+                cycle(BillingUnit::Year, 1),
+                day(2024, 2, 29)
+            ),
+            Some(day(2025, 2, 28))
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-012, case = "date immunisée aux changements d'heure")]
+    fn date_is_dst_immune() {
+        // 2025-03-30 est un jour de passage à l'heure d'été en zone Europe. Au niveau DATE, l'échéance
+        // est exactement le 30 mars, sans décalage (le modèle n'a pas d'heure).
+        assert_eq!(
+            next_due(day(2025, 1, 30), monthly(1), day(2025, 3, 1)),
+            Some(day(2025, 3, 30))
+        );
+    }
+}

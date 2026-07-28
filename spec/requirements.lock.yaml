@@ -718,7 +718,7 @@ requirements:
 - id: REQ-SUB-012
   title: Calcul de la prochaine échéance pour un cycle mensuel
   domain: subscriptions
-  status: draft
+  status: verified
   criticality: high
   layer:
   - core

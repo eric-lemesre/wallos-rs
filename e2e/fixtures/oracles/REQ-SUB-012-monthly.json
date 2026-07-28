@@ -1,0 +1,21 @@
+{
+  "_requirement": "REQ-SUB-012",
+  "_decision": "ADR 0022 — subtrack implémente ancrage+clamp (acceptation spec) ; le débordement PHP de Wallos est rejeté comme bug.",
+  "wallos_captured": {
+    "_source": "Wallos 5.4.2 endpoints/cronjobs/updatenextpayment.php (add DateInterval P{n}M à la date COURANTE, débordement PHP), vérifié en exécutant le PHP.",
+    "_note": "Conservé pour traçabilité — NON implémenté.",
+    "monthly_from_2025_01_31": ["2025-03-03", "2025-04-03", "2025-05-03"],
+    "monthly_from_2024_01_31_leap": ["2024-03-02", "2024-04-02"]
+  },
+  "subtrack_rule": {
+    "_rule": "occurrence(k) = ancre + k mois (ancré au jour d'origine, clamp fin de mois). Prochaine = plus petite occurrence strictement > date de référence.",
+    "vectors": [
+      { "anchor": "2025-01-31", "interval": 1, "after": "2025-01-31", "next": "2025-02-28", "why": "31 janv -> 28 févr (clamp, non bissextile)" },
+      { "anchor": "2024-01-31", "interval": 1, "after": "2024-01-31", "next": "2024-02-29", "why": "31 janv -> 29 févr (bissextile)" },
+      { "anchor": "2025-01-31", "interval": 1, "after": "2025-02-28", "next": "2025-03-31", "why": "revient au 31 mars, pas ancré au 28" },
+      { "anchor": "2025-01-31", "interval": 1, "after": "2025-02-15", "next": "2025-02-28", "why": "prochaine après mi-février" },
+      { "anchor": "2025-01-31", "interval": 3, "after": "2025-01-31", "next": "2025-04-30", "why": "trimestriel : +3 mois -> 30 avril (clamp)" },
+      { "anchor": "2025-01-31", "interval": 1, "after": "2025-05-15", "next": "2025-05-31", "why": "rattrapage : strictement postérieure" }
+    ]
+  }
+}

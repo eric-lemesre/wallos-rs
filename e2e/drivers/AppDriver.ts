@@ -40,6 +40,12 @@ export interface AppDriver {
   /** Vrai si aucune catégorie de ce nom n'apparaît (isolation / suppression). */
   categoryAbsent(name: string): Promise<boolean>;
 
+  // Calcul d'échéance (REQ-SUB-012).
+  /** Renseigne ancre/unité/intervalle/date de référence et déclenche le calcul. */
+  computeNextDue(anchor: string, unit: string, interval: string, after: string): Promise<void>;
+  /** Texte de la prochaine échéance affichée. */
+  readNextDue(): Promise<string>;
+
   // Agrégation multi-devises en mode dégradé (REQ-CUR-004).
   /** Saisit une devise cible et des montants, puis déclenche le calcul de l'agrégat. */
   computeAggregate(target: string, amounts: MoneyInput[]): Promise<void>;

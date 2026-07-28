@@ -169,6 +169,21 @@ export class TargetDriver implements AppDriver, Harness {
     }
   }
 
+  // --- Calcul d'échéance (REQ-SUB-012) ---
+
+  async computeNextDue(anchor: string, unit: string, interval: string, after: string): Promise<void> {
+    await this.page.getByTestId("nextdue-anchor").fill(anchor);
+    await this.page.getByTestId("nextdue-unit").selectOption(unit);
+    await this.page.getByTestId("nextdue-interval").fill(interval);
+    await this.page.getByTestId("nextdue-after").fill(after);
+    await this.page.getByTestId("nextdue-compute").click();
+  }
+
+  async readNextDue(): Promise<string> {
+    await this.page.getByTestId("nextdue-result").waitFor({ state: "visible", timeout: 5000 });
+    return (await this.page.getByTestId("nextdue-result").textContent()) ?? "";
+  }
+
   // --- Catégories (REQ-CAT-001) ---
 
   async createCategory(name: string): Promise<void> {

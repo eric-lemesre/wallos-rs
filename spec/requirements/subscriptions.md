@@ -260,7 +260,7 @@ depends_on: [REQ-SUB-001]
 id: REQ-SUB-012
 title: Calcul de la prochaine échéance pour un cycle mensuel
 domain: subscriptions
-status: draft
+status: verified
 criticality: high
 layer: [core, api, ui]
 e2e: required

@@ -173,6 +173,30 @@ pub struct DeviceSummary {
     pub current: bool,
 }
 
+/// Requête de calcul de la prochaine échéance (REQ-SUB-012).
+///
+/// `first_payment` est l'**ancre** (date de premier paiement) ; `after` est la date de référence — la
+/// réponse est la première échéance strictement postérieure. Dates en `YYYY-MM-DD`.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct NextDueRequest {
+    /// Date de premier paiement (ancre), `YYYY-MM-DD`.
+    #[schema(example = "2025-01-31")]
+    pub first_payment: String,
+    /// Cycle de facturation.
+    pub cycle: BillingCycleDto,
+    /// Date de référence : la prochaine échéance est strictement postérieure, `YYYY-MM-DD`.
+    #[schema(example = "2025-01-31")]
+    pub after: String,
+}
+
+/// Prochaine échéance calculée (REQ-SUB-012).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct NextDueResponse {
+    /// Prochaine échéance, `YYYY-MM-DD`.
+    #[schema(example = "2025-02-28")]
+    pub next_payment: String,
+}
+
 /// Une catégorie d'abonnements exposée à l'interface (REQ-CAT-001).
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct CategoryDto {

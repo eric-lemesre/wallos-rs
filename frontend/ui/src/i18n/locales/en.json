@@ -71,5 +71,21 @@
     "rename": "Rename",
     "delete": "Delete",
     "loadError": "Could not load categories"
+  },
+  "nextDue": {
+    "title": "Next payment date",
+    "firstPayment": "First payment",
+    "unit": "Unit",
+    "interval": "Interval",
+    "after": "After date",
+    "compute": "Compute",
+    "result": "Next payment",
+    "error": "Could not compute the next payment",
+    "units": {
+      "day": "Day",
+      "week": "Week",
+      "month": "Month",
+      "year": "Year"
+    }
   }
 }
