@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/currencies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Liste les devises supportées (code, symbole, libellé, décimales), pour l'interface. */
+        get: operations["listCurrencies"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/device-sessions": {
         parameters: {
             query?: never;
@@ -307,6 +324,34 @@ export interface components {
              */
             password: string;
         };
+        /**
+         * @description Une devise du référentiel supporté exposée à l'interface (REQ-CUR-007).
+         *
+         *     `name` est le libellé par défaut (anglais) ; l'UI affiche le nom **localisé** par code (i18n).
+         */
+        CurrencyDto: {
+            /**
+             * @description Code ISO 4217.
+             * @example EUR
+             */
+            code: string;
+            /**
+             * Format: int32
+             * @description Nombre de décimales d'affichage (unités mineures ISO 4217).
+             * @example 2
+             */
+            decimals: number;
+            /**
+             * @description Libellé par défaut (localisé par l'UI).
+             * @example Euro
+             */
+            name: string;
+            /**
+             * @description Symbole d'affichage.
+             * @example €
+             */
+            symbol: string;
+        };
         /** @description Représentation du compte authentifié courant (REQ-AUT-002). */
         CurrentUser: {
             /** @description Adresse e-mail du compte courant. */
@@ -423,6 +468,35 @@ export interface operations {
             };
             /** @description Requête invalide */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listCurrencies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Référentiel des devises supportées */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrencyDto"][];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -246,7 +246,7 @@ requirements:
 - id: REQ-CUR-007
   title: Référentiel des devises supportées
   domain: currencies
-  status: draft
+  status: verified
   criticality: medium
   layer:
   - core

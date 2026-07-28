@@ -58,5 +58,10 @@
     "asOf": "Rates as of {{date}}",
     "incomplete": "Incomplete aggregate: some amounts were excluded (no known rate).",
     "error": "Could not compute the total"
+  },
+  "currencies": {
+    "title": "Supported currencies",
+    "loadError": "Could not load currencies",
+    "decimals": "Decimals"
   }
 }
