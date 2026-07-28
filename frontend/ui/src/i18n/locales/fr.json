@@ -118,6 +118,8 @@
     "save": "Enregistrer",
     "editAmount": "Montant",
     "editUnit": "Unité de cycle",
-    "editInterval": "Intervalle"
+    "editInterval": "Intervalle",
+    "editActive": "Actif",
+    "saveError": "Impossible d'enregistrer la modification"
   }
 }

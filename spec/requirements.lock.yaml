@@ -665,7 +665,7 @@ requirements:
 - id: REQ-SUB-008
   title: Abonnement désactivé
   domain: subscriptions
-  status: draft
+  status: verified
   criticality: medium
   layer:
   - core

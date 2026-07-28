@@ -196,6 +196,21 @@ fn row_to_dto(row: SubscriptionRow, today: NaiveDate) -> SubscriptionDto {
     }
 }
 
+/// Montants des abonnements **actifs** d'un lot (REQ-SUB-008) : un abonnement désactivé est exclu de
+/// l'agrégat (conservé dans la liste, mais ne pèse sur aucun total). Une ligne à la devise ou au montant
+/// illisible est ignorée du total (jamais traitée comme zéro silencieux dans le calcul).
+#[requirement(REQ-SUB-008)]
+fn active_amounts(rows: &[SubscriptionRow]) -> Vec<Money> {
+    rows.iter()
+        .filter(|r| r.active)
+        .filter_map(|r| {
+            CurrencyCode::new(&r.currency)
+                .ok()
+                .and_then(|c| Money::new(r.amount, c).ok())
+        })
+        .collect()
+}
+
 /// Parse un identifiant de filtre optionnel (UUID) ; `Err` nomme le champ fautif (→ 422).
 #[requirement(REQ-SUB-006)]
 fn filter_id(raw: Option<String>, field: &'static str) -> Result<Option<Uuid>, FieldError> {
@@ -255,17 +270,8 @@ pub async fn list_subscriptions(
         );
     };
 
-    // Total = somme convertie des abonnements **actifs** du sous-ensemble filtré (REQ-SUB-008 : un
-    // abonnement désactivé figure dans la liste mais est exclu de l'agrégat).
-    let amounts: Vec<Money> = rows
-        .iter()
-        .filter(|r| r.active)
-        .filter_map(|r| {
-            CurrencyCode::new(&r.currency)
-                .ok()
-                .and_then(|c| Money::new(r.amount, c).ok())
-        })
-        .collect();
+    // Total = somme convertie des abonnements **actifs** du sous-ensemble filtré (REQ-SUB-008).
+    let amounts = active_amounts(&rows);
     // Pas de montant actif à agréger (ex. filtre `active=false`) : total nul sans charger les taux
     // (revue SUB-006 #8 — évite un aller-retour base inutile).
     let table = if amounts.is_empty() {

@@ -250,6 +250,17 @@ export class TargetDriver implements AppDriver, Harness {
     return (await row.getByTestId("subscription-amount").textContent()) ?? "";
   }
 
+  // --- Abonnement désactivé (REQ-SUB-008) ---
+
+  async deactivateSubscription(name: string): Promise<void> {
+    const row = this.page.getByTestId("subscription-row").filter({ hasText: name });
+    await row.getByTestId("subscription-edit").click();
+    await row.getByTestId("subscription-active").uncheck();
+    await row.getByTestId("subscription-save").click();
+    // Attend que la liste rechargée reflète l'exclusion du total (total nul).
+    await this.page.getByTestId("subscriptions-total").waitFor({ state: "visible", timeout: 5000 });
+  }
+
   // --- Calcul d'échéance (REQ-SUB-012) ---
 
   async computeNextDue(anchor: string, unit: string, interval: string, after: string): Promise<void> {

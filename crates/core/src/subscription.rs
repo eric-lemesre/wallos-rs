@@ -214,6 +214,17 @@ impl Subscription {
         self.active
     }
 
+    /// Éligibilité aux rappels d'échéance (REQ-SUB-008).
+    ///
+    /// Un abonnement **désactivé ne déclenche aucun rappel** : il est conservé mais dormant.
+    /// L'ordonnanceur de notifications (REQ-NOT-002) consomme ce prédicat ; le domaine ne connaît pas
+    /// l'horloge (la décision « la fin approche » est prise ailleurs, avec la date injectée).
+    #[must_use]
+    #[requirement(REQ-SUB-008)]
+    pub const fn emits_reminder(&self) -> bool {
+        self.active
+    }
+
     /// Prochaine échéance après modification (REQ-SUB-004), strictement postérieure à `after`.
     ///
     /// **Recalculée à partir de la date de premier paiement et du cycle courant** (dérivée pure via
@@ -332,6 +343,15 @@ mod tests {
             yearly.next_due_after(after),
             NaiveDate::from_ymd_opt(2027, 1, 31)
         );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-008, case = "abonnement désactivé n'émet aucun rappel")]
+    fn inactive_subscription_emits_no_reminder() {
+        let active =
+            Subscription::new(Uuid::from_u128(1), "N", money("1", "EUR"), cycle(), day()).unwrap();
+        assert!(active.emits_reminder());
+        assert!(!active.with_active(false).emits_reminder());
     }
 
     #[test]
