@@ -757,7 +757,7 @@ requirements:
 - id: REQ-SUB-015
   title: Logo d'abonnement
   domain: subscriptions
-  status: draft
+  status: verified
   criticality: low
   layer:
   - api

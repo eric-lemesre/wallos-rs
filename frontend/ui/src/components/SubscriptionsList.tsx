@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
 import type { components } from "../api/client";
+import { SubscriptionLogo } from "./SubscriptionLogo";
 
 type SubscriptionListResponse = components["schemas"]["SubscriptionListResponse"];
 type SubscriptionDto = components["schemas"]["SubscriptionDto"];
@@ -206,6 +207,7 @@ function SubscriptionRow({
 
   return (
     <li data-testid="subscription-row">
+      <SubscriptionLogo name={sub.name} logo={sub.logo} />
       <span data-testid="subscription-name">{sub.name}</span>
       <span data-testid="subscription-amount">
         {sub.amount} {sub.currency}
