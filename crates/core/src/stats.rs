@@ -19,8 +19,9 @@ use crate::money::{CurrencyCode, Money};
 /// Montants entrant dans les agrégats statistiques (REQ-SUB-008).
 ///
 /// Un abonnement **désactivé** est **exclu de tous les agrégats** : il est conservé mais ne pèse sur
-/// aucun total. Seuls les abonnements actifs contribuent leur prix. C'est le point de sélection unique
-/// que les exigences `REQ-STA-*` (normalisation, répartitions) et la vue liste (REQ-SUB-006) partagent.
+/// aucun total. Seuls les abonnements actifs contribuent leur prix. C'est la primitive de domaine que
+/// les exigences `REQ-STA-*` (normalisation, répartitions) consomment ; côté API, la vue liste applique
+/// la même règle (`active`) au niveau des lignes stockées (`server::subscriptions::active_amounts`).
 #[requirement(REQ-SUB-008)]
 pub fn billable_amounts(subscriptions: &[Subscription]) -> Vec<Money> {
     subscriptions

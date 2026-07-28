@@ -78,12 +78,18 @@ export function SubscriptionsList() {
         notes: sub.notes,
         active: patch.active,
       };
-      const { response } = await api.PUT("/subscriptions/{id}", {
-        params: { path: { id: sub.id } },
-        body,
-      });
-      // Revue SUB-004 #2 : un échec du PUT est signalé (jamais un rechargement silencieux).
-      if (!response.ok) {
+      // Revue SUB-004 #2 / SUB-008 : tout échec du PUT — statut HTTP d'erreur **ou** exception réseau
+      // (fetch rejeté) — est signalé (jamais un rechargement silencieux, jamais une exception non gérée).
+      try {
+        const { response } = await api.PUT("/subscriptions/{id}", {
+          params: { path: { id: sub.id } },
+          body,
+        });
+        if (!response.ok) {
+          setSaveFailed(true);
+          return false;
+        }
+      } catch {
         setSaveFailed(true);
         return false;
       }

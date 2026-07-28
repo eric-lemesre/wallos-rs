@@ -121,5 +121,13 @@
     "editInterval": "Interval",
     "editActive": "Active",
     "saveError": "Could not save the change"
+  },
+  "paymentMethods": {
+    "title": "Payment methods",
+    "name": "Name",
+    "create": "Add",
+    "rename": "Rename",
+    "delete": "Delete",
+    "loadError": "Could not load payment methods"
   }
 }

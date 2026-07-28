@@ -121,5 +121,13 @@
     "editInterval": "Intervalle",
     "editActive": "Actif",
     "saveError": "Impossible d'enregistrer la modification"
+  },
+  "paymentMethods": {
+    "title": "Moyens de paiement",
+    "name": "Nom",
+    "create": "Ajouter",
+    "rename": "Renommer",
+    "delete": "Supprimer",
+    "loadError": "Impossible de charger les moyens de paiement"
   }
 }

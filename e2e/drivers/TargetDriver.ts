@@ -304,6 +304,35 @@ export class TargetDriver implements AppDriver, Harness {
     );
   }
 
+  // --- Moyens de paiement (REQ-SUB-011) ---
+
+  async createPaymentMethod(name: string): Promise<void> {
+    await this.page.getByTestId("payment-method-new-name").fill(name);
+    await this.page.getByTestId("payment-method-create").click();
+  }
+
+  async paymentMethodVisible(name: string): Promise<boolean> {
+    try {
+      await this.page
+        .getByTestId("payment-method-name")
+        .filter({ hasText: name })
+        .first()
+        .waitFor({ state: "visible", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async paymentMethodAbsent(name: string): Promise<boolean> {
+    await this.page
+      .getByTestId("payment-methods-list")
+      .waitFor({ state: "visible", timeout: 5000 });
+    return (
+      (await this.page.getByTestId("payment-method-name").filter({ hasText: name }).count()) === 0
+    );
+  }
+
   // --- Agrégation multi-devises en mode dégradé (REQ-CUR-004) ---
 
   async computeAggregate(target: string, amounts: MoneyInput[]): Promise<void> {

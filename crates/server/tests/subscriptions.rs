@@ -419,6 +419,43 @@ async fn inactive_subscription_is_excluded_from_total(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-008)]
+async fn deactivating_then_reactivating_via_put_toggles_the_total(pool: PgPool) {
+    // Revue SUB-008 : le chemin utilisateur réel (PUT active) bascule l'inclusion dans le total.
+    let web = account(&pool, "sub008-put@example.com").await;
+    let id = create_id(&pool, &web, sub_body("Netflix", "9.99", None, true)).await;
+    assert_eq!(list(&pool, &web, "").await["total"]["total"], "9.99");
+
+    // Désactivation via PUT : réponse `active:false` et total exclut désormais l'abonnement.
+    let mut off = sub_body("Netflix", "9.99", None, false);
+    off["first_payment"] = json!("2030-01-15");
+    let r = put(
+        &pool,
+        &format!("/api/v1/subscriptions/{id}"),
+        off,
+        Some(&web),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::OK);
+    assert_eq!(body_json(r).await["active"], false);
+    let after_off = list(&pool, &web, "").await;
+    assert_eq!(after_off["subscriptions"].as_array().unwrap().len(), 1); // conservé
+    assert_eq!(after_off["total"]["total"], "0"); // exclu du total
+
+    // Réactivation via PUT : l'abonnement repèse de nouveau sur le total.
+    let on = sub_body("Netflix", "9.99", None, true);
+    let r = put(
+        &pool,
+        &format!("/api/v1/subscriptions/{id}"),
+        on,
+        Some(&web),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::OK);
+    assert_eq!(list(&pool, &web, "").await["total"]["total"], "9.99");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
 #[verifies(REQ-SUB-006)]
 async fn invalid_filter_is_rejected_per_field(pool: PgPool) {
     let web = account(&pool, "list-bad@example.com").await;

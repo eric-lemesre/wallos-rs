@@ -705,7 +705,7 @@ requirements:
 - id: REQ-SUB-011
   title: Moyen de paiement
   domain: subscriptions
-  status: draft
+  status: verified
   criticality: low
   layer:
   - core
