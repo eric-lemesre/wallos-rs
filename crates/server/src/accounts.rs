@@ -47,13 +47,13 @@ pub async fn create_account(
     State(db): State<Db>,
     Json(req): Json<CreateAccountRequest>,
 ) -> Response {
-    if let Err(error) = enforce_password_policy(&req.password) {
+    if let Err(error) = enforce_password_policy(req.password.expose_secret()) {
         let body =
             problem(422, "about:blank", "Unprocessable Entity").with_detail(error.message_key());
         return problem_response(StatusCode::UNPROCESSABLE_ENTITY, body);
     }
 
-    let Ok(hash) = hash_password(&req.password) else {
+    let Ok(hash) = hash_password(req.password.expose_secret()) else {
         let body = problem(500, "about:blank", "Internal Server Error");
         return problem_response(StatusCode::INTERNAL_SERVER_ERROR, body);
     };

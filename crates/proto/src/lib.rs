@@ -4,9 +4,58 @@
 
 #![forbid(unsafe_code)]
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use wallos_core::requirement;
+
+/// Enveloppe un secret (mot de passe, jeton d'appareil, clé de canal de notification) — REQ-SEC-003.
+///
+/// La protection est **portée par le type**, pas par une liste de champs à maintenir : `Debug` et
+/// `Display` masquent **toujours** la valeur (`[REDACTED]`), y compris au niveau de trace le plus
+/// détaillé, si bien qu'un secret ne peut pas se retrouver dans un journal même par inadvertance.
+/// La sérialisation reste **transparente** (`#[serde(transparent)]`) : la valeur circule normalement
+/// sur le canal TLS (corps de requête/réponse), jamais dans les logs. Les champs sensibles des DTO
+/// annotent `#[schema(value_type = String)]` pour conserver un schéma OpenAPI inchangé (chaîne).
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Secret<T = String>(T);
+
+impl<T> Secret<T> {
+    /// Enveloppe une valeur secrète.
+    pub const fn new(value: T) -> Self {
+        Self(value)
+    }
+
+    /// Expose la valeur en clair — à n'appeler que pour l'usage métier (hachage, vérification,
+    /// émission au client), jamais pour journaliser.
+    #[requirement(REQ-SEC-003)]
+    pub const fn expose_secret(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T> From<T> for Secret<T> {
+    fn from(value: T) -> Self {
+        Self(value)
+    }
+}
+
+impl<T> fmt::Debug for Secret<T> {
+    /// Masque toujours la valeur (REQ-SEC-003) : `Debug` est le format employé par `tracing`.
+    #[requirement(REQ-SEC-003)]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Secret([REDACTED])")
+    }
+}
+
+impl<T> fmt::Display for Secret<T> {
+    #[requirement(REQ-SEC-003)]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("[REDACTED]")
+    }
+}
 
 /// Réponse d'état du serveur.
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -30,11 +79,12 @@ pub struct CreateAccountRequest {
     pub email: String,
     /// Mot de passe (longueur minimale vérifiée côté serveur, REQ-AUT-003).
     #[schema(
+        value_type = String,
         example = "correct horse battery staple",
         min_length = 12,
         format = "password"
     )]
-    pub password: String,
+    pub password: Secret<String>,
 }
 
 /// Requête d'authentification (REQ-AUT-002).
@@ -44,8 +94,8 @@ pub struct CreateSessionRequest {
     #[schema(example = "user@example.com", format = "email")]
     pub email: String,
     /// Mot de passe.
-    #[schema(format = "password")]
-    pub password: String,
+    #[schema(value_type = String, format = "password")]
+    pub password: Secret<String>,
 }
 
 /// Représentation du compte authentifié courant (REQ-AUT-002).
@@ -65,8 +115,8 @@ pub struct CreateDeviceSessionRequest {
     #[schema(example = "user@example.com", format = "email")]
     pub email: String,
     /// Mot de passe.
-    #[schema(format = "password")]
-    pub password: String,
+    #[schema(value_type = String, format = "password")]
+    pub password: Secret<String>,
     /// Libellé lisible de l'appareil (choisi par l'utilisateur ou dérivé du matériel).
     #[schema(example = "MacBook de Léa")]
     pub label: String,
@@ -82,7 +132,8 @@ pub struct CreateDeviceSessionRequest {
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct DeviceToken {
     /// Jeton opaque à présenter en `Authorization: Bearer`.
-    pub token: String,
+    #[schema(value_type = String)]
+    pub token: Secret<String>,
 }
 
 /// Requête de changement de mot de passe (REQ-AUT-007).
@@ -91,11 +142,11 @@ pub struct DeviceToken {
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct ChangePasswordRequest {
     /// Mot de passe actuel, revérifié côté serveur.
-    #[schema(format = "password")]
-    pub current_password: String,
+    #[schema(value_type = String, format = "password")]
+    pub current_password: Secret<String>,
     /// Nouveau mot de passe (longueur minimale + non compromis, REQ-AUT-003).
-    #[schema(format = "password", min_length = 12)]
-    pub new_password: String,
+    #[schema(value_type = String, format = "password", min_length = 12)]
+    pub new_password: Secret<String>,
 }
 
 /// Résumé d'un appareil appairé, pour la liste de gestion (REQ-AUT-006).
@@ -275,6 +326,46 @@ mod tests {
         .unwrap();
         assert!(output["total"].is_string());
         assert_eq!(output["total"], "142.50");
+    }
+
+    #[test]
+    #[verifies(REQ-SEC-003, case = "Debug/Display masquent le secret")]
+    fn secret_is_redacted_in_debug_and_display() {
+        let s = Secret::new("hunter2-super-secret".to_string());
+        // `Debug` (le format utilisé par tracing) ne révèle jamais la valeur.
+        let dbg = format!("{s:?}");
+        assert_eq!(dbg, "Secret([REDACTED])");
+        assert!(!dbg.contains("hunter2"));
+        // `Display` non plus.
+        assert_eq!(format!("{s}"), "[REDACTED]");
+        // Un DTO entier journalisé (Debug) masque le champ secret sans masquer le reste.
+        let req = CreateSessionRequest {
+            email: "user@example.com".to_string(),
+            password: Secret::new("hunter2-super-secret".to_string()),
+        };
+        let dbg = format!("{req:?}");
+        assert!(dbg.contains("user@example.com"));
+        assert!(!dbg.contains("hunter2"));
+        assert!(dbg.contains("[REDACTED]"));
+    }
+
+    #[test]
+    #[verifies(REQ-SEC-003, case = "serde reste transparent")]
+    fn secret_serialises_transparently() {
+        // Sur le canal TLS, la valeur circule normalement (jamais masquée à la sérialisation) :
+        // le masquage ne concerne QUE les journaux (Debug/Display).
+        let req = CreateSessionRequest {
+            email: "user@example.com".to_string(),
+            password: Secret::new("hunter2".to_string()),
+        };
+        let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(json["password"], "hunter2");
+
+        // Et un secret se relit depuis une chaîne JSON (désérialisation transparente).
+        let parsed: CreateSessionRequest =
+            serde_json::from_value(serde_json::json!({ "email": "a@b.c", "password": "pw" }))
+                .unwrap();
+        assert_eq!(parsed.password.expose_secret(), "pw");
     }
 
     #[test]

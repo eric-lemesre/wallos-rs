@@ -293,7 +293,15 @@ pub async fn create_session(
     Json(req): Json<CreateSessionRequest>,
 ) -> Response {
     let now = Utc::now();
-    let actor = match authenticate(&db, &req.email, &req.password, ip.as_deref(), now).await {
+    let actor = match authenticate(
+        &db,
+        &req.email,
+        req.password.expose_secret(),
+        ip.as_deref(),
+        now,
+    )
+    .await
+    {
         Ok(actor) => actor,
         Err(rejection) => return rejection,
     };
@@ -350,7 +358,15 @@ pub async fn create_device_session(
     Json(req): Json<CreateDeviceSessionRequest>,
 ) -> Response {
     let now = Utc::now();
-    let actor = match authenticate(&db, &req.email, &req.password, ip.as_deref(), now).await {
+    let actor = match authenticate(
+        &db,
+        &req.email,
+        req.password.expose_secret(),
+        ip.as_deref(),
+        now,
+    )
+    .await
+    {
         Ok(actor) => actor,
         Err(rejection) => return rejection,
     };
@@ -379,7 +395,13 @@ pub async fn create_device_session(
         );
     }
 
-    (StatusCode::OK, Json(DeviceToken { token })).into_response()
+    (
+        StatusCode::OK,
+        Json(DeviceToken {
+            token: token.into(),
+        }),
+    )
+        .into_response()
 }
 
 /// Identifiant de l'appareil ayant présenté un jeton Bearer valide sur la requête courante.
@@ -674,7 +696,7 @@ pub async fn change_password(
     }
 
     // Mot de passe actuel revérifié : échec -> 403, sans aucune modification d'état.
-    if !verify_password(&req.current_password, &stored_hash) {
+    if !verify_password(req.current_password.expose_secret(), &stored_hash) {
         let _ = attempts.record_failure(&email, ip.as_deref(), now).await;
         return problem_response(
             StatusCode::FORBIDDEN,
@@ -684,13 +706,13 @@ pub async fn change_password(
     let _ = attempts.clear_email(&email).await;
 
     // Nouveau mot de passe : politique REQ-AUT-003 (longueur + non compromis).
-    if let Err(error) = validate_password(&req.new_password) {
+    if let Err(error) = validate_password(req.new_password.expose_secret()) {
         let body =
             problem(422, "about:blank", "Unprocessable Entity").with_detail(error.message_key());
         return problem_response(StatusCode::UNPROCESSABLE_ENTITY, body);
     }
 
-    let Ok(new_hash) = hash_password(&req.new_password) else {
+    let Ok(new_hash) = hash_password(req.new_password.expose_secret()) else {
         return problem_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             problem(500, "about:blank", "Internal Server Error"),

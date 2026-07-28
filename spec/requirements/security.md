@@ -58,7 +58,7 @@ depends_on: []
 id: REQ-SEC-003
 title: Journalisation sans secret
 domain: security
-status: draft
+status: verified
 criticality: high
 layer: [api]
 e2e: n-a
