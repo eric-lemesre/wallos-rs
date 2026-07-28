@@ -6,9 +6,14 @@
 
 use std::fmt;
 
+use chrono::NaiveDate;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-use wallos_core::requirement;
+use uuid::Uuid;
+use wallos_core::billing::{BillingCycle, BillingUnit};
+use wallos_core::money::{CurrencyCode, Money};
+use wallos_core::{DomainError, Subscription, requirement};
 
 /// Enveloppe un secret (mot de passe, jeton d'appareil, clé de canal de notification) — REQ-SEC-003.
 ///
@@ -181,6 +186,130 @@ pub struct BillingCycleDto {
     pub interval: u32,
 }
 
+/// Représentation d'un abonnement dans le contrat API (REQ-SUB-001).
+///
+/// Reflet 1:1 du modèle [`Subscription`] du domaine : aucun champ n'est perdu ni normalisé
+/// silencieusement. Montant en **chaîne** décimale (R4/CUR-002) ; identifiants et date en chaînes
+/// (indépendants des features `utoipa`) ; cycle imbriqué (REQ-SUB-003).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct SubscriptionDto {
+    /// Identifiant stable (UUID).
+    pub id: String,
+    /// Nom de l'abonnement.
+    pub name: String,
+    /// Montant du prix (chaîne décimale).
+    #[schema(example = "9.99")]
+    pub amount: String,
+    /// Code devise ISO 4217 du prix.
+    #[schema(example = "EUR")]
+    pub currency: String,
+    /// Cycle de facturation.
+    pub cycle: BillingCycleDto,
+    /// Date de premier paiement (`YYYY-MM-DD`).
+    #[schema(example = "2026-01-31")]
+    pub first_payment: String,
+    /// Catégorie rattachée (UUID), le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    /// Moyen de paiement rattaché (UUID), le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payment_method: Option<String>,
+    /// Payeur rattaché (UUID), le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payer: Option<String>,
+    /// Logo (référence d'image ou substitut), le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logo: Option<String>,
+    /// URL du service, le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// Notes libres, le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notes: Option<String>,
+    /// État actif (un abonnement désactivé est conservé mais exclu des agrégats, REQ-SUB-008).
+    pub active: bool,
+}
+
+/// Parse un UUID optionnel (chaîne) ou renvoie une erreur de domaine.
+fn parse_optional_uuid(value: Option<String>, field: &str) -> Result<Option<Uuid>, DomainError> {
+    value
+        .map(|v| {
+            Uuid::parse_str(&v)
+                .map_err(|_| DomainError::InvalidArgument(format!("invalid {field} id: {v}")))
+        })
+        .transpose()
+}
+
+impl SubscriptionDto {
+    /// Projette un abonnement du domaine vers le DTO (sans perte).
+    #[must_use]
+    #[requirement(REQ-SUB-001)]
+    pub fn from_core(sub: &Subscription) -> Self {
+        Self {
+            id: sub.id().to_string(),
+            name: sub.name().to_string(),
+            amount: sub.price().amount().to_string(),
+            currency: sub.price().currency().as_str().to_string(),
+            cycle: BillingCycleDto {
+                unit: sub.cycle().unit().as_str().to_string(),
+                interval: sub.cycle().interval(),
+            },
+            first_payment: sub.first_payment().to_string(),
+            category: sub.category().map(|u| u.to_string()),
+            payment_method: sub.payment_method().map(|u| u.to_string()),
+            payer: sub.payer().map(|u| u.to_string()),
+            logo: sub.logo().map(String::from),
+            url: sub.url().map(String::from),
+            notes: sub.notes().map(String::from),
+            active: sub.is_active(),
+        }
+    }
+
+    /// Reconstruit un abonnement du domaine depuis le DTO, en validant chaque champ.
+    ///
+    /// # Errors
+    /// [`DomainError`] si un identifiant, un montant, une devise, un cycle ou une date est invalide.
+    #[requirement(REQ-SUB-001)]
+    pub fn into_core(self) -> Result<Subscription, DomainError> {
+        let id = Uuid::parse_str(&self.id).map_err(|_| {
+            DomainError::InvalidArgument(format!("invalid subscription id: {}", self.id))
+        })?;
+        let amount = self
+            .amount
+            .parse::<Decimal>()
+            .map_err(|_| DomainError::InvalidMoney(format!("invalid amount: {}", self.amount)))?;
+        let currency = CurrencyCode::new(&self.currency)?;
+        let price = Money::new(amount, currency)?;
+        let unit = BillingUnit::parse(&self.cycle.unit)?;
+        let cycle = BillingCycle::from_parts(unit, self.cycle.interval)?;
+        let first_payment =
+            NaiveDate::parse_from_str(&self.first_payment, "%Y-%m-%d").map_err(|_| {
+                DomainError::InvalidDate(format!("invalid date: {}", self.first_payment))
+            })?;
+
+        let mut sub = Subscription::new(id, self.name, price, cycle, first_payment)?;
+        if let Some(category) = parse_optional_uuid(self.category, "category")? {
+            sub = sub.with_category(category);
+        }
+        if let Some(payment_method) = parse_optional_uuid(self.payment_method, "payment_method")? {
+            sub = sub.with_payment_method(payment_method);
+        }
+        if let Some(payer) = parse_optional_uuid(self.payer, "payer")? {
+            sub = sub.with_payer(payer);
+        }
+        if let Some(logo) = self.logo {
+            sub = sub.with_logo(logo);
+        }
+        if let Some(url) = self.url {
+            sub = sub.with_url(url);
+        }
+        if let Some(notes) = self.notes {
+            sub = sub.with_notes(notes);
+        }
+        Ok(sub.with_active(self.active))
+    }
+}
+
 /// Un montant en devise pour l'agrégation multi-devises (REQ-CUR-004).
 ///
 /// `amount` est une **chaîne décimale** (règle R4 / REQ-CUR-002) : jamais un nombre JSON, qui
@@ -340,6 +469,64 @@ mod tests {
         .unwrap();
         assert!(output["total"].is_string());
         assert_eq!(output["total"], "142.50");
+    }
+
+    fn sample_subscription() -> Subscription {
+        Subscription::new(
+            Uuid::from_u128(1),
+            "Netflix",
+            Money::new("9.99".parse().unwrap(), CurrencyCode::new("EUR").unwrap()).unwrap(),
+            BillingCycle::from_parts(BillingUnit::Month, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 1, 31).unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-001, case = "round-trip DTO sans perte de champ")]
+    fn subscription_dto_roundtrips_without_loss() {
+        // Abonnement doté de TOUS les champs (obligatoires + optionnels).
+        let original = sample_subscription()
+            .with_category(Uuid::from_u128(2))
+            .with_payment_method(Uuid::from_u128(3))
+            .with_payer(Uuid::from_u128(4))
+            .with_logo("netflix.png")
+            .with_url("https://netflix.com")
+            .with_notes("compte partagé")
+            .with_active(false);
+
+        // core -> DTO -> JSON -> DTO -> core : identité (aucun champ perdu ni normalisé).
+        let dto = SubscriptionDto::from_core(&original);
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["amount"], "9.99"); // montant en chaîne (jamais un nombre JSON)
+        assert_eq!(json["cycle"]["unit"], "month");
+        assert_eq!(json["active"], false);
+        let parsed: SubscriptionDto = serde_json::from_value(json).unwrap();
+        let restored = parsed.into_core().unwrap();
+        assert_eq!(restored, original);
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-001, case = "round-trip minimal (sans optionnels)")]
+    fn minimal_subscription_dto_roundtrips() {
+        let original = sample_subscription();
+        let restored = SubscriptionDto::from_core(&original).into_core().unwrap();
+        assert_eq!(restored, original);
+        // Les champs optionnels absents sont omis du JSON (jamais matérialisés à null).
+        let json = serde_json::to_value(SubscriptionDto::from_core(&original)).unwrap();
+        assert!(json.get("category").is_none());
+        assert!(json.get("notes").is_none());
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-001, case = "DTO invalide rejeté")]
+    fn invalid_subscription_dto_is_rejected() {
+        let mut dto = SubscriptionDto::from_core(&sample_subscription());
+        dto.amount = "not-a-number".to_string();
+        assert!(dto.clone().into_core().is_err());
+        let mut bad_date = SubscriptionDto::from_core(&sample_subscription());
+        bad_date.first_payment = "31/01/2026".to_string();
+        assert!(bad_date.into_core().is_err());
     }
 
     #[test]

@@ -577,7 +577,7 @@ requirements:
 - id: REQ-SUB-001
   title: Modèle de données d'un abonnement
   domain: subscriptions
-  status: draft
+  status: verified
   criticality: high
   layer:
   - core
