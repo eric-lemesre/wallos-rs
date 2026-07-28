@@ -223,6 +223,32 @@ pub struct RenameCategoryRequest {
     pub name: String,
 }
 
+/// Un moyen de paiement exposé à l'interface (REQ-SUB-011).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct PaymentMethodDto {
+    /// Identifiant stable (UUID).
+    pub id: String,
+    /// Nom du moyen de paiement.
+    #[schema(example = "Carte de crédit")]
+    pub name: String,
+}
+
+/// Requête de création d'un moyen de paiement (REQ-SUB-011).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct CreatePaymentMethodRequest {
+    /// Nom (non vide, ≤ 100 caractères ; les espaces de bord sont normalisés).
+    #[schema(example = "Carte de crédit", max_length = 100)]
+    pub name: String,
+}
+
+/// Requête de renommage d'un moyen de paiement (REQ-SUB-011).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct RenamePaymentMethodRequest {
+    /// Nouveau nom (non vide, ≤ 100 caractères ; espaces de bord normalisés).
+    #[schema(example = "PayPal", max_length = 100)]
+    pub name: String,
+}
+
 /// Une devise du référentiel supporté exposée à l'interface (REQ-CUR-007).
 ///
 /// `name` est le libellé par défaut (anglais) ; l'UI affiche le nom **localisé** par code (i18n).

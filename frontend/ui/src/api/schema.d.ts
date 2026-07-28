@@ -207,6 +207,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/payment-methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Liste les moyens de paiement du foyer de l'appelant. */
+        get: operations["listPaymentMethods"];
+        put?: never;
+        /** Crée un moyen de paiement dans le foyer de l'appelant. */
+        post: operations["createPaymentMethod"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payment-methods/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Renomme un moyen de paiement du foyer de l'appelant. */
+        put: operations["renamePaymentMethod"];
+        post?: never;
+        /** Supprime un moyen de paiement du foyer de l'appelant. */
+        delete: operations["deletePaymentMethod"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/schedule/next-due": {
         parameters: {
             query?: never;
@@ -440,6 +476,14 @@ export interface components {
              */
             platform: string;
         };
+        /** @description Requête de création d'un moyen de paiement (REQ-SUB-011). */
+        CreatePaymentMethodRequest: {
+            /**
+             * @description Nom (non vide, ≤ 100 caractères ; les espaces de bord sont normalisés).
+             * @example Carte de crédit
+             */
+            name: string;
+        };
         /** @description Requête d'authentification (REQ-AUT-002). */
         CreateSessionRequest: {
             /**
@@ -609,6 +653,16 @@ export interface components {
              */
             next_payment: string;
         };
+        /** @description Un moyen de paiement exposé à l'interface (REQ-SUB-011). */
+        PaymentMethodDto: {
+            /** @description Identifiant stable (UUID). */
+            id: string;
+            /**
+             * @description Nom du moyen de paiement.
+             * @example Carte de crédit
+             */
+            name: string;
+        };
         /**
          * @description Détail d'erreur conforme à la RFC 9457 (`application/problem+json`).
          *
@@ -639,6 +693,14 @@ export interface components {
             /**
              * @description Nouveau nom de la catégorie (non vide, ≤ 100 caractères ; espaces de bord normalisés).
              * @example Musique
+             */
+            name: string;
+        };
+        /** @description Requête de renommage d'un moyen de paiement (REQ-SUB-011). */
+        RenamePaymentMethodRequest: {
+            /**
+             * @description Nouveau nom (non vide, ≤ 100 caractères ; espaces de bord normalisés).
+             * @example PayPal
              */
             name: string;
         };
@@ -1190,6 +1252,170 @@ export interface operations {
             };
             /** @description Trop de tentatives ; réessayer après l'en-tête Retry-After */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listPaymentMethods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Moyens de paiement du foyer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentMethodDto"][];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createPaymentMethod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePaymentMethodRequest"];
+            };
+        };
+        responses: {
+            /** @description Moyen de paiement créé */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentMethodDto"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Nom invalide */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    renamePaymentMethod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant (UUID) du moyen de paiement */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenamePaymentMethodRequest"];
+            };
+        };
+        responses: {
+            /** @description Moyen de paiement renommé */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentMethodDto"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Inconnu ou hors du foyer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Nom invalide */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deletePaymentMethod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant (UUID) du moyen de paiement */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Moyen de paiement supprimé */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Inconnu ou hors du foyer */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -40,6 +40,14 @@ export interface AppDriver {
   /** Vrai si aucune catégorie de ce nom n'apparaît (isolation / suppression). */
   categoryAbsent(name: string): Promise<boolean>;
 
+  // Moyens de paiement (REQ-SUB-011).
+  /** Crée un moyen de paiement via le formulaire. */
+  createPaymentMethod(name: string): Promise<void>;
+  /** Vrai si un moyen de paiement de ce nom est visible dans la liste. */
+  paymentMethodVisible(name: string): Promise<boolean>;
+  /** Vrai si aucun moyen de paiement de ce nom n'apparaît (isolation / suppression). */
+  paymentMethodAbsent(name: string): Promise<boolean>;
+
   // Création d'abonnement (REQ-SUB-002).
   createSubscription(input: {
     name: string; amount: string; currency: string; unit: string; interval: string; firstPayment: string;

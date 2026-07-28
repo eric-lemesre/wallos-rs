@@ -240,7 +240,7 @@ depends_on: [REQ-SUB-001, REQ-NOT-001]
 id: REQ-SUB-011
 title: Moyen de paiement
 domain: subscriptions
-status: draft
+status: verified
 criticality: low
 layer: [core, api, ui]
 e2e: optional

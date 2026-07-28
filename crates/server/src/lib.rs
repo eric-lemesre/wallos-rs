@@ -11,9 +11,10 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use wallos_core::requirement;
 use wallos_proto::{
     AggregateRequest, CategoryDto, ChangePasswordRequest, ConvertedTotalResponse,
-    CreateAccountRequest, CreateCategoryRequest, CreateDeviceSessionRequest, CreateSessionRequest,
-    CreateSubscriptionRequest, CurrencyDto, CurrentUser, DeviceSummary, DeviceToken,
-    HealthResponse, MoneyInput, NextDueRequest, NextDueResponse, Problem, RenameCategoryRequest,
+    CreateAccountRequest, CreateCategoryRequest, CreateDeviceSessionRequest,
+    CreatePaymentMethodRequest, CreateSessionRequest, CreateSubscriptionRequest, CurrencyDto,
+    CurrentUser, DeviceSummary, DeviceToken, HealthResponse, MoneyInput, NextDueRequest,
+    NextDueResponse, PaymentMethodDto, Problem, RenameCategoryRequest, RenamePaymentMethodRequest,
     SubscriptionDto, SubscriptionListResponse, problem,
 };
 use wallos_storage::Db;
@@ -23,6 +24,7 @@ pub mod auth;
 pub mod categories;
 pub mod currencies;
 pub mod exchange;
+pub mod payment_methods;
 pub mod schedule;
 pub mod subscriptions;
 
@@ -54,7 +56,11 @@ pub mod subscriptions;
         schedule::compute_next_due,
         subscriptions::create_subscription,
         subscriptions::list_subscriptions,
-        subscriptions::update_subscription
+        subscriptions::update_subscription,
+        payment_methods::create_payment_method,
+        payment_methods::list_payment_methods,
+        payment_methods::rename_payment_method,
+        payment_methods::delete_payment_method
     ),
     components(schemas(
         HealthResponse,
@@ -77,7 +83,10 @@ pub mod subscriptions;
         NextDueResponse,
         CreateSubscriptionRequest,
         SubscriptionDto,
-        SubscriptionListResponse
+        SubscriptionListResponse,
+        PaymentMethodDto,
+        CreatePaymentMethodRequest,
+        RenamePaymentMethodRequest
     ))
 )]
 pub struct ApiDoc;
@@ -160,6 +169,14 @@ pub fn app_with_db(db: Db) -> Router {
             subscriptions::list_subscriptions
         ))
         .routes(routes!(subscriptions::update_subscription))
+        .routes(routes!(
+            payment_methods::create_payment_method,
+            payment_methods::list_payment_methods
+        ))
+        .routes(routes!(
+            payment_methods::rename_payment_method,
+            payment_methods::delete_payment_method
+        ))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))
