@@ -261,7 +261,14 @@ pub struct SubscriptionDto {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
     /// État actif (un abonnement désactivé est conservé mais exclu des agrégats, REQ-SUB-008).
+    /// Absent à la désérialisation ⇒ actif par défaut, aligné sur le domaine (`Subscription::new`).
+    #[serde(default = "default_active")]
     pub active: bool,
+}
+
+/// Valeur par défaut de `active` (aligne le DTO sur le défaut du domaine : actif).
+fn default_active() -> bool {
+    true
 }
 
 /// Parse un UUID optionnel (chaîne) ou renvoie une erreur de domaine.
@@ -550,6 +557,23 @@ mod tests {
         let json = serde_json::to_value(SubscriptionDto::from_core(&original)).unwrap();
         assert!(json.get("category").is_none());
         assert!(json.get("notes").is_none());
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-001, case = "active absent -> défaut actif")]
+    fn active_defaults_to_true_when_omitted() {
+        // Un DTO sans `active` se désérialise en actif, aligné sur `Subscription::new`.
+        let dto: SubscriptionDto = serde_json::from_value(serde_json::json!({
+            "id": "00000000-0000-0000-0000-000000000001",
+            "name": "X",
+            "amount": "1.00",
+            "currency": "EUR",
+            "cycle": { "unit": "month", "interval": 1 },
+            "first_payment": "2026-01-31"
+        }))
+        .unwrap();
+        assert!(dto.active);
+        assert!(dto.into_core().unwrap().is_active());
     }
 
     #[test]

@@ -82,14 +82,24 @@ pub struct CurrencyCode([u8; 3]);
 impl CurrencyCode {
     /// Parse un code devise depuis une chaîne ASCII.
     ///
+    /// Le code doit être **trois lettres majuscules** ET appartenir au **référentiel supporté**
+    /// (REQ-CUR-007) : un code hors référentiel (ou en minuscules) est rejeté, ce qui rend impossible
+    /// la construction d'un montant dans une devise non supportée, quel que soit le chemin d'appel.
+    ///
     /// # Errors
-    /// Retourne `DomainError::InvalidMoney` si le format est incorrect.
+    /// `DomainError::InvalidMoney` si le format est incorrect (≠ 3 lettres majuscules) ou si le code
+    /// n'est pas dans le référentiel supporté.
     #[requirement(REQ-CUR-001)]
     pub fn new(code: &str) -> Result<Self, crate::DomainError> {
         let bytes = code.as_bytes();
-        if bytes.len() != 3 || !bytes.iter().all(|b| b.is_ascii_alphabetic()) {
+        if bytes.len() != 3 || !bytes.iter().all(u8::is_ascii_uppercase) {
             return Err(crate::DomainError::InvalidMoney(format!(
-                "invalid currency code: {code}"
+                "invalid currency code format: {code}"
+            )));
+        }
+        if !crate::currencies::is_supported(code) {
+            return Err(crate::DomainError::InvalidMoney(format!(
+                "unsupported currency code: {code}"
             )));
         }
         let mut arr = [0u8; 3];
@@ -149,6 +159,21 @@ mod tests {
     #[verifies(REQ-CUR-001, case = "Display = code ISO")]
     fn currency_code_display_matches_code() {
         assert_eq!(format!("{}", CurrencyCode::new("USD").unwrap()), "USD");
+    }
+
+    #[test]
+    #[verifies(REQ-CUR-007, case = "code hors référentiel ou mal formé rejeté")]
+    fn currency_code_requires_supported_uppercase() {
+        // Codes supportés (référentiel CUR-007) : acceptés.
+        assert!(CurrencyCode::new("EUR").is_ok());
+        assert!(CurrencyCode::new("JPY").is_ok());
+        // Minuscules : rejetées (sinon "eur" != "EUR" et les lookups échouent).
+        assert!(CurrencyCode::new("eur").is_err());
+        // Bien formé mais hors référentiel : rejeté (critère #1 de CUR-007).
+        assert!(CurrencyCode::new("ZZZ").is_err());
+        // Format invalide.
+        assert!(CurrencyCode::new("US").is_err());
+        assert!(CurrencyCode::new("US1").is_err());
     }
 
     #[test]

@@ -281,10 +281,16 @@ async fn aggregate_with_invalid_input_is_422(pool: PgPool) {
     signup(&pool, "agg-bad@example.com").await;
     let web = login_cookie(&pool, "agg-bad@example.com").await;
 
-    // Devise cible mal formée (pas 3 lettres). Le référentiel ISO 4217 relève de CUR-007 ; ici
-    // seule la forme est validée -> une chaîne non conforme est rejetée en 422.
+    // Devise cible mal formée (pas 3 lettres) -> 422.
     assert_eq!(
         aggregate(&pool, &web, json!({ "target": "US", "amounts": [] }))
+            .await
+            .status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    // Devise bien formée mais HORS RÉFÉRENTIEL supporté : rejetée côté serveur (REQ-CUR-007 #1).
+    assert_eq!(
+        aggregate(&pool, &web, json!({ "target": "ZZZ", "amounts": [] }))
             .await
             .status(),
         StatusCode::UNPROCESSABLE_ENTITY
