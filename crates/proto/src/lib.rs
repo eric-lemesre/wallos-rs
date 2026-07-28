@@ -427,15 +427,6 @@ impl SubscriptionDto {
         }
     }
 
-    /// Comme [`from_core`](Self::from_core), en renseignant la prochaine échéance dérivée.
-    #[must_use]
-    #[requirement(REQ-SUB-002)]
-    pub fn from_core_with_next_payment(sub: &Subscription, next_payment: NaiveDate) -> Self {
-        let mut dto = Self::from_core(sub);
-        dto.next_payment = Some(next_payment.to_string());
-        dto
-    }
-
     /// Comme [`from_core`](Self::from_core), avec les champs **dérivés** (horloge serveur) : prochaine
     /// échéance éventuelle (absente si l'abonnement est terminé, REQ-SUB-009) et état « terminé ».
     #[must_use]
@@ -495,6 +486,12 @@ impl SubscriptionDto {
         if let Some(end) = self.end_date {
             let end = NaiveDate::parse_from_str(&end, "%Y-%m-%d")
                 .map_err(|_| DomainError::InvalidDate(format!("invalid end date: {end}")))?;
+            // La date de fin ne peut précéder le premier paiement (REQ-SUB-009 : période vide interdite).
+            if end < first_payment {
+                return Err(DomainError::InvalidDate(
+                    "end date is before first payment".to_string(),
+                ));
+            }
             sub = sub.with_end_date(end);
         }
         Ok(sub.with_active(self.active))
@@ -633,6 +630,13 @@ impl CreateSubscriptionRequest {
         if let Some(end) = self.end_date {
             let end = NaiveDate::parse_from_str(&end, "%Y-%m-%d")
                 .map_err(|_| FieldError::new("end_date", "date YYYY-MM-DD invalide"))?;
+            // La date de fin ne peut précéder le premier paiement (revue SUB-009 : période vide interdite).
+            if end < first_payment {
+                return Err(FieldError::new(
+                    "end_date",
+                    "date de fin antérieure au premier paiement",
+                ));
+            }
             sub = sub.with_end_date(end);
         }
         Ok(sub.with_active(self.active))
