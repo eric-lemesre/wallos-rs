@@ -1,0 +1,10 @@
+{
+  "_requirement": "REQ-CAT-001",
+  "_source": "Wallos 5.4.2 table `categories` (schéma: id, name, order, user_id).",
+  "_note": "CAT-001 = CRUD isolé par compte. L'ISOLATION (crée/renomme/supprime n'affecte que ses propres catégories) est spécifique à subtrack (§9/SEC-001) et NON reproductible sur Wallos (mono-foyer) — vérifiée en scénario @design (OQ-007). Le CRUD de base (créer -> apparaît dans la liste) reflète le comportement Wallos.",
+  "default_categories_order": [
+    "No category","Entertainment","Music","Utilities","Food & Beverages","Health & Wellbeing",
+    "Productivity","Banking","Transport","Education","Insurance","Gaming","News & Magazines",
+    "Software","Technology","Cloud Services","Charity & Donations"
+  ]
+}

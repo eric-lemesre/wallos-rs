@@ -32,6 +32,14 @@ export interface AppDriver {
   changePassword(current: string, next: string): Promise<void>;
   passwordChangeSucceeded(): Promise<boolean>;
 
+  // Catégories (REQ-CAT-001).
+  /** Crée une catégorie via le formulaire. */
+  createCategory(name: string): Promise<void>;
+  /** Vrai si une catégorie de ce nom est visible dans la liste. */
+  categoryVisible(name: string): Promise<boolean>;
+  /** Vrai si aucune catégorie de ce nom n'apparaît (isolation / suppression). */
+  categoryAbsent(name: string): Promise<boolean>;
+
   // Agrégation multi-devises en mode dégradé (REQ-CUR-004).
   /** Saisit une devise cible et des montants, puis déclenche le calcul de l'agrégat. */
   computeAggregate(target: string, amounts: MoneyInput[]): Promise<void>;

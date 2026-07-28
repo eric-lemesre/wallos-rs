@@ -1,0 +1,387 @@
+//! Tests d'intégration des catégories (REQ-CAT-001).
+//!
+//! CRUD isolé par foyer : create/list/rename/delete n'affectent que les catégories de l'appelant.
+//! Autorisation §9 : propriétaire 2xx, tiers authentifié 404 (jamais 403), anonyme 401.
+
+use axum::Router;
+use axum::body::Body;
+use axum::http::{Request, StatusCode, header};
+use serde_json::json;
+use sqlx::PgPool;
+use tower::ServiceExt;
+use wallos_req_macros::verifies;
+use wallos_server::app_with_db;
+use wallos_storage::Db;
+
+const PASSWORD: &str = "correct horse battery staple";
+
+fn app(pool: PgPool) -> Router {
+    app_with_db(Db::from_pool(pool))
+}
+
+async fn send(
+    pool: &PgPool,
+    method: &str,
+    uri: &str,
+    cookie: Option<&str>,
+    body: Option<serde_json::Value>,
+) -> axum::http::Response<Body> {
+    let mut builder = Request::builder().method(method).uri(uri);
+    if let Some(c) = cookie {
+        builder = builder.header(header::COOKIE, c);
+    }
+    let body = match body {
+        Some(v) => {
+            builder = builder.header(header::CONTENT_TYPE, "application/json");
+            Body::from(v.to_string())
+        }
+        None => Body::empty(),
+    };
+    app(pool.clone())
+        .oneshot(builder.body(body).unwrap())
+        .await
+        .unwrap()
+}
+
+async fn signup(pool: &PgPool, email: &str) {
+    let r = send(
+        pool,
+        "POST",
+        "/api/v1/accounts",
+        None,
+        Some(json!({ "email": email, "password": PASSWORD })),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::CREATED);
+}
+
+async fn login_cookie(pool: &PgPool, email: &str) -> String {
+    let r = send(
+        pool,
+        "POST",
+        "/api/v1/sessions",
+        None,
+        Some(json!({ "email": email, "password": PASSWORD })),
+    )
+    .await;
+    r.headers()
+        .get(header::SET_COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .expect("cookie")
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string()
+}
+
+async fn account(pool: &PgPool, email: &str) -> String {
+    signup(pool, email).await;
+    login_cookie(pool, email).await
+}
+
+async fn create_category(pool: &PgPool, cookie: &str, name: &str) -> axum::http::Response<Body> {
+    send(
+        pool,
+        "POST",
+        "/api/v1/categories",
+        Some(cookie),
+        Some(json!({ "name": name })),
+    )
+    .await
+}
+
+async fn categories(pool: &PgPool, cookie: &str) -> Vec<serde_json::Value> {
+    let r = send(pool, "GET", "/api/v1/categories", Some(cookie), None).await;
+    let bytes = axum::body::to_bytes(r.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    serde_json::from_slice(&bytes).unwrap()
+}
+
+async fn created_id(r: axum::http::Response<Body>) -> String {
+    let bytes = axum::body::to_bytes(r.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    v["id"].as_str().unwrap().to_string()
+}
+
+// --- Parcours fonctionnels ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn created_category_is_listed_immediately(pool: PgPool) {
+    let web = account(&pool, "cat@example.com").await;
+    let created = create_category(&pool, &web, "Streaming").await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+
+    let list = categories(&pool, &web).await;
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0]["name"], "Streaming");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn rename_and_delete_own_category(pool: PgPool) {
+    let web = account(&pool, "cat2@example.com").await;
+    let id = created_id(create_category(&pool, &web, "Musci").await).await;
+
+    // Renommer (corrige la faute).
+    let renamed = send(
+        &pool,
+        "PUT",
+        &format!("/api/v1/categories/{id}"),
+        Some(&web),
+        Some(json!({ "name": "Musique" })),
+    )
+    .await;
+    assert_eq!(renamed.status(), StatusCode::OK);
+    assert_eq!(categories(&pool, &web).await[0]["name"], "Musique");
+
+    // Supprimer.
+    let deleted = send(
+        &pool,
+        "DELETE",
+        &format!("/api/v1/categories/{id}"),
+        Some(&web),
+        None,
+    )
+    .await;
+    assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
+    assert!(categories(&pool, &web).await.is_empty());
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn empty_name_is_rejected(pool: PgPool) {
+    let web = account(&pool, "cat3@example.com").await;
+    assert_eq!(
+        create_category(&pool, &web, "   ").await.status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+}
+
+// --- Isolation (§9) : les opérations n'affectent que ses propres catégories ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn categories_are_isolated_between_accounts(pool: PgPool) {
+    let alice = account(&pool, "alice-cat@example.com").await;
+    let bob = account(&pool, "bob-cat@example.com").await;
+    let alice_cat = created_id(create_category(&pool, &alice, "Alice Only").await).await;
+
+    // Bob ne voit pas la catégorie d'Alice.
+    assert!(categories(&pool, &bob).await.is_empty());
+    // Bob ne peut ni renommer ni supprimer celle d'Alice -> 404 (jamais 403).
+    assert_eq!(
+        send(
+            &pool,
+            "PUT",
+            &format!("/api/v1/categories/{alice_cat}"),
+            Some(&bob),
+            Some(json!({ "name": "Hacked" }))
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        send(
+            &pool,
+            "DELETE",
+            &format!("/api/v1/categories/{alice_cat}"),
+            Some(&bob),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+    // La catégorie d'Alice est intacte.
+    assert_eq!(categories(&pool, &alice).await[0]["name"], "Alice Only");
+}
+
+// --- Autorisation §9 : createCategory ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn authz_owner_create_category(pool: PgPool) {
+    let web = account(&pool, "own-cc@example.com").await;
+    assert_eq!(
+        create_category(&pool, &web, "X").await.status(),
+        StatusCode::CREATED
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn authz_other_create_category(pool: PgPool) {
+    // Chaque compte crée SES propres catégories (pas de ressource d'autrui visée à la création).
+    let web = account(&pool, "other-cc@example.com").await;
+    assert_eq!(
+        create_category(&pool, &web, "X").await.status(),
+        StatusCode::CREATED
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn authz_anon_create_category(pool: PgPool) {
+    assert_eq!(
+        create_category(&pool, "session=nope", "X").await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+// --- Autorisation §9 : listCategories ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn authz_owner_list_categories(pool: PgPool) {
+    let web = account(&pool, "own-lc@example.com").await;
+    assert_eq!(
+        send(&pool, "GET", "/api/v1/categories", Some(&web), None)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn authz_other_list_categories(pool: PgPool) {
+    // Un autre foyer ne voit jamais les catégories d'un autre : sa liste est la sienne (vide ici).
+    let owner = account(&pool, "owner-lc@example.com").await;
+    let _ = create_category(&pool, &owner, "Secret").await;
+    let other = account(&pool, "other-lc@example.com").await;
+    assert!(categories(&pool, &other).await.is_empty());
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn authz_anon_list_categories(pool: PgPool) {
+    assert_eq!(
+        send(&pool, "GET", "/api/v1/categories", None, None)
+            .await
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+// --- Autorisation §9 : renameCategory ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn authz_owner_rename_category(pool: PgPool) {
+    let web = account(&pool, "own-rc@example.com").await;
+    let id = created_id(create_category(&pool, &web, "Old").await).await;
+    assert_eq!(
+        send(
+            &pool,
+            "PUT",
+            &format!("/api/v1/categories/{id}"),
+            Some(&web),
+            Some(json!({ "name": "New" }))
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn authz_other_rename_category(pool: PgPool) {
+    let owner = account(&pool, "owner-rc@example.com").await;
+    let id = created_id(create_category(&pool, &owner, "Old").await).await;
+    let other = account(&pool, "other-rc@example.com").await;
+    assert_eq!(
+        send(
+            &pool,
+            "PUT",
+            &format!("/api/v1/categories/{id}"),
+            Some(&other),
+            Some(json!({ "name": "Hacked" }))
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn authz_anon_rename_category(pool: PgPool) {
+    let id = uuid::Uuid::new_v4();
+    assert_eq!(
+        send(
+            &pool,
+            "PUT",
+            &format!("/api/v1/categories/{id}"),
+            None,
+            Some(json!({ "name": "X" }))
+        )
+        .await
+        .status(),
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+// --- Autorisation §9 : deleteCategory ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn authz_owner_delete_category(pool: PgPool) {
+    let web = account(&pool, "own-dc@example.com").await;
+    let id = created_id(create_category(&pool, &web, "Tmp").await).await;
+    assert_eq!(
+        send(
+            &pool,
+            "DELETE",
+            &format!("/api/v1/categories/{id}"),
+            Some(&web),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn authz_other_delete_category(pool: PgPool) {
+    let owner = account(&pool, "owner-dc@example.com").await;
+    let id = created_id(create_category(&pool, &owner, "Tmp").await).await;
+    let other = account(&pool, "other-dc@example.com").await;
+    assert_eq!(
+        send(
+            &pool,
+            "DELETE",
+            &format!("/api/v1/categories/{id}"),
+            Some(&other),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn authz_anon_delete_category(pool: PgPool) {
+    let id = uuid::Uuid::new_v4();
+    assert_eq!(
+        send(
+            &pool,
+            "DELETE",
+            &format!("/api/v1/categories/{id}"),
+            None,
+            None
+        )
+        .await
+        .status(),
+        StatusCode::UNAUTHORIZED
+    );
+}

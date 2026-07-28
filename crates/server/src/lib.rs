@@ -10,14 +10,16 @@ use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use wallos_core::requirement;
 use wallos_proto::{
-    AggregateRequest, ChangePasswordRequest, ConvertedTotalResponse, CreateAccountRequest,
-    CreateDeviceSessionRequest, CreateSessionRequest, CurrencyDto, CurrentUser, DeviceSummary,
-    DeviceToken, HealthResponse, MoneyInput, Problem, problem,
+    AggregateRequest, CategoryDto, ChangePasswordRequest, ConvertedTotalResponse,
+    CreateAccountRequest, CreateCategoryRequest, CreateDeviceSessionRequest, CreateSessionRequest,
+    CurrencyDto, CurrentUser, DeviceSummary, DeviceToken, HealthResponse, MoneyInput, Problem,
+    RenameCategoryRequest, problem,
 };
 use wallos_storage::Db;
 
 pub mod accounts;
 pub mod auth;
+pub mod categories;
 pub mod currencies;
 pub mod exchange;
 
@@ -41,7 +43,11 @@ pub mod exchange;
         auth::change_password,
         auth::delete_session,
         exchange::aggregate_converted_handler,
-        currencies::list_currencies
+        currencies::list_currencies,
+        categories::create_category,
+        categories::list_categories,
+        categories::rename_category,
+        categories::delete_category
     ),
     components(schemas(
         HealthResponse,
@@ -56,7 +62,10 @@ pub mod exchange;
         MoneyInput,
         AggregateRequest,
         ConvertedTotalResponse,
-        CurrencyDto
+        CurrencyDto,
+        CategoryDto,
+        CreateCategoryRequest,
+        RenameCategoryRequest
     ))
 )]
 pub struct ApiDoc;
@@ -125,6 +134,14 @@ pub fn app_with_db(db: Db) -> Router {
         .routes(routes!(auth::delete_session))
         .routes(routes!(exchange::aggregate_converted_handler))
         .routes(routes!(currencies::list_currencies))
+        .routes(routes!(
+            categories::create_category,
+            categories::list_categories
+        ))
+        .routes(routes!(
+            categories::rename_category,
+            categories::delete_category
+        ))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))

@@ -63,5 +63,13 @@
     "title": "Supported currencies",
     "loadError": "Could not load currencies",
     "decimals": "Decimals"
+  },
+  "categories": {
+    "title": "Categories",
+    "name": "Category name",
+    "create": "Add category",
+    "rename": "Rename",
+    "delete": "Delete",
+    "loadError": "Could not load categories"
   }
 }
