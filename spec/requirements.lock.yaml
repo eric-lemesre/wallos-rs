@@ -223,7 +223,7 @@ requirements:
 - id: REQ-CUR-005
   title: Règle d'arrondi
   domain: currencies
-  status: draft
+  status: verified
   criticality: high
   layer:
   - core
