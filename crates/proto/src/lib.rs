@@ -167,6 +167,20 @@ pub struct DeviceSummary {
     pub current: bool,
 }
 
+/// Cycle de facturation d'un abonnement (REQ-SUB-003) : couple (unité, intervalle).
+///
+/// `unit` est un code stable (`day`/`week`/`month`/`year`) ; `interval` est le nombre d'unités entre
+/// deux échéances, strictement positif. Modèle capturé sur l'application d'origine (table `cycles`).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct BillingCycleDto {
+    /// Unité de récurrence : `day`, `week`, `month` ou `year`.
+    #[schema(example = "month")]
+    pub unit: String,
+    /// Nombre d'unités entre deux échéances (strictement positif).
+    #[schema(example = 1, minimum = 1)]
+    pub interval: u32,
+}
+
 /// Un montant en devise pour l'agrégation multi-devises (REQ-CUR-004).
 ///
 /// `amount` est une **chaîne décimale** (règle R4 / REQ-CUR-002) : jamais un nombre JSON, qui
@@ -326,6 +340,22 @@ mod tests {
         .unwrap();
         assert!(output["total"].is_string());
         assert_eq!(output["total"], "142.50");
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-003, case = "cycle sérialisé (unité + intervalle)")]
+    fn billing_cycle_roundtrips() {
+        let dto = BillingCycleDto {
+            unit: "month".to_string(),
+            interval: 3,
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["unit"], "month");
+        assert_eq!(json["interval"], 3);
+        let parsed: BillingCycleDto =
+            serde_json::from_value(serde_json::json!({ "unit": "week", "interval": 2 })).unwrap();
+        assert_eq!(parsed.unit, "week");
+        assert_eq!(parsed.interval, 2);
     }
 
     #[test]

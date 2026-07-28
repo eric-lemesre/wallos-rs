@@ -55,7 +55,7 @@ depends_on: [REQ-SUB-001, REQ-SUB-003]
 id: REQ-SUB-003
 title: Modèle de cycle de facturation
 domain: subscriptions
-status: draft
+status: verified
 criticality: high
 layer: [core, api]
 e2e: n-a
