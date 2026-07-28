@@ -1,0 +1,15 @@
+{
+  "_requirement": "REQ-CUR-005",
+  "_rule": "Arrondi bancaire (round half to even / MidpointNearestEven). Règle PRESCRITE par l'acceptation de la spec (le domaine est marqué oracle:legacy mais la règle y est explicitement imposée) — vecteurs figés ici, réinjectés dans les tests core.",
+  "_note": "Le nombre de décimales dépend de la devise (référentiel REQ-CUR-007) : 2 pour EUR/USD, 0 pour JPY.",
+  "vectors": [
+    { "value": "0.125", "decimals": 2, "rounded": "0.12", "why": "3e décimale = 5, arrondi vers le pair (2)" },
+    { "value": "0.135", "decimals": 2, "rounded": "0.14", "why": "3e décimale = 5, arrondi vers le pair (4)" },
+    { "value": "0.5",   "decimals": 0, "rounded": "0",    "why": "demi vers le pair (0)" },
+    { "value": "1.5",   "decimals": 0, "rounded": "2",    "why": "demi vers le pair (2)" },
+    { "value": "2.5",   "decimals": 0, "rounded": "2",    "why": "demi vers le pair (2)" },
+    { "value": "3.5",   "decimals": 0, "rounded": "4",    "why": "demi vers le pair (4)" },
+    { "value": "9.994", "decimals": 2, "rounded": "9.99", "why": "sous le demi, arrondi vers le bas" },
+    { "value": "9.996", "decimals": 2, "rounded": "10.00","why": "au-dessus du demi, arrondi vers le haut" }
+  ]
+}

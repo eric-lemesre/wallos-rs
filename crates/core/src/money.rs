@@ -7,7 +7,7 @@
 // justifié par l'ADR `docs/adr/0005-currency-code-as-str.md`.
 #![allow(unsafe_code)]
 
-use rust_decimal::Decimal;
+use rust_decimal::{Decimal, RoundingStrategy};
 use wallos_req_macros::requirement;
 
 /// Représente un montant positif dans une devise donnée.
@@ -54,6 +54,24 @@ impl Money {
     #[requirement(REQ-CUR-002)]
     pub const fn currency(&self) -> CurrencyCode {
         self.currency
+    }
+
+    /// Arrondit le montant à `decimals` décimales, en **arrondi bancaire** (REQ-CUR-005).
+    ///
+    /// L'arrondi n'intervient qu'à cette étape d'affichage : la conversion et l'agrégation
+    /// conservent la précision maximale (REQ-CUR-004), jamais arrondie en cours de calcul. La règle
+    /// est le *round half to even* (les demis vont vers le chiffre pair, ce qui évite le biais
+    /// systématique du *half up*). Le nombre de décimales **dépend de la devise** : il est fourni par
+    /// l'appelant depuis le référentiel (REQ-CUR-007), p. ex. 2 pour EUR/USD, 0 pour JPY.
+    #[must_use]
+    #[requirement(REQ-CUR-005)]
+    pub fn round_to(&self, decimals: u32) -> Self {
+        Self {
+            amount: self
+                .amount
+                .round_dp_with_strategy(decimals, RoundingStrategy::MidpointNearestEven),
+            currency: self.currency,
+        }
     }
 }
 
@@ -139,6 +157,55 @@ mod tests {
         let z = Money::zero(CurrencyCode::new("EUR").unwrap());
         assert_eq!(z.amount(), Decimal::ZERO);
         assert_eq!(z.currency(), CurrencyCode::new("EUR").unwrap());
+    }
+
+    #[test]
+    #[verifies(REQ-CUR-005, case = "arrondi bancaire (half to even)")]
+    fn rounds_half_to_even() {
+        // Vecteurs figés : e2e/fixtures/oracles/REQ-CUR-005-rounding.json.
+        let eur = CurrencyCode::new("EUR").unwrap();
+        let round = |v: &str, dp: u32| {
+            Money::new(v.parse::<Decimal>().unwrap(), eur)
+                .unwrap()
+                .round_to(dp)
+                .amount()
+        };
+        // Les demis vont vers le chiffre pair (jamais un biais systématique « half up »).
+        assert_eq!(round("0.125", 2), "0.12".parse::<Decimal>().unwrap());
+        assert_eq!(round("0.135", 2), "0.14".parse::<Decimal>().unwrap());
+        assert_eq!(round("0.5", 0), Decimal::ZERO);
+        assert_eq!(round("1.5", 0), "2".parse::<Decimal>().unwrap());
+        assert_eq!(round("2.5", 0), "2".parse::<Decimal>().unwrap());
+        assert_eq!(round("3.5", 0), "4".parse::<Decimal>().unwrap());
+        // Hors demi : arrondi au plus proche.
+        assert_eq!(round("9.994", 2), "9.99".parse::<Decimal>().unwrap());
+        assert_eq!(round("9.996", 2), "10.00".parse::<Decimal>().unwrap());
+    }
+
+    #[test]
+    #[verifies(REQ-CUR-005, case = "décimales selon la devise ; original inchangé")]
+    fn rounding_depends_on_decimals_and_preserves_source() {
+        let source = Money::new(
+            "1234.5678".parse::<Decimal>().unwrap(),
+            CurrencyCode::new("EUR").unwrap(),
+        )
+        .unwrap();
+        // 2 décimales (EUR) vs 0 décimale (JPY) : le nombre de décimales est fourni par l'appelant.
+        assert_eq!(
+            source.round_to(2).amount(),
+            "1234.57".parse::<Decimal>().unwrap()
+        );
+        assert_eq!(
+            source.round_to(0).amount(),
+            "1235".parse::<Decimal>().unwrap()
+        );
+        // L'arrondi ne mute pas le montant d'origine (précision maximale conservée jusqu'à l'affichage).
+        assert_eq!(source.amount(), "1234.5678".parse::<Decimal>().unwrap());
+        // La devise est préservée.
+        assert_eq!(
+            source.round_to(2).currency(),
+            CurrencyCode::new("EUR").unwrap()
+        );
     }
 
     #[test]

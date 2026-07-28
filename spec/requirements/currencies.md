@@ -104,7 +104,7 @@ depends_on: [REQ-CUR-003]
 id: REQ-CUR-005
 title: Règle d'arrondi
 domain: currencies
-status: draft
+status: verified
 criticality: high
 layer: [core]
 e2e: n-a
