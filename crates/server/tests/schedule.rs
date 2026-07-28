@@ -134,6 +134,25 @@ async fn invalid_input_is_422(pool: PgPool) {
     );
 }
 
+// --- Cycles jour/semaine/année (REQ-SUB-013) ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-013)]
+async fn yearly_and_weekly_via_endpoint(pool: PgPool) {
+    let web = account(&pool, "sched-dwy@example.com").await;
+    // Année depuis le 29 févr bissextile -> 28 févr (clamp ancré, ADR 0022 ; pas le 1er mars de Wallos).
+    let r = post(&pool, "/api/v1/schedule/next-due", json!({
+        "first_payment": "2024-02-29", "cycle": { "unit": "year", "interval": 1 }, "after": "2024-02-29"
+    }), Some(&web)).await;
+    assert_eq!(r.status(), StatusCode::OK);
+    assert_eq!(next_payment(r).await, "2025-02-28");
+    // Hebdomadaire : +7 jours, aucune dérive.
+    let r = post(&pool, "/api/v1/schedule/next-due", json!({
+        "first_payment": "2025-01-01", "cycle": { "unit": "week", "interval": 1 }, "after": "2025-01-01"
+    }), Some(&web)).await;
+    assert_eq!(next_payment(r).await, "2025-01-08");
+}
+
 // --- Autorisation §9 : computeNextDue (calcul sans état, pas de portée foyer) ---
 
 #[sqlx::test(migrations = "../storage/migrations")]

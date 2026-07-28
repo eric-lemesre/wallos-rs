@@ -46,3 +46,17 @@ périmètre (cf. revue, différé).
   (année : 29 févr → 28 févr en clamp), mais SUB-013 tranchera formellement sa propre divergence oracle.
 - **Import depuis Wallos (SUB-016)** : les `next_payment` importés seront recalculés selon la règle
   subtrack, ce qui peut décaler une échéance héritée d'un débordement PHP — à documenter à ce moment-là.
+
+## Mise à jour (REQ-SUB-013 — cycles jour/semaine/année)
+
+SUB-013 rencontre la **même divergence** pour l'unité **année** : Wallos déborde
+`2024-02-29 + P1Y → 2025-03-01` (bug PHP), là où l'ancrage+clamp donne `2025-02-28`.
+
+**Décision** : par **cohérence** avec SUB-012, la règle ancrage+clamp s'applique à **toutes** les
+unités (jour, semaine, mois, année) — le même moteur `next_due`/`occurrence` les traite uniformément
+(`checked_add_days` pour jour/semaine, `checked_add_months` pour mois/année avec clamp). L'année 29 févr
+clampe donc au 28 févr, jamais au 1er mars. L'acceptation de SUB-013 (« règle capturée sur l'application
+d'origine ») est **explicitement superseded** par cet override, au même titre que SUB-012 : le comportement
+Wallos capturé reste figé dans `e2e/fixtures/oracles/REQ-SUB-013-cycles.json` pour mémoire, mais n'est
+pas implémenté. Le cas **hebdomadaire** (+7 jours, aucune dérive de jour de semaine) est **identique** à
+Wallos — pas de divergence.

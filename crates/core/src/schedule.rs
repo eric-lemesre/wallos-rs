@@ -16,8 +16,10 @@ use crate::billing::{BillingCycle, BillingUnit};
 
 /// `k`-ième occurrence depuis l'ancre : `ancre + k × intervalle` (unité du cycle), ancrée et clampée.
 ///
-/// `None` si le calcul déborde la plage représentable (date astronomiquement lointaine).
-#[requirement(REQ-SUB-012)]
+/// Moteur **multi-unités** (jour, semaine, mois, année — REQ-SUB-013) : arithmétique de jours pour
+/// jour/semaine (pas de clamp requis), `checked_add_months` pour mois/année (clamp fin de mois, dont
+/// l'année 29 févr → 28 févr, ADR 0022). `None` si le calcul déborde la plage représentable.
+#[requirement(REQ-SUB-013)]
 fn occurrence(anchor: NaiveDate, cycle: BillingCycle, k: u32) -> Option<NaiveDate> {
     let steps = cycle.interval().checked_mul(k)?;
     match cycle.unit() {
@@ -128,8 +130,8 @@ mod tests {
     }
 
     #[test]
-    #[verifies(REQ-SUB-012, case = "autres unités : jour/semaine/année (branches de next_due)")]
-    fn day_week_year_units() {
+    #[verifies(REQ-SUB-013, case = "jour et semaine : arithmétique de jours")]
+    fn day_and_week_units() {
         // Jour : +1 et +10 jours.
         assert_eq!(
             next_due(day(2025, 1, 1), cycle(BillingUnit::Day, 1), day(2025, 1, 1)),
@@ -160,7 +162,21 @@ mod tests {
             ),
             Some(day(2025, 1, 15))
         );
-        // Année : +1 an, avec clamp du 29 févr bissextile vers 28 févr.
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-013, case = "année : 29 févr -> 28 févr (clamp ancré, ADR 0022, pas le débordement Wallos)")]
+    fn yearly_leap_day_clamps() {
+        // Oracle figé : Wallos déborde au 1er mars ; subtrack clampe au 28 févr (cohérence SUB-012).
+        assert_eq!(
+            next_due(
+                day(2024, 2, 29),
+                cycle(BillingUnit::Year, 1),
+                day(2024, 2, 29)
+            ),
+            Some(day(2025, 2, 28))
+        );
+        // Année non bissextile ordinaire, et intervalle 2 (bisannuel).
         assert_eq!(
             next_due(
                 day(2025, 1, 1),
@@ -171,12 +187,34 @@ mod tests {
         );
         assert_eq!(
             next_due(
-                day(2024, 2, 29),
-                cycle(BillingUnit::Year, 1),
-                day(2024, 2, 29)
+                day(2025, 3, 15),
+                cycle(BillingUnit::Year, 2),
+                day(2025, 3, 15)
             ),
-            Some(day(2025, 2, 28))
+            Some(day(2027, 3, 15))
         );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-013, case = "hebdomadaire : aucune dérive de jour de semaine sur un an")]
+    fn weekly_no_weekday_drift_over_a_year() {
+        use chrono::Datelike;
+        // Le 1er janv 2025 est un mercredi. Toute échéance hebdomadaire tombe un mercredi (52 fois/an).
+        let anchor = day(2025, 1, 1);
+        let anchor_weekday = anchor.weekday();
+        let mut after = anchor;
+        for _ in 0..52 {
+            let occ = next_due(anchor, cycle(BillingUnit::Week, 1), after).unwrap();
+            assert_eq!(
+                occ.weekday(),
+                anchor_weekday,
+                "dérive de jour de semaine à {occ}"
+            );
+            after = occ;
+        }
+        // Après 52 semaines, on est bien un an plus loin, même jour de semaine (mercredi).
+        assert_eq!(after, day(2025, 12, 31));
+        assert_eq!(after.weekday(), anchor_weekday);
     }
 
     #[test]

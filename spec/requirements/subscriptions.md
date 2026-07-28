@@ -288,7 +288,7 @@ depends_on: [REQ-SUB-003]
 id: REQ-SUB-013
 title: Calcul de la prochaine échéance pour les cycles jour, semaine et année
 domain: subscriptions
-status: draft
+status: verified
 criticality: high
 layer: [core, api]
 e2e: optional
