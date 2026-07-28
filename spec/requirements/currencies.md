@@ -150,7 +150,7 @@ depends_on: [REQ-CUR-005, REQ-I18N-003]
 id: REQ-CUR-007
 title: Référentiel des devises supportées
 domain: currencies
-status: draft
+status: verified
 criticality: medium
 layer: [core, api, ui]
 e2e: optional

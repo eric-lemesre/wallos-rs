@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 use wallos_core::billing::{BillingCycle, BillingUnit};
+use wallos_core::currencies::SupportedCurrency;
 use wallos_core::money::{CurrencyCode, Money};
 use wallos_core::{DomainError, Subscription, requirement};
 
@@ -170,6 +171,39 @@ pub struct DeviceSummary {
     pub last_seen_at: String,
     /// Vrai si cet appareil est celui qui a émis la requête courante.
     pub current: bool,
+}
+
+/// Une devise du référentiel supporté exposée à l'interface (REQ-CUR-007).
+///
+/// `name` est le libellé par défaut (anglais) ; l'UI affiche le nom **localisé** par code (i18n).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct CurrencyDto {
+    /// Code ISO 4217.
+    #[schema(example = "EUR")]
+    pub code: String,
+    /// Symbole d'affichage.
+    #[schema(example = "€")]
+    pub symbol: String,
+    /// Libellé par défaut (localisé par l'UI).
+    #[schema(example = "Euro")]
+    pub name: String,
+    /// Nombre de décimales d'affichage (unités mineures ISO 4217).
+    #[schema(example = 2)]
+    pub decimals: u32,
+}
+
+impl CurrencyDto {
+    /// Projette une devise du référentiel `core` vers le DTO.
+    #[must_use]
+    #[requirement(REQ-CUR-007)]
+    pub fn from_core(currency: &SupportedCurrency) -> Self {
+        Self {
+            code: currency.code.to_string(),
+            symbol: currency.symbol.to_string(),
+            name: currency.name.to_string(),
+            decimals: currency.decimals,
+        }
+    }
 }
 
 /// Cycle de facturation d'un abonnement (REQ-SUB-003) : couple (unité, intervalle).

@@ -11,6 +11,7 @@ pub use wallos_req_macros::{requirement, verifies};
 
 pub mod actor;
 pub mod billing;
+pub mod currencies;
 pub mod error;
 pub mod exchange;
 pub mod money;

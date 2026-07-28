@@ -11,13 +11,14 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use wallos_core::requirement;
 use wallos_proto::{
     AggregateRequest, ChangePasswordRequest, ConvertedTotalResponse, CreateAccountRequest,
-    CreateDeviceSessionRequest, CreateSessionRequest, CurrentUser, DeviceSummary, DeviceToken,
-    HealthResponse, MoneyInput, Problem, problem,
+    CreateDeviceSessionRequest, CreateSessionRequest, CurrencyDto, CurrentUser, DeviceSummary,
+    DeviceToken, HealthResponse, MoneyInput, Problem, problem,
 };
 use wallos_storage::Db;
 
 pub mod accounts;
 pub mod auth;
+pub mod currencies;
 pub mod exchange;
 
 /// API wallos-rs v1.
@@ -39,7 +40,8 @@ pub mod exchange;
         auth::revoke_device,
         auth::change_password,
         auth::delete_session,
-        exchange::aggregate_converted_handler
+        exchange::aggregate_converted_handler,
+        currencies::list_currencies
     ),
     components(schemas(
         HealthResponse,
@@ -53,7 +55,8 @@ pub mod exchange;
         CurrentUser,
         MoneyInput,
         AggregateRequest,
-        ConvertedTotalResponse
+        ConvertedTotalResponse,
+        CurrencyDto
     ))
 )]
 pub struct ApiDoc;
@@ -121,6 +124,7 @@ pub fn app_with_db(db: Db) -> Router {
         .routes(routes!(auth::change_password))
         .routes(routes!(auth::delete_session))
         .routes(routes!(exchange::aggregate_converted_handler))
+        .routes(routes!(currencies::list_currencies))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))

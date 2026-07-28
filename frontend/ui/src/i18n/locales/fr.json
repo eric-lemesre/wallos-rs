@@ -58,5 +58,10 @@
     "asOf": "Taux au {{date}}",
     "incomplete": "Agrégat incomplet : certains montants ont été exclus faute de taux connu.",
     "error": "Impossible de calculer le total"
+  },
+  "currencies": {
+    "title": "Devises supportées",
+    "loadError": "Impossible de charger les devises",
+    "decimals": "Décimales"
   }
 }
