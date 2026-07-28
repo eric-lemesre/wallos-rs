@@ -35,7 +35,7 @@ depends_on: [REQ-AUT-002]
 id: REQ-SEC-002
 title: Format d'erreur uniforme sans fuite d'information
 domain: security
-status: draft
+status: verified
 criticality: high
 layer: [api]
 e2e: optional

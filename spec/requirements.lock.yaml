@@ -370,7 +370,7 @@ requirements:
 - id: REQ-SEC-002
   title: Format d'erreur uniforme sans fuite d'information
   domain: security
-  status: draft
+  status: verified
   criticality: high
   layer:
   - api
