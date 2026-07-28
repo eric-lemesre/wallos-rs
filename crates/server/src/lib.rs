@@ -13,9 +13,10 @@ use wallos_proto::{
     AggregateRequest, CategoryDto, ChangePasswordRequest, ConvertedTotalResponse,
     CreateAccountRequest, CreateCategoryRequest, CreateDeviceSessionRequest,
     CreatePaymentMethodRequest, CreateSessionRequest, CreateSubscriptionRequest, CurrencyDto,
-    CurrentUser, DeviceSummary, DeviceToken, HealthResponse, MoneyInput, NextDueRequest,
-    NextDueResponse, PaymentMethodDto, Problem, ReferenceCurrencyDto, RenameCategoryRequest,
-    RenamePaymentMethodRequest, SubscriptionDto, SubscriptionListResponse, problem,
+    CurrentUser, DeviceSummary, DeviceToken, HealthResponse, LanguageResponse, MoneyInput,
+    NextDueRequest, NextDueResponse, PaymentMethodDto, Problem, ReferenceCurrencyDto,
+    RenameCategoryRequest, RenamePaymentMethodRequest, SetLanguageRequest, SubscriptionDto,
+    SubscriptionListResponse, problem,
 };
 use wallos_storage::Db;
 
@@ -63,7 +64,9 @@ pub mod subscriptions;
         payment_methods::rename_payment_method,
         payment_methods::delete_payment_method,
         settings::get_reference_currency,
-        settings::set_reference_currency
+        settings::set_reference_currency,
+        settings::get_language,
+        settings::set_language
     ),
     components(schemas(
         HealthResponse,
@@ -90,7 +93,9 @@ pub mod subscriptions;
         PaymentMethodDto,
         CreatePaymentMethodRequest,
         RenamePaymentMethodRequest,
-        ReferenceCurrencyDto
+        ReferenceCurrencyDto,
+        LanguageResponse,
+        SetLanguageRequest
     ))
 )]
 pub struct ApiDoc;
@@ -185,6 +190,7 @@ pub fn app_with_db(db: Db) -> Router {
             settings::get_reference_currency,
             settings::set_reference_currency
         ))
+        .routes(routes!(settings::get_language, settings::set_language))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))

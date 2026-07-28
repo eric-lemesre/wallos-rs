@@ -48,6 +48,12 @@ export interface AppDriver {
   /** Vrai si aucun moyen de paiement de ce nom n'apparaît (isolation / suppression). */
   paymentMethodAbsent(name: string): Promise<boolean>;
 
+  // Langue (REQ-I18N-001).
+  /** Sélectionne une langue (code `en`/`fr`) et l'applique/enregistre. */
+  setLanguage(code: string): Promise<void>;
+  /** Code de langue actuellement appliqué (tel qu'affiché). */
+  readLanguage(): Promise<string>;
+
   // Devise de référence (REQ-CUR-001).
   /** Saisit une devise de référence (code ISO) et enregistre. */
   setReferenceCurrency(code: string): Promise<void>;

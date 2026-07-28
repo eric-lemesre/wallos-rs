@@ -293,6 +293,26 @@ pub struct ReferenceCurrencyDto {
     pub currency: String,
 }
 
+/// Langue de l'utilisateur (REQ-I18N-001), en **réponse** de lecture.
+///
+/// `language` est absent (`None`) si l'utilisateur n'a rien choisi : l'UI applique alors la langue
+/// système si elle est supportée (acceptance #2).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct LanguageResponse {
+    /// Code de langue (`en`, `fr`), ou absent si non renseigné.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(example = "fr")]
+    pub language: Option<String>,
+}
+
+/// Requête de choix de langue (REQ-I18N-001) : le code doit être une langue supportée.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct SetLanguageRequest {
+    /// Code de langue souhaité (`en`, `fr`).
+    #[schema(example = "fr")]
+    pub language: String,
+}
+
 /// Cycle de facturation d'un abonnement (REQ-SUB-003) : couple (unité, intervalle).
 ///
 /// `unit` est un code stable (`day`/`week`/`month`/`year`) ; `interval` est le nombre d'unités entre

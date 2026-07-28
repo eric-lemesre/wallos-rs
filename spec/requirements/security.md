@@ -155,7 +155,7 @@ depends_on: []
 id: REQ-I18N-001
 title: Choix et persistance de la langue
 domain: i18n
-status: draft
+status: verified
 criticality: medium
 layer: [core, api, ui]
 e2e: required

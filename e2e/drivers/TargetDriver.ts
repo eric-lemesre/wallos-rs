@@ -304,6 +304,21 @@ export class TargetDriver implements AppDriver, Harness {
     );
   }
 
+  // --- Langue (REQ-I18N-001) ---
+
+  async setLanguage(code: string): Promise<void> {
+    await this.page.getByTestId("language-select").selectOption(code);
+    await this.page
+      .getByTestId("language-current")
+      .filter({ hasText: code })
+      .waitFor({ state: "visible", timeout: 5000 });
+  }
+
+  async readLanguage(): Promise<string> {
+    await this.page.getByTestId("language-current").waitFor({ state: "visible", timeout: 5000 });
+    return (await this.page.getByTestId("language-current").textContent()) ?? "";
+  }
+
   // --- Devise de référence (REQ-CUR-001) ---
 
   async setReferenceCurrency(code: string): Promise<void> {

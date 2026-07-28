@@ -55,4 +55,33 @@ impl<'a> SettingsRepository<'a> {
             .await?;
         Ok(())
     }
+
+    /// Lit la langue **de l'utilisateur appelant** (REQ-I18N-001) : `None` si non renseignée (l'UI
+    /// applique alors la langue système si supportée).
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-I18N-001)]
+    pub async fn language(&self, actor: &Actor) -> Result<Option<String>, StorageError> {
+        let (language,): (Option<String>,) =
+            sqlx::query_as("select language from users where id = $1")
+                .bind(actor.user_id())
+                .fetch_one(self.pool)
+                .await?;
+        Ok(language)
+    }
+
+    /// Fixe la langue **de l'utilisateur appelant** (le code doit être déjà validé).
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de mise à jour.
+    #[requirement(REQ-I18N-001)]
+    pub async fn set_language(&self, actor: &Actor, code: &str) -> Result<(), StorageError> {
+        sqlx::query("update users set language = $2 where id = $1")
+            .bind(actor.user_id())
+            .bind(code)
+            .execute(self.pool)
+            .await?;
+        Ok(())
+    }
 }

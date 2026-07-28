@@ -15,6 +15,7 @@ pub mod category;
 pub mod currencies;
 pub mod error;
 pub mod exchange;
+pub mod language;
 pub mod money;
 pub mod password_policy;
 pub mod payment_method;
@@ -29,6 +30,7 @@ pub use error::DomainError;
 pub use exchange::{
     ConvertedTotal, ExchangeRate, RateProvider, RateTable, aggregate_converted, convert,
 };
+pub use language::Language;
 pub use payment_method::PaymentMethod;
 pub use reference_currency::ReferenceCurrency;
 pub use schedule::next_due;
