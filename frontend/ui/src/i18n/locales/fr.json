@@ -129,5 +129,12 @@
     "rename": "Renommer",
     "delete": "Supprimer",
     "loadError": "Impossible de charger les moyens de paiement"
+  },
+  "referenceCurrency": {
+    "title": "Devise de référence",
+    "current": "Devise actuelle",
+    "label": "Nouvelle devise (code ISO)",
+    "save": "Enregistrer",
+    "error": "Impossible de modifier la devise de référence"
   }
 }

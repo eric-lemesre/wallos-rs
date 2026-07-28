@@ -304,6 +304,25 @@ export class TargetDriver implements AppDriver, Harness {
     );
   }
 
+  // --- Devise de référence (REQ-CUR-001) ---
+
+  async setReferenceCurrency(code: string): Promise<void> {
+    await this.page.getByTestId("reference-currency-input").fill(code);
+    await this.page.getByTestId("reference-currency-save").click();
+    // Attend que l'affichage courant reflète la nouvelle devise.
+    await this.page
+      .getByTestId("reference-currency-current")
+      .filter({ hasText: code })
+      .waitFor({ state: "visible", timeout: 5000 });
+  }
+
+  async readReferenceCurrency(): Promise<string> {
+    await this.page
+      .getByTestId("reference-currency-current")
+      .waitFor({ state: "visible", timeout: 5000 });
+    return (await this.page.getByTestId("reference-currency-current").textContent()) ?? "";
+  }
+
   // --- Moyens de paiement (REQ-SUB-011) ---
 
   async createPaymentMethod(name: string): Promise<void> {

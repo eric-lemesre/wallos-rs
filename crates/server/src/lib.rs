@@ -14,8 +14,8 @@ use wallos_proto::{
     CreateAccountRequest, CreateCategoryRequest, CreateDeviceSessionRequest,
     CreatePaymentMethodRequest, CreateSessionRequest, CreateSubscriptionRequest, CurrencyDto,
     CurrentUser, DeviceSummary, DeviceToken, HealthResponse, MoneyInput, NextDueRequest,
-    NextDueResponse, PaymentMethodDto, Problem, RenameCategoryRequest, RenamePaymentMethodRequest,
-    SubscriptionDto, SubscriptionListResponse, problem,
+    NextDueResponse, PaymentMethodDto, Problem, ReferenceCurrencyDto, RenameCategoryRequest,
+    RenamePaymentMethodRequest, SubscriptionDto, SubscriptionListResponse, problem,
 };
 use wallos_storage::Db;
 
@@ -26,6 +26,7 @@ pub mod currencies;
 pub mod exchange;
 pub mod payment_methods;
 pub mod schedule;
+pub mod settings;
 pub mod subscriptions;
 
 /// API wallos-rs v1.
@@ -60,7 +61,9 @@ pub mod subscriptions;
         payment_methods::create_payment_method,
         payment_methods::list_payment_methods,
         payment_methods::rename_payment_method,
-        payment_methods::delete_payment_method
+        payment_methods::delete_payment_method,
+        settings::get_reference_currency,
+        settings::set_reference_currency
     ),
     components(schemas(
         HealthResponse,
@@ -86,7 +89,8 @@ pub mod subscriptions;
         SubscriptionListResponse,
         PaymentMethodDto,
         CreatePaymentMethodRequest,
-        RenamePaymentMethodRequest
+        RenamePaymentMethodRequest,
+        ReferenceCurrencyDto
     ))
 )]
 pub struct ApiDoc;
@@ -176,6 +180,10 @@ pub fn app_with_db(db: Db) -> Router {
         .routes(routes!(
             payment_methods::rename_payment_method,
             payment_methods::delete_payment_method
+        ))
+        .routes(routes!(
+            settings::get_reference_currency,
+            settings::set_reference_currency
         ))
         .split_for_parts();
     Router::new()

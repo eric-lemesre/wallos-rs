@@ -282,6 +282,17 @@ impl CurrencyDto {
     }
 }
 
+/// Devise de référence du foyer (REQ-CUR-001) : devise cible de tous les agrégats.
+///
+/// Sert à la fois de **réponse** (`GET`) et de **corps de requête** (`PUT`). Le code est validé contre
+/// le référentiel supporté côté serveur ; les montants saisis ne sont jamais altérés.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct ReferenceCurrencyDto {
+    /// Code ISO 4217 de la devise de référence.
+    #[schema(example = "EUR")]
+    pub currency: String,
+}
+
 /// Cycle de facturation d'un abonnement (REQ-SUB-003) : couple (unité, intervalle).
 ///
 /// `unit` est un code stable (`day`/`week`/`month`/`year`) ; `interval` est le nombre d'unités entre

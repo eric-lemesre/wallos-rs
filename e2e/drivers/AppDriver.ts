@@ -48,6 +48,12 @@ export interface AppDriver {
   /** Vrai si aucun moyen de paiement de ce nom n'apparaît (isolation / suppression). */
   paymentMethodAbsent(name: string): Promise<boolean>;
 
+  // Devise de référence (REQ-CUR-001).
+  /** Saisit une devise de référence (code ISO) et enregistre. */
+  setReferenceCurrency(code: string): Promise<void>;
+  /** Devise de référence actuellement affichée. */
+  readReferenceCurrency(): Promise<string>;
+
   // Création d'abonnement (REQ-SUB-002).
   createSubscription(input: {
     name: string; amount: string; currency: string; unit: string; interval: string; firstPayment: string;

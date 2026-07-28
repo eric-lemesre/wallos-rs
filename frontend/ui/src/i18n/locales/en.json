@@ -129,5 +129,12 @@
     "rename": "Rename",
     "delete": "Delete",
     "loadError": "Could not load payment methods"
+  },
+  "referenceCurrency": {
+    "title": "Reference currency",
+    "current": "Current currency",
+    "label": "New currency (ISO code)",
+    "save": "Save",
+    "error": "Could not update the reference currency"
   }
 }

@@ -148,6 +148,41 @@ async fn empty_name_is_rejected(pool: PgPool) {
     );
 }
 
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-011)]
+async fn edge_cases_are_rejected(pool: PgPool) {
+    // Revue SUB-011 #4 : nom trop long (> 100) refusé ; UUID malformé sur rename/delete -> 404.
+    let web = account(&pool, "pm-edge@example.com").await;
+    assert_eq!(
+        create(&pool, &web, &"a".repeat(101)).await.status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert_eq!(
+        send(
+            &pool,
+            "PUT",
+            "/api/v1/payment-methods/not-a-uuid",
+            Some(&web),
+            Some(json!({ "name": "X" })),
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        send(
+            &pool,
+            "DELETE",
+            "/api/v1/payment-methods/not-a-uuid",
+            Some(&web),
+            None,
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+}
+
 // --- Autorisation §9 : createPaymentMethod ---
 
 #[sqlx::test(migrations = "../storage/migrations")]

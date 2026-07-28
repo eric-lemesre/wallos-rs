@@ -19,7 +19,8 @@ use wallos_proto::{
     SubscriptionDto, SubscriptionListQuery, SubscriptionListResponse, problem,
 };
 use wallos_storage::{
-    Db, ExchangeRateRepository, SubscriptionFilter, SubscriptionRepository, SubscriptionRow,
+    Db, ExchangeRateRepository, SettingsRepository, SubscriptionFilter, SubscriptionRepository,
+    SubscriptionRow,
 };
 
 use crate::auth::AuthActor;
@@ -246,11 +247,24 @@ pub async fn list_subscriptions(
         Ok(p) => p,
         Err(err) => return field_error(&err),
     };
-    // Devise cible du total : défaut EUR en attendant la devise de référence (REQ-CUR-001).
-    let target_code = q
-        .currency
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "EUR".to_string());
+    // Devise cible du total : la **devise de référence du foyer** (REQ-CUR-001) par défaut ; un
+    // paramètre `currency` explicite reste un override ponctuel. Les agrégats s'expriment ainsi dans
+    // la devise choisie par le foyer, sans jamais altérer les montants saisis.
+    let target_code = match q.currency.filter(|s| !s.is_empty()) {
+        Some(explicit) => explicit,
+        None => match SettingsRepository::new(db.pool())
+            .reference_currency(&actor)
+            .await
+        {
+            Ok(code) => code,
+            Err(_) => {
+                return problem_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    problem(500, "about:blank", "Internal Server Error"),
+                );
+            }
+        },
+    };
     let Ok(target) = CurrencyCode::new(&target_code) else {
         return field_error(&FieldError::new("currency", "devise hors référentiel"));
     };

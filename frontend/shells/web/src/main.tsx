@@ -10,6 +10,7 @@ import { SubscriptionForm } from "../../../ui/src/components/SubscriptionForm";
 import { SubscriptionsList } from "../../../ui/src/components/SubscriptionsList";
 import { PaymentMethodsList } from "../../../ui/src/components/PaymentMethodsList";
 import { CurrenciesList } from "../../../ui/src/components/CurrenciesList";
+import { ReferenceCurrencySetting } from "../../../ui/src/components/ReferenceCurrencySetting";
 import { DevicesList } from "../../../ui/src/components/DevicesList";
 import { LoginForm } from "../../../ui/src/components/LoginForm";
 import { SignupForm } from "../../../ui/src/components/SignupForm";
@@ -29,6 +30,7 @@ if (root) {
           <ChangePasswordForm />
           <ConvertedTotalCard />
           <CurrenciesList />
+          <ReferenceCurrencySetting />
           <CategoriesList />
           <PaymentMethodsList />
           <NextDueCard />
