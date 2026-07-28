@@ -34,6 +34,21 @@ describe("CategoriesList", () => {
     expect(await screen.findByTestId("category-name")).toHaveTextContent("Streaming");
   });
 
+  it("préserve l'ordre déterministe renvoyé par le serveur (REQ-CAT-005)", async () => {
+    // Le serveur renvoie un ordre déterministe (par nom) ; l'UI l'affiche tel quel, identique aux
+    // autres modalités.
+    const ordered = [
+      { id: "a", name: "Alpha" },
+      { id: "b", name: "Beta" },
+      { id: "c", name: "Gamma" },
+    ];
+    vi.spyOn(api, "GET").mockResolvedValue(ok(ordered));
+    renderList();
+    await screen.findByText("Alpha");
+    const names = screen.getAllByTestId("category-name").map((n) => n.textContent);
+    expect(names).toEqual(["Alpha", "Beta", "Gamma"]);
+  });
+
   it("crée une catégorie puis rafraîchit", async () => {
     const get = vi.spyOn(api, "GET").mockResolvedValueOnce(ok([])).mockResolvedValueOnce(ok([CAT]));
     const post = vi.spyOn(api, "POST").mockResolvedValue(ok(CAT));
