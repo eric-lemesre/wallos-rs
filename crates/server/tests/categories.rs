@@ -124,6 +124,7 @@ async fn created_category_is_listed_immediately(pool: PgPool) {
 #[verifies(REQ-CAT-001)]
 async fn rename_and_delete_own_category(pool: PgPool) {
     let web = account(&pool, "cat2@example.com").await;
+    // Nom volontairement erroné ("Musci") pour illustrer la correction par renommage.
     let id = created_id(create_category(&pool, &web, "Musci").await).await;
 
     // Renommer (corrige la faute).
@@ -199,6 +200,72 @@ async fn categories_are_isolated_between_accounts(pool: PgPool) {
     );
     // La catégorie d'Alice est intacte.
     assert_eq!(categories(&pool, &alice).await[0]["name"], "Alice Only");
+}
+
+// --- Cas limites d'identifiant (dans le propre foyer de l'appelant) ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn rename_or_delete_nonexistent_category_is_404(pool: PgPool) {
+    let web = account(&pool, "missing-cat@example.com").await;
+    // UUID valide mais inexistant DANS SON PROPRE foyer -> 404 (pas une erreur 500).
+    let ghost = uuid::Uuid::new_v4();
+    assert_eq!(
+        send(
+            &pool,
+            "PUT",
+            &format!("/api/v1/categories/{ghost}"),
+            Some(&web),
+            Some(json!({ "name": "X" }))
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        send(
+            &pool,
+            "DELETE",
+            &format!("/api/v1/categories/{ghost}"),
+            Some(&web),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-001)]
+async fn malformed_category_id_is_404(pool: PgPool) {
+    // Convention codebase (cf. revokeDevice) : un identifiant mal formé est traité comme inexistant
+    // (404, ne divulgue rien), jamais 400/500.
+    let web = account(&pool, "malformed-cat@example.com").await;
+    assert_eq!(
+        send(
+            &pool,
+            "PUT",
+            "/api/v1/categories/not-a-uuid",
+            Some(&web),
+            Some(json!({ "name": "X" }))
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        send(
+            &pool,
+            "DELETE",
+            "/api/v1/categories/not-a-uuid",
+            Some(&web),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::NOT_FOUND
+    );
 }
 
 // --- Autorisation §9 : createCategory ---

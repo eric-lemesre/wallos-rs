@@ -186,16 +186,16 @@ pub struct CategoryDto {
 /// Requête de création d'une catégorie (REQ-CAT-001).
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct CreateCategoryRequest {
-    /// Nom de la catégorie (non vide).
-    #[schema(example = "Streaming")]
+    /// Nom de la catégorie (non vide, ≤ 100 caractères ; les espaces de bord sont normalisés).
+    #[schema(example = "Streaming", max_length = 100)]
     pub name: String,
 }
 
 /// Requête de renommage d'une catégorie (REQ-CAT-001).
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct RenameCategoryRequest {
-    /// Nouveau nom de la catégorie (non vide).
-    #[schema(example = "Musique")]
+    /// Nouveau nom de la catégorie (non vide, ≤ 100 caractères ; espaces de bord normalisés).
+    #[schema(example = "Musique", max_length = 100)]
     pub name: String,
 }
 

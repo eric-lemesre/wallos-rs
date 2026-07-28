@@ -330,7 +330,7 @@ export interface components {
         /** @description Requête de création d'une catégorie (REQ-CAT-001). */
         CreateCategoryRequest: {
             /**
-             * @description Nom de la catégorie (non vide).
+             * @description Nom de la catégorie (non vide, ≤ 100 caractères ; les espaces de bord sont normalisés).
              * @example Streaming
              */
             name: string;
@@ -494,7 +494,7 @@ export interface components {
         /** @description Requête de renommage d'une catégorie (REQ-CAT-001). */
         RenameCategoryRequest: {
             /**
-             * @description Nouveau nom de la catégorie (non vide).
+             * @description Nouveau nom de la catégorie (non vide, ≤ 100 caractères ; espaces de bord normalisés).
              * @example Musique
              */
             name: string;
