@@ -375,6 +375,13 @@ pub struct SubscriptionDto {
     /// réponses de lecture/création, absent du modèle pur (calculé avec l'horloge serveur).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_payment: Option<String>,
+    /// Date de fin (annulation programmée, `YYYY-MM-DD`, REQ-SUB-009), le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_date: Option<String>,
+    /// Vrai si l'abonnement est **terminé** (date de fin dépassée) — champ **dérivé** (horloge serveur),
+    /// REQ-SUB-009. Un abonnement terminé est conservé mais exclu des agrégats.
+    #[serde(default)]
+    pub ended: bool,
 }
 
 /// Valeur par défaut de `active` (aligne le DTO sur le défaut du domaine : actif).
@@ -415,6 +422,8 @@ impl SubscriptionDto {
             notes: sub.notes().map(String::from),
             active: sub.is_active(),
             next_payment: None,
+            end_date: sub.end_date().map(|d| d.to_string()),
+            ended: false,
         }
     }
 
@@ -424,6 +433,21 @@ impl SubscriptionDto {
     pub fn from_core_with_next_payment(sub: &Subscription, next_payment: NaiveDate) -> Self {
         let mut dto = Self::from_core(sub);
         dto.next_payment = Some(next_payment.to_string());
+        dto
+    }
+
+    /// Comme [`from_core`](Self::from_core), avec les champs **dérivés** (horloge serveur) : prochaine
+    /// échéance éventuelle (absente si l'abonnement est terminé, REQ-SUB-009) et état « terminé ».
+    #[must_use]
+    #[requirement(REQ-SUB-009)]
+    pub fn from_core_derived(
+        sub: &Subscription,
+        next_payment: Option<NaiveDate>,
+        ended: bool,
+    ) -> Self {
+        let mut dto = Self::from_core(sub);
+        dto.next_payment = next_payment.map(|d| d.to_string());
+        dto.ended = ended;
         dto
     }
 
@@ -467,6 +491,11 @@ impl SubscriptionDto {
         }
         if let Some(notes) = self.notes {
             sub = sub.with_notes(notes);
+        }
+        if let Some(end) = self.end_date {
+            let end = NaiveDate::parse_from_str(&end, "%Y-%m-%d")
+                .map_err(|_| DomainError::InvalidDate(format!("invalid end date: {end}")))?;
+            sub = sub.with_end_date(end);
         }
         Ok(sub.with_active(self.active))
     }
@@ -544,6 +573,9 @@ pub struct CreateSubscriptionRequest {
     /// État actif (défaut : actif).
     #[serde(default = "default_active")]
     pub active: bool,
+    /// Date de fin (annulation programmée, `YYYY-MM-DD`, REQ-SUB-009), le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_date: Option<String>,
 }
 
 impl CreateSubscriptionRequest {
@@ -597,6 +629,11 @@ impl CreateSubscriptionRequest {
         }
         if let Some(notes) = self.notes {
             sub = sub.with_notes(notes);
+        }
+        if let Some(end) = self.end_date {
+            let end = NaiveDate::parse_from_str(&end, "%Y-%m-%d")
+                .map_err(|_| FieldError::new("end_date", "date YYYY-MM-DD invalide"))?;
+            sub = sub.with_end_date(end);
         }
         Ok(sub.with_active(self.active))
     }
@@ -872,6 +909,7 @@ mod tests {
             url: None,
             notes: None,
             active: true,
+            end_date: None,
         }
     }
 

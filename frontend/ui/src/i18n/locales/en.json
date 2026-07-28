@@ -98,7 +98,8 @@
     "firstPayment": "First payment",
     "create": "Create subscription",
     "created": "Created, next payment",
-    "error": "Could not create the subscription"
+    "error": "Could not create the subscription",
+    "endDate": "End date (optional)"
   },
   "subscriptions": {
     "title": "My subscriptions",
@@ -120,7 +121,8 @@
     "editUnit": "Cycle unit",
     "editInterval": "Interval",
     "editActive": "Active",
-    "saveError": "Could not save the change"
+    "saveError": "Could not save the change",
+    "ended": "Ended"
   },
   "paymentMethods": {
     "title": "Payment methods",

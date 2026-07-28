@@ -212,10 +212,14 @@ function SubscriptionRow({
       <span data-testid="subscription-amount">
         {sub.amount} {sub.currency}
       </span>
-      {sub.next_payment && (
-        <span data-testid="subscription-next">
-          {t("subscriptions.nextPayment")}: {sub.next_payment}
-        </span>
+      {sub.ended ? (
+        <span data-testid="subscription-ended">{t("subscriptions.ended")}</span>
+      ) : (
+        sub.next_payment && (
+          <span data-testid="subscription-next">
+            {t("subscriptions.nextPayment")}: {sub.next_payment}
+          </span>
+        )
       )}
 
       {editing ? (

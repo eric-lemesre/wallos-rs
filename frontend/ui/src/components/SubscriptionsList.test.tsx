@@ -171,6 +171,14 @@ describe("SubscriptionsList", () => {
     expect(screen.getByTestId("subscription-amount-input")).toBeInTheDocument();
   });
 
+  it("affiche « terminé » pour un abonnement dont la date de fin est dépassée (REQ-SUB-009)", async () => {
+    const ended = { ...sub("1", "Netflix", "9.99"), ended: true, next_payment: undefined };
+    vi.spyOn(api, "GET").mockResolvedValue(response([ended], "0.00"));
+    renderList();
+    expect(await screen.findByTestId("subscription-ended")).toBeInTheDocument();
+    expect(screen.queryByTestId("subscription-next")).toBeNull();
+  });
+
   it("affiche un message quand la liste est vide", async () => {
     vi.spyOn(api, "GET").mockResolvedValue(response([], "0.00"));
     renderList();

@@ -43,6 +43,8 @@ pub struct SubscriptionRow {
     pub notes: Option<String>,
     /// État actif.
     pub active: bool,
+    /// Date de fin (annulation programmée), le cas échéant (REQ-SUB-009).
+    pub end_date: Option<NaiveDate>,
 }
 
 /// Filtres de liste (REQ-SUB-006), tous optionnels et **conjonctifs** : un critère absent (`None`)
@@ -80,8 +82,8 @@ impl<'a> SubscriptionRepository<'a> {
         sqlx::query(
             "insert into subscriptions \
              (id, household_id, name, amount, currency, cycle_unit, cycle_interval, first_payment, \
-              category_id, payment_method_id, payer_id, logo, url, notes, active) \
-             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)",
+              category_id, payment_method_id, payer_id, logo, url, notes, active, end_date) \
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)",
         )
         .bind(sub.id())
         .bind(actor.household_id())
@@ -98,6 +100,7 @@ impl<'a> SubscriptionRepository<'a> {
         .bind(sub.url())
         .bind(sub.notes())
         .bind(sub.is_active())
+        .bind(sub.end_date())
         .execute(self.pool)
         .await?;
         Ok(())
@@ -115,7 +118,7 @@ impl<'a> SubscriptionRepository<'a> {
     ) -> Result<Option<SubscriptionRow>, StorageError> {
         let row = sqlx::query_as::<_, SubscriptionRow>(
             "select id, name, amount, currency, cycle_unit, cycle_interval, first_payment, \
-                    category_id, payment_method_id, payer_id, logo, url, notes, active \
+                    category_id, payment_method_id, payer_id, logo, url, notes, active, end_date \
              from subscriptions where id = $1 and household_id = $2",
         )
         .bind(id)
@@ -139,7 +142,7 @@ impl<'a> SubscriptionRepository<'a> {
             "update subscriptions set \
                 name = $3, amount = $4, currency = $5, cycle_unit = $6, cycle_interval = $7, \
                 first_payment = $8, category_id = $9, payment_method_id = $10, payer_id = $11, \
-                logo = $12, url = $13, notes = $14, active = $15 \
+                logo = $12, url = $13, notes = $14, active = $15, end_date = $16 \
              where id = $1 and household_id = $2",
         )
         .bind(sub.id())
@@ -157,6 +160,7 @@ impl<'a> SubscriptionRepository<'a> {
         .bind(sub.url())
         .bind(sub.notes())
         .bind(sub.is_active())
+        .bind(sub.end_date())
         .execute(self.pool)
         .await?;
         Ok(res.rows_affected() > 0)
@@ -178,7 +182,7 @@ impl<'a> SubscriptionRepository<'a> {
     ) -> Result<Vec<SubscriptionRow>, StorageError> {
         let rows = sqlx::query_as::<_, SubscriptionRow>(
             "select id, name, amount, currency, cycle_unit, cycle_interval, first_payment, \
-                    category_id, payment_method_id, payer_id, logo, url, notes, active \
+                    category_id, payment_method_id, payer_id, logo, url, notes, active, end_date \
              from subscriptions \
              where household_id = $1 \
                and ($2::uuid is null or category_id = $2) \

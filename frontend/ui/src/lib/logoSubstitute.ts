@@ -22,7 +22,8 @@ export function logoSubstitute(name: string): LogoSubstitute {
       ? "?"
       : words
           .slice(0, 2)
-          .map((w) => w[0]!.toUpperCase())
+          // Revue SUB-015 #1 : première **unité de code** (pas unité UTF-16) — préserve emoji / hors-BMP.
+          .map((w) => String.fromCodePoint(w.codePointAt(0)!).toUpperCase())
           .join("");
 
   // Teinte dérivée d'un hachage déterministe du nom (aucune source d'aléa, aucun réseau).
@@ -31,5 +32,6 @@ export function logoSubstitute(name: string): LogoSubstitute {
     hash = (hash * 31 + trimmed.charCodeAt(i)) >>> 0;
   }
   const hue = hash % 360;
-  return { initials, color: `hsl(${hue}, 65%, 45%)` };
+  // L=40 % pour un contraste suffisant avec un texte blanc (revue SUB-015 #6).
+  return { initials, color: `hsl(${hue}, 65%, 40%)` };
 }
