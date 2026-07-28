@@ -169,6 +169,34 @@ export class TargetDriver implements AppDriver, Harness {
     }
   }
 
+  // --- Catégories (REQ-CAT-001) ---
+
+  async createCategory(name: string): Promise<void> {
+    await this.page.getByTestId("category-new-name").fill(name);
+    await this.page.getByTestId("category-create").click();
+  }
+
+  async categoryVisible(name: string): Promise<boolean> {
+    try {
+      await this.page
+        .getByTestId("category-name")
+        .filter({ hasText: name })
+        .first()
+        .waitFor({ state: "visible", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async categoryAbsent(name: string): Promise<boolean> {
+    // La liste doit être chargée (section visible) avant de conclure à l'absence.
+    await this.page.getByTestId("categories-list").waitFor({ state: "visible", timeout: 5000 });
+    return (
+      (await this.page.getByTestId("category-name").filter({ hasText: name }).count()) === 0
+    );
+  }
+
   // --- Agrégation multi-devises en mode dégradé (REQ-CUR-004) ---
 
   async computeAggregate(target: string, amounts: MoneyInput[]): Promise<void> {

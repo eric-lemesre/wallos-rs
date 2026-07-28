@@ -3,6 +3,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod categories;
 pub mod db;
 pub mod device_tokens;
 pub mod error;
@@ -11,6 +12,7 @@ pub mod login_attempts;
 pub mod sessions;
 pub mod users;
 
+pub use categories::{CategoryRepository, CategoryRow};
 pub use db::Db;
 pub use device_tokens::DeviceTokenRepository;
 pub use error::StorageError;

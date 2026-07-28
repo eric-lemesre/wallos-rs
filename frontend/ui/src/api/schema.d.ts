@@ -21,6 +21,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Liste les catégories du foyer de l'appelant (disponibles immédiatement pour le formulaire). */
+        get: operations["listCategories"];
+        put?: never;
+        /** Crée une catégorie dans le foyer de l'appelant. */
+        post: operations["createCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Renomme une catégorie du foyer de l'appelant. */
+        put: operations["renameCategory"];
+        post?: never;
+        /** Supprime une catégorie du foyer de l'appelant. */
+        delete: operations["deleteCategory"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/currencies": {
         parameters: {
             query?: never;
@@ -206,6 +242,16 @@ export interface components {
              */
             target: string;
         };
+        /** @description Une catégorie d'abonnements exposée à l'interface (REQ-CAT-001). */
+        CategoryDto: {
+            /** @description Identifiant stable (UUID). */
+            id: string;
+            /**
+             * @description Nom de la catégorie.
+             * @example Streaming
+             */
+            name: string;
+        };
         /**
          * @description Requête de changement de mot de passe (REQ-AUT-007).
          *
@@ -280,6 +326,14 @@ export interface components {
              * @example correct horse battery staple
              */
             password: string;
+        };
+        /** @description Requête de création d'une catégorie (REQ-CAT-001). */
+        CreateCategoryRequest: {
+            /**
+             * @description Nom de la catégorie (non vide).
+             * @example Streaming
+             */
+            name: string;
         };
         /**
          * @description Requête d'appairage d'un appareil natif (REQ-AUT-005).
@@ -437,6 +491,14 @@ export interface components {
              */
             type: string;
         };
+        /** @description Requête de renommage d'une catégorie (REQ-CAT-001). */
+        RenameCategoryRequest: {
+            /**
+             * @description Nouveau nom de la catégorie (non vide).
+             * @example Musique
+             */
+            name: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -468,6 +530,170 @@ export interface operations {
             };
             /** @description Requête invalide */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listCategories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Catégories du foyer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryDto"][];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Catégorie créée */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryDto"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Nom invalide */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    renameCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant (UUID) de la catégorie */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Catégorie renommée */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryDto"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Catégorie inconnue ou hors du foyer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Nom invalide */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant (UUID) de la catégorie */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Catégorie supprimée */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Catégorie inconnue ou hors du foyer */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

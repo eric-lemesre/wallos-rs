@@ -63,5 +63,13 @@
     "title": "Devises supportées",
     "loadError": "Impossible de charger les devises",
     "decimals": "Décimales"
+  },
+  "categories": {
+    "title": "Catégories",
+    "name": "Nom de la catégorie",
+    "create": "Ajouter une catégorie",
+    "rename": "Renommer",
+    "delete": "Supprimer",
+    "loadError": "Impossible de charger les catégories"
   }
 }

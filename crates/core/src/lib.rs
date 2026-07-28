@@ -11,6 +11,7 @@ pub use wallos_req_macros::{requirement, verifies};
 
 pub mod actor;
 pub mod billing;
+pub mod category;
 pub mod currencies;
 pub mod error;
 pub mod exchange;
@@ -20,6 +21,7 @@ pub mod stats;
 pub mod subscription;
 
 pub use billing::{BillingCycle, BillingUnit};
+pub use category::Category;
 pub use error::DomainError;
 pub use exchange::{
     ConvertedTotal, ExchangeRate, RateProvider, RateTable, aggregate_converted, convert,

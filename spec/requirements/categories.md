@@ -5,7 +5,7 @@
 id: REQ-CAT-001
 title: Gestion des catégories
 domain: categories
-status: draft
+status: verified
 criticality: medium
 layer: [core, api, ui]
 e2e: required

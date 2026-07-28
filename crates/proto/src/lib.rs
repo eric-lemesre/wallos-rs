@@ -173,6 +173,32 @@ pub struct DeviceSummary {
     pub current: bool,
 }
 
+/// Une catégorie d'abonnements exposée à l'interface (REQ-CAT-001).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct CategoryDto {
+    /// Identifiant stable (UUID).
+    pub id: String,
+    /// Nom de la catégorie.
+    #[schema(example = "Streaming")]
+    pub name: String,
+}
+
+/// Requête de création d'une catégorie (REQ-CAT-001).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct CreateCategoryRequest {
+    /// Nom de la catégorie (non vide).
+    #[schema(example = "Streaming")]
+    pub name: String,
+}
+
+/// Requête de renommage d'une catégorie (REQ-CAT-001).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct RenameCategoryRequest {
+    /// Nouveau nom de la catégorie (non vide).
+    #[schema(example = "Musique")]
+    pub name: String,
+}
+
 /// Une devise du référentiel supporté exposée à l'interface (REQ-CUR-007).
 ///
 /// `name` est le libellé par défaut (anglais) ; l'UI affiche le nom **localisé** par code (i18n).
