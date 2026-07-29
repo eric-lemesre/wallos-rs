@@ -25,6 +25,7 @@ pub mod auth;
 pub mod categories;
 pub mod currencies;
 pub mod exchange;
+pub mod idempotency;
 pub mod payment_methods;
 pub mod schedule;
 pub mod settings;
