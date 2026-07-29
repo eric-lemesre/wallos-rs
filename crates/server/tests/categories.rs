@@ -606,7 +606,7 @@ async fn modification_timestamp_is_server_provided(pool: PgPool) {
     assert_eq!(created_at, updated_at);
 
     // Une modification ultérieure **avance** l'horodatage (fourni par l'horloge serveur, jamais le client).
-    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await; // marge robuste (revue SYN-001 F3)
     let renamed = send(
         &pool,
         "PUT",
@@ -716,4 +716,40 @@ async fn without_key_creation_is_unaffected(pool: PgPool) {
         StatusCode::CREATED
     );
     assert_eq!(categories(&pool, &web).await.len(), 1);
+}
+
+// --- REQ-SYN-001 (revue F1) : collision d'id client distincte du doublon de nom ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-001, case = "id client déjà pris → 409, jamais un message de doublon de nom")]
+async fn client_provided_id_collision_is_conflict(pool: PgPool) {
+    let web = account(&pool, "syn-cat-idcol@example.com").await;
+    let id = uuid::Uuid::new_v4().to_string();
+    assert_eq!(
+        send(
+            &pool,
+            "POST",
+            "/api/v1/categories",
+            Some(&web),
+            Some(json!({ "id": id, "name": "Streaming" })),
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+    // Même id, nom **différent** (sans clé d'idempotence) : collision de clé primaire → 409 (pas 422).
+    let conflict = send(
+        &pool,
+        "POST",
+        "/api/v1/categories",
+        Some(&web),
+        Some(json!({ "id": id, "name": "Musique" })),
+    )
+    .await;
+    assert_eq!(conflict.status(), StatusCode::CONFLICT);
+    // Le doublon de **nom**, lui, reste un 422 (unicité métier CAT-004) — comportement inchangé.
+    assert_eq!(
+        create_category(&pool, &web, "Streaming").await.status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
 }

@@ -10,6 +10,7 @@ use wallos_core::actor::Actor;
 use wallos_core::requirement;
 
 use crate::StorageError;
+use crate::outcomes::CreateOutcome;
 
 /// Catégorie exposée aux lectures autorisées.
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -48,13 +49,19 @@ impl<'a> CategoryRepository<'a> {
 
     /// Crée une catégorie **dans le foyer de l'appelant**.
     ///
-    /// Renvoie `false` si le nom entre en collision (insensible à la casse) avec une catégorie existante
-    /// du foyer (unicité CAT-004) — l'appelant traduit ce `false` en `422`. `true` si créée.
+    /// Distingue les deux collisions d'unicité possibles (revue SYN-001 F1) : l'`id` fourni déjà pris
+    /// (clé primaire) → [`CreateOutcome::DuplicateId`] (→ `409`) ; un nom déjà utilisé dans le foyer,
+    /// insensible à la casse (unicité CAT-004) → [`CreateOutcome::DuplicateName`] (→ `422`).
     ///
     /// # Errors
     /// `StorageError::Database` en cas d'échec d'insertion (hors collision d'unicité).
     #[requirement(REQ-CAT-004)]
-    pub async fn create(&self, actor: &Actor, id: Uuid, name: &str) -> Result<bool, StorageError> {
+    pub async fn create(
+        &self,
+        actor: &Actor,
+        id: Uuid,
+        name: &str,
+    ) -> Result<CreateOutcome, StorageError> {
         let inserted =
             sqlx::query("insert into categories (id, household_id, name) values ($1, $2, $3)")
                 .bind(id)
@@ -63,8 +70,15 @@ impl<'a> CategoryRepository<'a> {
                 .execute(self.pool)
                 .await;
         match inserted {
-            Ok(_) => Ok(true),
-            Err(sqlx::Error::Database(db)) if db.is_unique_violation() => Ok(false),
+            Ok(_) => Ok(CreateOutcome::Created),
+            Err(sqlx::Error::Database(db)) if db.is_unique_violation() => {
+                // L'index unique de nom porte un nom stable ; toute autre violation est la clé primaire.
+                if db.constraint() == Some("categories_household_name_unique") {
+                    Ok(CreateOutcome::DuplicateName)
+                } else {
+                    Ok(CreateOutcome::DuplicateId)
+                }
+            }
             Err(other) => Err(other.into()),
         }
     }

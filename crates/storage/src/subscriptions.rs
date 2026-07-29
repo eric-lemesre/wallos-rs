@@ -11,6 +11,7 @@ use wallos_core::actor::Actor;
 use wallos_core::requirement;
 
 use crate::StorageError;
+use crate::outcomes::CreateOutcome;
 
 /// Ligne d'abonnement (champs bruts, tels que stockés).
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -77,11 +78,19 @@ impl<'a> SubscriptionRepository<'a> {
 
     /// Crée un abonnement **dans le foyer de l'appelant**.
     ///
+    /// La seule contrainte d'unicité est la clé primaire `id` : une collision (id **fourni par le
+    /// client** déjà pris, REQ-SYN-001) renvoie [`CreateOutcome::DuplicateId`] (→ `409`) au lieu d'un
+    /// `500` (revue SYN-001 F2).
+    ///
     /// # Errors
-    /// `StorageError::Database` en cas d'échec d'insertion.
+    /// `StorageError::Database` en cas d'échec d'insertion (hors collision d'unicité).
     #[requirement(REQ-SUB-002)]
-    pub async fn create(&self, actor: &Actor, sub: &Subscription) -> Result<(), StorageError> {
-        sqlx::query(
+    pub async fn create(
+        &self,
+        actor: &Actor,
+        sub: &Subscription,
+    ) -> Result<CreateOutcome, StorageError> {
+        let inserted = sqlx::query(
             "insert into subscriptions \
              (id, household_id, name, amount, currency, cycle_unit, cycle_interval, first_payment, \
               category_id, payment_method_id, payer_id, logo, url, notes, active, end_date) \
@@ -104,8 +113,14 @@ impl<'a> SubscriptionRepository<'a> {
         .bind(sub.is_active())
         .bind(sub.end_date())
         .execute(self.pool)
-        .await?;
-        Ok(())
+        .await;
+        match inserted {
+            Ok(_) => Ok(CreateOutcome::Created),
+            Err(sqlx::Error::Database(db)) if db.is_unique_violation() => {
+                Ok(CreateOutcome::DuplicateId)
+            }
+            Err(other) => Err(other.into()),
+        }
     }
 
     /// Lit un abonnement **du foyer de l'appelant** par son id (`None` si absent ou autre foyer → 404).

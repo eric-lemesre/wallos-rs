@@ -828,7 +828,7 @@ async fn modification_timestamp_is_server_provided(pool: PgPool) {
             .unwrap();
 
     // Une modification (PUT) avance l'horodatage : fourni par l'horloge serveur, jamais le client.
-    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await; // marge robuste (revue SYN-001 F3)
     let mut upd = valid_body();
     upd["amount"] = json!("19.99");
     let r = put(
@@ -888,4 +888,27 @@ async fn idempotent_create_replays_without_side_effect(pool: PgPool) {
     // Aucun doublon : un seul abonnement.
     let listed = list(&pool, &web, "").await;
     assert_eq!(listed["subscriptions"].as_array().unwrap().len(), 1);
+}
+
+// --- REQ-SYN-001 (revue F2) : collision d'id client → 409 (au lieu de 500) ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-001, case = "id client déjà pris → 409, jamais 500")]
+async fn client_provided_id_collision_is_conflict(pool: PgPool) {
+    let web = account(&pool, "syn-sub-idcol@example.com").await;
+    let id = uuid::Uuid::new_v4().to_string();
+    let mut body = valid_body();
+    body["id"] = json!(id);
+    assert_eq!(
+        create(&pool, &web, body).await.status(),
+        StatusCode::CREATED
+    );
+    // Même id (sans clé d'idempotence), corps différent : collision de clé primaire → 409, pas 500.
+    let mut again = valid_body();
+    again["id"] = json!(id);
+    again["amount"] = json!("19.99");
+    assert_eq!(
+        create(&pool, &web, again).await.status(),
+        StatusCode::CONFLICT
+    );
 }

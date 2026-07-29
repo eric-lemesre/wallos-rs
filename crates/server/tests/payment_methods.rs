@@ -399,3 +399,100 @@ async fn client_provided_uuid_is_preserved(pool: PgPool) {
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["id"], client_id);
 }
+
+// --- REQ-SYN-001 (revue F4) : symétrie avec catégories/abonnements ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-001, case = "un id fourni non-UUID est rejeté (422)")]
+async fn invalid_client_provided_id_is_rejected(pool: PgPool) {
+    let web = account(&pool, "syn-pm-bad@example.com").await;
+    let bad = send(
+        &pool,
+        "POST",
+        "/api/v1/payment-methods",
+        Some(&web),
+        Some(json!({ "id": "not-a-uuid", "name": "PayPal" })),
+    )
+    .await;
+    assert_eq!(bad.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(list(&pool, &web).await.len(), 0);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-001, case = "id client déjà pris → 409, jamais 500")]
+async fn client_provided_id_collision_is_conflict(pool: PgPool) {
+    let web = account(&pool, "syn-pm-idcol@example.com").await;
+    let id = uuid::Uuid::new_v4().to_string();
+    assert_eq!(
+        send(
+            &pool,
+            "POST",
+            "/api/v1/payment-methods",
+            Some(&web),
+            Some(json!({ "id": id, "name": "Carte" })),
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+    let conflict = send(
+        &pool,
+        "POST",
+        "/api/v1/payment-methods",
+        Some(&web),
+        Some(json!({ "id": id, "name": "PayPal" })),
+    )
+    .await;
+    assert_eq!(conflict.status(), StatusCode::CONFLICT);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-001, case = "l'horodatage de modification est fourni par le serveur et avancé")]
+async fn modification_timestamp_is_server_provided(pool: PgPool) {
+    use chrono::{DateTime, Utc};
+
+    let web = account(&pool, "syn-pm-ts@example.com").await;
+    let id = uuid::Uuid::new_v4();
+    assert_eq!(
+        send(
+            &pool,
+            "POST",
+            "/api/v1/payment-methods",
+            Some(&web),
+            Some(json!({ "id": id.to_string(), "name": "Carte" })),
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+    let created_at: DateTime<Utc> =
+        sqlx::query_scalar("select updated_at from payment_methods where id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await; // marge robuste (revue SYN-001 F3)
+    assert_eq!(
+        send(
+            &pool,
+            "PUT",
+            &format!("/api/v1/payment-methods/{id}"),
+            Some(&web),
+            Some(json!({ "name": "PayPal" })),
+        )
+        .await
+        .status(),
+        StatusCode::OK
+    );
+    let after: DateTime<Utc> =
+        sqlx::query_scalar("select updated_at from payment_methods where id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(
+        after > created_at,
+        "updated_at doit avancer après modification"
+    );
+}

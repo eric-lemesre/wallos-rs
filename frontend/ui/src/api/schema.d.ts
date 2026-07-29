@@ -975,7 +975,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Clé d'idempotence réutilisée avec un corps différent */
+            /** @description Conflit : identifiant déjà utilisé, ou clé d'idempotence réutilisée avec un corps différent */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -984,7 +984,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Nom invalide */
+            /** @description Identifiant ou nom invalide */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -1439,7 +1439,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Clé d'idempotence réutilisée avec un corps différent */
+            /** @description Conflit : identifiant déjà utilisé, ou clé d'idempotence réutilisée avec un corps différent */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -1448,7 +1448,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Nom invalide */
+            /** @description Identifiant ou nom invalide */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -1878,7 +1878,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Clé d'idempotence réutilisée avec un corps différent */
+            /** @description Conflit : identifiant déjà utilisé, ou clé d'idempotence réutilisée avec un corps différent */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -1887,7 +1887,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Validation par champ */
+            /** @description Validation par champ (dont identifiant) */
             422: {
                 headers: {
                     [name: string]: unknown;
