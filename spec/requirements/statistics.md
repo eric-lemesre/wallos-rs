@@ -9,7 +9,7 @@
 id: REQ-STA-001
 title: Normalisation du coût mensuel
 domain: statistics
-status: draft
+status: verified
 criticality: high
 layer: [core, api, ui]
 e2e: required

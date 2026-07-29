@@ -14,6 +14,7 @@ use uuid::Uuid;
 use wallos_core::billing::{BillingCycle, BillingUnit};
 use wallos_core::currencies::SupportedCurrency;
 use wallos_core::money::{CurrencyCode, Money};
+use wallos_core::stats::monthly_cost_rounded;
 use wallos_core::{DomainError, Subscription, requirement};
 
 /// Enveloppe un secret (mot de passe, jeton d'appareil, clé de canal de notification) — REQ-SEC-003.
@@ -431,6 +432,11 @@ pub struct SubscriptionDto {
     /// REQ-SUB-009. Un abonnement terminé est conservé mais exclu des agrégats.
     #[serde(default)]
     pub ended: bool,
+    /// Coût **mensuel normalisé** (chaîne décimale, REQ-STA-001), dans la devise de l'abonnement.
+    /// Champ **dérivé** : facteur de cycle capturé sur l'application d'origine (30 j/mois, 4.35 sem/mois,
+    /// 12 mois/an). L'arrondi d'affichage relève de REQ-CUR-005.
+    #[serde(default)]
+    pub monthly_cost: String,
 }
 
 /// Valeur par défaut de `active` (aligne le DTO sur le défaut du domaine : actif).
@@ -473,6 +479,10 @@ impl SubscriptionDto {
             next_payment: None,
             end_date: sub.end_date().map(|d| d.to_string()),
             ended: false,
+            // Coût mensuel normalisé et arrondi pour l'affichage (REQ-STA-001) : dérivé du prix + cycle.
+            monthly_cost: monthly_cost_rounded(*sub.price(), sub.cycle())
+                .amount()
+                .to_string(),
         }
     }
 
