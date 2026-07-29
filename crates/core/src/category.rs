@@ -69,6 +69,23 @@ impl Category {
     }
 }
 
+/// Politique de suppression d'une catégorie **référencée** (REQ-CAT-003).
+///
+/// **Comportement de référence capturé sur Wallos 5.4.2** (§8.1, `endpoints/categories/category.php`,
+/// `handleDeleteCategory`) : avant toute suppression, Wallos compte les abonnements du compte qui
+/// pointent vers la catégorie ; si ce compte est non nul, la suppression est **refusée** (message
+/// `category_in_use`) — jamais de réaffectation à une catégorie par défaut, jamais de cascade sur les
+/// abonnements. C'est précisément le piège que l'exigence pointe : un agent inventerait volontiers un
+/// `SET NULL` ou un `CASCADE` plausibles mais divergents.
+///
+/// Renvoie `true` si la catégorie peut être supprimée (aucun abonnement ne la référence). Garantit,
+/// par construction, qu'aucun abonnement ne référencera jamais une catégorie inexistante (CAT-003 #2).
+#[must_use]
+#[requirement(REQ-CAT-003)]
+pub const fn category_is_deletable(referencing_subscriptions: u64) -> bool {
+    referencing_subscriptions == 0
+}
+
 #[cfg(test)]
 mod tests {
     use wallos_req_macros::verifies;
@@ -112,6 +129,22 @@ mod tests {
         // Un nom distinct a une forme canonique distincte.
         let c = Category::new(Uuid::from_u128(3), "Musique").unwrap();
         assert_ne!(a.canonical_name(), c.canonical_name());
+    }
+
+    #[test]
+    #[verifies(REQ-CAT-003, case = "catégorie référencée non supprimable (oracle Wallos)")]
+    fn referenced_category_is_not_deletable() {
+        // Oracle figé : e2e/fixtures/oracles/REQ-CAT-003-category-delete.json (Wallos 5.4.2
+        // handleDeleteCategory : compte > 0 -> `category_in_use`, la catégorie n'est PAS supprimée).
+        assert!(category_is_deletable(0), "aucune référence -> supprimable");
+        assert!(
+            !category_is_deletable(1),
+            "une référence -> non supprimable (jamais SET NULL ni CASCADE)"
+        );
+        assert!(
+            !category_is_deletable(42),
+            "plusieurs références -> toujours non supprimable"
+        );
     }
 
     #[test]

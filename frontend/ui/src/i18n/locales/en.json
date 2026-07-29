@@ -70,7 +70,8 @@
     "create": "Add category",
     "rename": "Rename",
     "delete": "Delete",
-    "loadError": "Could not load categories"
+    "loadError": "Could not load categories",
+    "inUse": "This category is used by a subscription and cannot be deleted"
   },
   "nextDue": {
     "title": "Next payment date",
@@ -99,7 +100,9 @@
     "create": "Create subscription",
     "created": "Created, next payment",
     "error": "Could not create the subscription",
-    "endDate": "End date (optional)"
+    "endDate": "End date (optional)",
+    "category": "Category",
+    "noCategory": "(none)"
   },
   "subscriptions": {
     "title": "My subscriptions",

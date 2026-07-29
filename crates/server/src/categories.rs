@@ -13,7 +13,7 @@ use wallos_core::Category;
 use wallos_core::actor::Actor;
 use wallos_core::requirement;
 use wallos_proto::{CategoryDto, CreateCategoryRequest, RenameCategoryRequest, problem};
-use wallos_storage::{CategoryRepository, CreateOutcome, Db, RenameOutcome};
+use wallos_storage::{CategoryRepository, CreateOutcome, Db, DeleteOutcome, RenameOutcome};
 
 use crate::auth::AuthActor;
 use crate::idempotency::{self, IdempotencyKey, Outcome};
@@ -44,6 +44,17 @@ fn category_not_found() -> Response {
     problem_response(
         StatusCode::NOT_FOUND,
         problem(404, "about:blank", "Not Found"),
+    )
+}
+
+/// `409` : la catégorie est **référencée** par au moins un abonnement et ne peut donc pas être
+/// supprimée (REQ-CAT-003). Comportement de référence capturé sur Wallos 5.4.2 (`category_in_use`).
+#[requirement(REQ-CAT-003)]
+fn category_in_use() -> Response {
+    problem_response(
+        StatusCode::CONFLICT,
+        problem(409, "about:blank", "Conflict")
+            .with_detail("category: référencée par un abonnement, suppression refusée"),
     )
 }
 
@@ -223,19 +234,24 @@ pub async fn rename_category(
 }
 
 /// Supprime une catégorie du foyer de l'appelant.
+///
+/// Refuse la suppression d'une catégorie **référencée** par un abonnement (`409`, REQ-CAT-003 :
+/// comportement capturé sur l'application d'origine, jamais de réaffectation ni de cascade).
 #[utoipa::path(
     delete,
     path = "/categories/{id}",
     operation_id = "deleteCategory",
     params(("id" = String, Path, description = "Identifiant (UUID) de la catégorie")),
-    extensions(("x-requirements" = json!(["REQ-CAT-001"]))),
+    extensions(("x-requirements" = json!(["REQ-CAT-001", "REQ-CAT-003"]))),
     responses(
         (status = 204, description = "Catégorie supprimée"),
         (status = 401, description = "Non authentifié", body = wallos_proto::Problem, content_type = "application/problem+json"),
-        (status = 404, description = "Catégorie inconnue ou hors du foyer", body = wallos_proto::Problem, content_type = "application/problem+json")
+        (status = 404, description = "Catégorie inconnue ou hors du foyer", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 409, description = "Catégorie référencée par un abonnement : suppression refusée", body = wallos_proto::Problem, content_type = "application/problem+json")
     )
 )]
 #[requirement(REQ-CAT-001)]
+#[requirement(REQ-CAT-003)]
 pub async fn delete_category(
     AuthActor(actor): AuthActor,
     State(db): State<Db>,
@@ -248,11 +264,10 @@ pub async fn delete_category(
         .delete(&actor, category_id)
         .await
     {
-        Ok(true) => StatusCode::NO_CONTENT.into_response(),
-        Ok(false) => category_not_found(),
-        _ => problem_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            problem(500, "about:blank", "Internal Server Error"),
-        ),
+        Ok(DeleteOutcome::Deleted) => StatusCode::NO_CONTENT.into_response(),
+        Ok(DeleteOutcome::NotFound) => category_not_found(),
+        // Référencée par un abonnement : suppression refusée (comportement Wallos, REQ-CAT-003).
+        Ok(DeleteOutcome::InUse) => category_in_use(),
+        Err(_) => internal_error(),
     }
 }

@@ -538,6 +538,162 @@ async fn authz_anon_delete_category(pool: PgPool) {
     );
 }
 
+// --- REQ-CAT-003 : suppression d'une catégorie référencée (oracle Wallos, §8.1) ---
+
+/// Crée un abonnement rattaché (ou non) à une catégorie, dans le foyer de l'appelant.
+async fn create_subscription(
+    pool: &PgPool,
+    cookie: &str,
+    name: &str,
+    category: Option<&str>,
+) -> axum::http::Response<Body> {
+    let mut body = json!({
+        "name": name,
+        "amount": "9.99",
+        "currency": "EUR",
+        "cycle": { "unit": "month", "interval": 1 },
+        "first_payment": "2030-01-15",
+    });
+    if let Some(c) = category {
+        body["category"] = json!(c);
+    }
+    send(
+        pool,
+        "POST",
+        "/api/v1/subscriptions",
+        Some(cookie),
+        Some(body),
+    )
+    .await
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-003, case = "catégorie référencée -> suppression refusée (409), catégorie intacte")]
+async fn referenced_category_cannot_be_deleted(pool: PgPool) {
+    // Comportement de référence capturé sur Wallos 5.4.2 (§8.1, handleDeleteCategory) : une catégorie
+    // référencée par au moins un abonnement du compte NE PEUT PAS être supprimée (`category_in_use`).
+    let web = account(&pool, "cat-del-inuse@example.com").await;
+    let cat_id = created_id(create_category(&pool, &web, "Streaming").await).await;
+    assert_eq!(
+        create_subscription(&pool, &web, "Netflix", Some(&cat_id))
+            .await
+            .status(),
+        StatusCode::CREATED
+    );
+
+    // Suppression refusée : 409 (jamais 204, jamais 404), la catégorie reste présente.
+    let refused = send(
+        &pool,
+        "DELETE",
+        &format!("/api/v1/categories/{cat_id}"),
+        Some(&web),
+        None,
+    )
+    .await;
+    assert_eq!(refused.status(), StatusCode::CONFLICT);
+    assert_eq!(categories(&pool, &web).await[0]["name"], "Streaming");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-003, case = "aucun abonnement ne référence une catégorie inexistante")]
+async fn category_becomes_deletable_once_no_longer_referenced(pool: PgPool) {
+    let web = account(&pool, "cat-del-free@example.com").await;
+    let cat_id = created_id(create_category(&pool, &web, "Streaming").await).await;
+    let sub = create_subscription(&pool, &web, "Netflix", Some(&cat_id)).await;
+    assert_eq!(sub.status(), StatusCode::CREATED);
+    let sub_id = created_id(sub).await;
+
+    // Tant que l'abonnement référence la catégorie, la suppression est refusée (409).
+    assert_eq!(
+        send(
+            &pool,
+            "DELETE",
+            &format!("/api/v1/categories/{cat_id}"),
+            Some(&web),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::CONFLICT
+    );
+
+    // On détache l'abonnement de la catégorie (PUT sans `category` -> category_id NULL) : la catégorie
+    // n'est plus référencée -> suppression autorisée (204).
+    let detach = send(
+        &pool,
+        "PUT",
+        &format!("/api/v1/subscriptions/{sub_id}"),
+        Some(&web),
+        Some(json!({
+            "name": "Netflix",
+            "amount": "9.99",
+            "currency": "EUR",
+            "cycle": { "unit": "month", "interval": 1 },
+            "first_payment": "2030-01-15",
+        })),
+    )
+    .await;
+    assert_eq!(detach.status(), StatusCode::OK);
+    assert_eq!(
+        send(
+            &pool,
+            "DELETE",
+            &format!("/api/v1/categories/{cat_id}"),
+            Some(&web),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    // Critère #2 : plus aucune catégorie (donc aucun abonnement ne pointe vers une catégorie fantôme).
+    assert!(categories(&pool, &web).await.is_empty());
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-003, case = "un abonnement d'un autre foyer ne bloque pas la suppression (isolation §9)")]
+async fn reference_from_another_household_does_not_block_deletion(pool: PgPool) {
+    // Isolation : seul le comptage des abonnements DU foyer de l'appelant bloque la suppression.
+    let alice = account(&pool, "cat-del-iso-a@example.com").await;
+    let bob = account(&pool, "cat-del-iso-b@example.com").await;
+    // Alice crée une catégorie et un abonnement qui la référence.
+    let alice_cat = created_id(create_category(&pool, &alice, "Streaming").await).await;
+    assert_eq!(
+        create_subscription(&pool, &alice, "Netflix", Some(&alice_cat))
+            .await
+            .status(),
+        StatusCode::CREATED
+    );
+    // Bob crée SA propre catégorie (même nom autorisé, foyers distincts) SANS abonnement référent.
+    let bob_cat = created_id(create_category(&pool, &bob, "Streaming").await).await;
+    // Bob peut supprimer sa catégorie : les abonnements d'Alice ne comptent pas pour Bob.
+    assert_eq!(
+        send(
+            &pool,
+            "DELETE",
+            &format!("/api/v1/categories/{bob_cat}"),
+            Some(&bob),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::NO_CONTENT
+    );
+    // La catégorie référencée d'Alice, elle, reste protégée (409).
+    assert_eq!(
+        send(
+            &pool,
+            "DELETE",
+            &format!("/api/v1/categories/{alice_cat}"),
+            Some(&alice),
+            None
+        )
+        .await
+        .status(),
+        StatusCode::CONFLICT
+    );
+}
+
 // --- REQ-SYN-001 : identifiant stable généré côté client + horodatage serveur ---
 
 #[sqlx::test(migrations = "../storage/migrations")]

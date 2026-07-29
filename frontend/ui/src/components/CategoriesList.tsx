@@ -18,6 +18,9 @@ export function CategoriesList() {
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [failed, setFailed] = useState(false);
   const [newName, setNewName] = useState("");
+  // Refus de suppression d'une catégorie **référencée** par un abonnement (REQ-CAT-003, 409) : le
+  // comportement de référence (capturé sur Wallos) est un blocage, jamais une réaffectation silencieuse.
+  const [inUse, setInUse] = useState(false);
 
   const refresh = useCallback(async () => {
     const { data, response } = await api.GET("/categories");
@@ -45,7 +48,14 @@ export function CategoriesList() {
   }
 
   async function remove(id: string) {
-    await api.DELETE("/categories/{id}", { params: { path: { id } } });
+    const { response } = await api.DELETE("/categories/{id}", { params: { path: { id } } });
+    // 409 : la catégorie est référencée par un abonnement -> suppression refusée (REQ-CAT-003).
+    // On l'indique explicitement et on ne rafraîchit rien (la catégorie reste présente).
+    if (response.status === 409) {
+      setInUse(true);
+      return;
+    }
+    setInUse(false);
     await refresh();
   }
 
@@ -56,6 +66,12 @@ export function CategoriesList() {
       {failed && (
         <p data-testid="categories-error" role="alert">
           {t("categories.loadError")}
+        </p>
+      )}
+
+      {inUse && (
+        <p data-testid="category-delete-error" role="alert">
+          {t("categories.inUse")}
         </p>
       )}
 

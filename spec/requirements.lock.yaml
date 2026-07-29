@@ -139,7 +139,7 @@ requirements:
 - id: REQ-CAT-003
   title: Suppression d'une catégorie référencée
   domain: categories
-  status: draft
+  status: verified
   criticality: medium
   layer:
   - core

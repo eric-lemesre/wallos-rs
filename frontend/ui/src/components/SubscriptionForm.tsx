@@ -1,7 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
+import type { components } from "../api/client";
+
+type CategoryDto = components["schemas"]["CategoryDto"];
 
 const UNITS = ["day", "week", "month", "year"] as const;
 
@@ -21,8 +24,21 @@ export function SubscriptionForm() {
   const [interval, setInterval] = useState("1");
   const [firstPayment, setFirstPayment] = useState("2030-01-31");
   const [endDate, setEndDate] = useState("");
+  const [category, setCategory] = useState("");
+  const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [nextPayment, setNextPayment] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Catégories du compte, source du sélecteur (REQ-CAT-001) : un abonnement peut être rattaché à une
+  // catégorie. Chargées une fois au montage ; « (aucune) » laisse l'abonnement sans catégorie.
+  useEffect(() => {
+    void (async () => {
+      const { data } = await api.GET("/categories");
+      if (data) {
+        setCategories(data);
+      }
+    })();
+  }, []);
 
   async function submit() {
     const { data, error: err } = await api.POST("/subscriptions", {
@@ -34,6 +50,8 @@ export function SubscriptionForm() {
         first_payment: firstPayment,
         // Date de fin optionnelle (annulation programmée, REQ-SUB-009).
         ...(endDate.trim() !== "" ? { end_date: endDate.trim() } : {}),
+        // Catégorie optionnelle (REQ-CAT-001) : omise si aucune n'est sélectionnée.
+        ...(category !== "" ? { category } : {}),
       },
     });
     if (data) {
@@ -87,6 +105,21 @@ export function SubscriptionForm() {
       <label>
         {t("subscription.endDate")}
         <input data-testid="sub-end-date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+      </label>
+      <label>
+        {t("subscription.category")}
+        <select
+          data-testid="sub-category"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+        >
+          <option value="">{t("subscription.noCategory")}</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
       </label>
 
       <button type="button" data-testid="sub-submit" onClick={() => void submit()}>
