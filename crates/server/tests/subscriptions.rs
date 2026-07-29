@@ -772,3 +772,82 @@ async fn authz_anon_update_subscription(pool: PgPool) {
         StatusCode::UNAUTHORIZED
     );
 }
+
+// --- REQ-SYN-001 : identifiant stable généré côté client + horodatage serveur ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-001, case = "l'UUID généré côté client est conservé à la création")]
+async fn client_provided_uuid_is_preserved(pool: PgPool) {
+    let web = account(&pool, "syn-sub@example.com").await;
+    // Abonnement « créé hors ligne » : son UUID client est conservé après poussée au serveur.
+    let client_id = uuid::Uuid::new_v4().to_string();
+    let mut body = valid_body();
+    body["id"] = json!(client_id);
+    let created = body_json(create(&pool, &web, body).await).await;
+    assert_eq!(created["id"], client_id);
+    // Relecture via la liste : l'abonnement est persisté sous l'identifiant fourni par le client.
+    let listed = list(&pool, &web, "").await;
+    let ids: Vec<&str> = listed["subscriptions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, vec![client_id.as_str()]);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-001, case = "un id fourni non-UUID est rejeté (422)")]
+async fn invalid_client_provided_id_is_rejected(pool: PgPool) {
+    let web = account(&pool, "syn-sub-bad@example.com").await;
+    let mut body = valid_body();
+    body["id"] = json!("not-a-uuid");
+    let bad = create(&pool, &web, body).await;
+    assert_eq!(bad.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-001, case = "l'horodatage de modification est fourni par le serveur et avancé")]
+async fn modification_timestamp_is_server_provided(pool: PgPool) {
+    use chrono::{DateTime, Utc};
+
+    let web = account(&pool, "syn-sub-ts@example.com").await;
+    let client_id = uuid::Uuid::new_v4();
+    let mut body = valid_body();
+    body["id"] = json!(client_id.to_string());
+    assert_eq!(
+        create(&pool, &web, body).await.status(),
+        StatusCode::CREATED
+    );
+
+    let created_at: DateTime<Utc> =
+        sqlx::query_scalar("select updated_at from subscriptions where id = $1")
+            .bind(client_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+
+    // Une modification (PUT) avance l'horodatage : fourni par l'horloge serveur, jamais le client.
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    let mut upd = valid_body();
+    upd["amount"] = json!("19.99");
+    let r = put(
+        &pool,
+        &format!("/api/v1/subscriptions/{client_id}"),
+        upd,
+        Some(&web),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::OK);
+
+    let after: DateTime<Utc> =
+        sqlx::query_scalar("select updated_at from subscriptions where id = $1")
+            .bind(client_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(
+        after > created_at,
+        "updated_at doit avancer après modification"
+    );
+}

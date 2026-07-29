@@ -65,7 +65,13 @@ pub async fn create_subscription(
     State(db): State<Db>,
     Json(req): Json<CreateSubscriptionRequest>,
 ) -> Response {
-    let subscription = match req.into_core(Uuid::new_v4()) {
+    // L'identifiant peut être **fourni par le client** (offline-first, REQ-SYN-001) : conservé tel
+    // quel s'il est présent et valide, sinon généré par le serveur.
+    let id = match req.resolve_id() {
+        Ok(id) => id,
+        Err(err) => return field_error(&err),
+    };
+    let subscription = match req.into_core(id) {
         Ok(sub) => sub,
         Err(err) => return field_error(&err),
     };

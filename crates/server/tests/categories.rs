@@ -537,3 +537,94 @@ async fn authz_anon_delete_category(pool: PgPool) {
         StatusCode::UNAUTHORIZED
     );
 }
+
+// --- REQ-SYN-001 : identifiant stable généré côté client + horodatage serveur ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-001, case = "l'UUID généré côté client est conservé à la création")]
+async fn client_provided_uuid_is_preserved(pool: PgPool) {
+    let web = account(&pool, "syn-cat@example.com").await;
+    // Une catégorie « créée hors ligne » porte déjà son UUID client ; poussée au serveur, il est conservé.
+    let client_id = uuid::Uuid::new_v4().to_string();
+    let created = send(
+        &pool,
+        "POST",
+        "/api/v1/categories",
+        Some(&web),
+        Some(json!({ "id": client_id, "name": "Streaming" })),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    assert_eq!(created_id(created).await, client_id);
+    // La liste renvoie bien l'entité sous l'identifiant fourni par le client.
+    let list = categories(&pool, &web).await;
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0]["id"], client_id);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-001, case = "un id fourni non-UUID est rejeté (422)")]
+async fn invalid_client_provided_id_is_rejected(pool: PgPool) {
+    let web = account(&pool, "syn-cat-bad@example.com").await;
+    let bad = send(
+        &pool,
+        "POST",
+        "/api/v1/categories",
+        Some(&web),
+        Some(json!({ "id": "not-a-uuid", "name": "Streaming" })),
+    )
+    .await;
+    assert_eq!(bad.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    // Rien n'a été créé.
+    assert_eq!(categories(&pool, &web).await.len(), 0);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-001, case = "l'horodatage de modification est fourni par le serveur et avancé")]
+async fn modification_timestamp_is_server_provided(pool: PgPool) {
+    use chrono::{DateTime, Utc};
+
+    let web = account(&pool, "syn-cat-ts@example.com").await;
+    let client_id = uuid::Uuid::new_v4();
+    let created = send(
+        &pool,
+        "POST",
+        "/api/v1/categories",
+        Some(&web),
+        Some(json!({ "id": client_id.to_string(), "name": "Streaming" })),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+
+    // À la création, l'horodatage est posé par le serveur (= created_at, même instant d'insertion).
+    let (created_at, updated_at): (DateTime<Utc>, DateTime<Utc>) =
+        sqlx::query_as("select created_at, updated_at from categories where id = $1")
+            .bind(client_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(created_at, updated_at);
+
+    // Une modification ultérieure **avance** l'horodatage (fourni par l'horloge serveur, jamais le client).
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    let renamed = send(
+        &pool,
+        "PUT",
+        &format!("/api/v1/categories/{client_id}"),
+        Some(&web),
+        Some(json!({ "name": "Musique" })),
+    )
+    .await;
+    assert_eq!(renamed.status(), StatusCode::OK);
+
+    let after: DateTime<Utc> =
+        sqlx::query_scalar("select updated_at from categories where id = $1")
+            .bind(client_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(
+        after > created_at,
+        "updated_at doit avancer après modification"
+    );
+}

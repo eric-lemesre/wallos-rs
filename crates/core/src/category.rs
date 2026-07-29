@@ -92,6 +92,16 @@ mod tests {
     }
 
     #[test]
+    #[verifies(REQ-SYN-001, case = "l'identifiant (UUID) fourni est conservé tel quel")]
+    fn identity_uuid_is_preserved() {
+        // Un UUID **généré côté client** (offline-first) est conservé à l'identique par le modèle :
+        // rien ne le réécrit. Préalable à la réplication (REQ-SYN-001).
+        let client_id = Uuid::from_u128(0xdead_beef);
+        let c = Category::new(client_id, "Streaming").unwrap();
+        assert_eq!(c.id(), client_id);
+    }
+
+    #[test]
     #[verifies(REQ-CAT-004, case = "nom canonique insensible à la casse")]
     fn canonical_name_is_case_insensitive() {
         let a = Category::new(Uuid::from_u128(1), "Streaming").unwrap();

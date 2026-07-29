@@ -210,9 +210,40 @@ pub struct CategoryDto {
 /// Requête de création d'une catégorie (REQ-CAT-001).
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct CreateCategoryRequest {
+    /// Identifiant (UUID) **généré côté client** (offline-first, REQ-SYN-001), le cas échéant. Absent
+    /// ⇒ le serveur en génère un. Présent ⇒ il est **conservé tel quel**.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     /// Nom de la catégorie (non vide, ≤ 100 caractères ; les espaces de bord sont normalisés).
     #[schema(example = "Streaming", max_length = 100)]
     pub name: String,
+}
+
+impl CreateCategoryRequest {
+    /// Résout l'identifiant : l'UUID **fourni par le client** s'il est présent et valide (préservé,
+    /// REQ-SYN-001), sinon un nouvel UUID généré par le serveur.
+    ///
+    /// # Errors
+    /// [`FieldError`] sur le champ `id` si un `id` est fourni mais n'est pas un UUID valide
+    /// (l'appelant traduit en `422`).
+    #[requirement(REQ-SYN-001)]
+    pub fn resolve_id(&self) -> Result<Uuid, FieldError> {
+        resolve_client_id(self.id.as_deref())
+            .map_err(|()| FieldError::new("id", "identifiant UUID invalide"))
+    }
+}
+
+/// Résout l'identifiant d'une entité créée : l'UUID **fourni par le client** (offline-first) s'il est
+/// présent et valide — alors **conservé** (REQ-SYN-001) —, sinon un nouvel UUID généré par le serveur.
+///
+/// # Errors
+/// `()` si `raw` est fourni mais n'est pas un UUID valide.
+#[requirement(REQ-SYN-001)]
+fn resolve_client_id(raw: Option<&str>) -> Result<Uuid, ()> {
+    match raw {
+        Some(s) => Uuid::parse_str(s).map_err(|_| ()),
+        None => Ok(Uuid::new_v4()),
+    }
 }
 
 /// Requête de renommage d'une catégorie (REQ-CAT-001).
@@ -236,9 +267,27 @@ pub struct PaymentMethodDto {
 /// Requête de création d'un moyen de paiement (REQ-SUB-011).
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct CreatePaymentMethodRequest {
+    /// Identifiant (UUID) **généré côté client** (offline-first, REQ-SYN-001), le cas échéant. Absent
+    /// ⇒ le serveur en génère un. Présent ⇒ il est **conservé tel quel**.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     /// Nom (non vide, ≤ 100 caractères ; les espaces de bord sont normalisés).
     #[schema(example = "Carte de crédit", max_length = 100)]
     pub name: String,
+}
+
+impl CreatePaymentMethodRequest {
+    /// Résout l'identifiant : l'UUID **fourni par le client** s'il est présent et valide (préservé,
+    /// REQ-SYN-001), sinon un nouvel UUID généré par le serveur.
+    ///
+    /// # Errors
+    /// [`FieldError`] sur le champ `id` si un `id` est fourni mais n'est pas un UUID valide
+    /// (l'appelant traduit en `422`).
+    #[requirement(REQ-SYN-001)]
+    pub fn resolve_id(&self) -> Result<Uuid, FieldError> {
+        resolve_client_id(self.id.as_deref())
+            .map_err(|()| FieldError::new("id", "identifiant UUID invalide"))
+    }
 }
 
 /// Requête de renommage d'un moyen de paiement (REQ-SUB-011).
@@ -536,6 +585,10 @@ pub struct SubscriptionListResponse {
 /// (généré par le serveur) ni `next_payment` (dérivé). Montant en **chaîne** décimale (R4).
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct CreateSubscriptionRequest {
+    /// Identifiant (UUID) **généré côté client** (offline-first, REQ-SYN-001), le cas échéant. Absent
+    /// ⇒ le serveur en génère un. Présent ⇒ il est **conservé tel quel**.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     /// Nom de l'abonnement.
     pub name: String,
     /// Montant du prix (chaîne décimale).
@@ -576,6 +629,17 @@ pub struct CreateSubscriptionRequest {
 }
 
 impl CreateSubscriptionRequest {
+    /// Résout l'identifiant : l'UUID **fourni par le client** s'il est présent et valide (préservé,
+    /// REQ-SYN-001), sinon un nouvel UUID généré par le serveur.
+    ///
+    /// # Errors
+    /// [`FieldError`] sur le champ `id` si un `id` est fourni mais n'est pas un UUID valide.
+    #[requirement(REQ-SYN-001)]
+    pub fn resolve_id(&self) -> Result<Uuid, FieldError> {
+        resolve_client_id(self.id.as_deref())
+            .map_err(|()| FieldError::new("id", "identifiant UUID invalide"))
+    }
+
     /// Construit l'abonnement du domaine avec l'`id` fourni, en **validant chaque champ**.
     ///
     /// # Errors
@@ -898,6 +962,7 @@ mod tests {
 
     fn create_req() -> CreateSubscriptionRequest {
         CreateSubscriptionRequest {
+            id: None,
             name: "Netflix".to_string(),
             amount: "9.99".to_string(),
             currency: "EUR".to_string(),

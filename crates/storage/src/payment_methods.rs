@@ -4,6 +4,7 @@
 //! `household_id` (§9). Une opération sur un moyen de paiement d'un autre foyer se comporte comme s'il
 //! n'existait pas (`false`), que l'appelant traduit en `404`. Calque du repository des catégories.
 
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use wallos_core::actor::Actor;
 use wallos_core::requirement;
@@ -13,10 +14,12 @@ use crate::StorageError;
 /// Moyen de paiement exposé aux lectures autorisées.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct PaymentMethodRow {
-    /// Identifiant stable.
+    /// Identifiant stable (UUID) — peut être généré côté client (REQ-SYN-001).
     pub id: Uuid,
     /// Nom.
     pub name: String,
+    /// Horodatage de dernière modification, **fourni par le serveur** (REQ-SYN-001).
+    pub updated_at: DateTime<Utc>,
 }
 
 /// Accès aux moyens de paiement.
@@ -54,7 +57,8 @@ impl<'a> PaymentMethodRepository<'a> {
     #[requirement(REQ-SUB-011)]
     pub async fn list(&self, actor: &Actor) -> Result<Vec<PaymentMethodRow>, StorageError> {
         let rows = sqlx::query_as::<_, PaymentMethodRow>(
-            "select id, name from payment_methods where household_id = $1 order by name asc, id asc",
+            "select id, name, updated_at from payment_methods \
+             where household_id = $1 order by name asc, id asc",
         )
         .bind(actor.household_id())
         .fetch_all(self.pool)
@@ -71,13 +75,15 @@ impl<'a> PaymentMethodRepository<'a> {
     /// `StorageError::Database` en cas d'échec de requête.
     #[requirement(REQ-SUB-011)]
     pub async fn rename(&self, actor: &Actor, id: Uuid, name: &str) -> Result<bool, StorageError> {
-        let result =
-            sqlx::query("update payment_methods set name = $3 where id = $1 and household_id = $2")
-                .bind(id)
-                .bind(actor.household_id())
-                .bind(name)
-                .execute(self.pool)
-                .await?;
+        let result = sqlx::query(
+            "update payment_methods set name = $3, updated_at = now() \
+                 where id = $1 and household_id = $2",
+        )
+        .bind(id)
+        .bind(actor.household_id())
+        .bind(name)
+        .execute(self.pool)
+        .await?;
         Ok(result.rows_affected() > 0)
     }
 

@@ -4,6 +4,7 @@
 //! `household_id` (garde-fou d'isolation, ADR 0006/0012, §9). Une opération sur une catégorie d'un
 //! autre foyer se comporte comme si elle n'existait pas (`false`), que l'appelant traduit en `404`.
 
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use wallos_core::actor::Actor;
 use wallos_core::requirement;
@@ -13,10 +14,12 @@ use crate::StorageError;
 /// Catégorie exposée aux lectures autorisées.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct CategoryRow {
-    /// Identifiant stable.
+    /// Identifiant stable (UUID) — peut être généré côté client (REQ-SYN-001).
     pub id: Uuid,
     /// Nom.
     pub name: String,
+    /// Horodatage de dernière modification, **fourni par le serveur** (REQ-SYN-001).
+    pub updated_at: DateTime<Utc>,
 }
 
 /// Résultat d'un renommage de catégorie (REQ-CAT-001 / CAT-004).
@@ -73,7 +76,8 @@ impl<'a> CategoryRepository<'a> {
     #[requirement(REQ-CAT-001)]
     pub async fn list(&self, actor: &Actor) -> Result<Vec<CategoryRow>, StorageError> {
         let rows = sqlx::query_as::<_, CategoryRow>(
-            "select id, name from categories where household_id = $1 order by name asc, id asc",
+            "select id, name, updated_at from categories \
+             where household_id = $1 order by name asc, id asc",
         )
         .bind(actor.household_id())
         .fetch_all(self.pool)
@@ -95,13 +99,15 @@ impl<'a> CategoryRepository<'a> {
         id: Uuid,
         name: &str,
     ) -> Result<RenameOutcome, StorageError> {
-        let result =
-            sqlx::query("update categories set name = $3 where id = $1 and household_id = $2")
-                .bind(id)
-                .bind(actor.household_id())
-                .bind(name)
-                .execute(self.pool)
-                .await;
+        let result = sqlx::query(
+            "update categories set name = $3, updated_at = now() \
+                 where id = $1 and household_id = $2",
+        )
+        .bind(id)
+        .bind(actor.household_id())
+        .bind(name)
+        .execute(self.pool)
+        .await;
         match result {
             Ok(r) if r.rows_affected() > 0 => Ok(RenameOutcome::Renamed),
             Ok(_) => Ok(RenameOutcome::NotFound),
