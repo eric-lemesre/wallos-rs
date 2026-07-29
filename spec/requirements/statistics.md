@@ -142,7 +142,7 @@ depends_on: [REQ-STA-001]
 id: REQ-STA-007
 title: Cohérence entre les agrégats et les filtres actifs
 domain: statistics
-status: draft
+status: verified
 criticality: medium
 layer: [ui]
 e2e: required

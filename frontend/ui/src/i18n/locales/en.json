@@ -124,7 +124,8 @@
     "editInterval": "Interval",
     "editActive": "Active",
     "saveError": "Could not save the change",
-    "ended": "Ended"
+    "ended": "Ended",
+    "totalFiltered": "(filtered set)"
   },
   "paymentMethods": {
     "title": "Payment methods",

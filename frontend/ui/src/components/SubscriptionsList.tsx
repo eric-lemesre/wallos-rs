@@ -22,6 +22,7 @@ const UNITS = ["day", "week", "month", "year"] as const;
  *
  * @implements REQ-SUB-006
  * @implements REQ-SUB-004
+ * @implements REQ-STA-007
  */
 export function SubscriptionsList() {
   const { t } = useTranslation();
@@ -31,6 +32,9 @@ export function SubscriptionsList() {
   const [data, setData] = useState<SubscriptionListResponse | null>(null);
   const [failed, setFailed] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
+  // Le total **reflète le filtre appliqué** (REQ-STA-007) : on mémorise si le dernier chargement
+  // portait un filtre actif, pour l'**indiquer explicitement** à côté du total.
+  const [filtered, setFiltered] = useState(false);
 
   // Chargement paramétré (jamais dans les deps d'un effet réactif : on ne recharge qu'au montage et
   // sur « Appliquer », pas à chaque frappe de filtre). Filtres conjonctifs : catégorie ET payeur ET état.
@@ -51,6 +55,8 @@ export function SubscriptionsList() {
     if (response.ok && body) {
       setData(body);
       setFailed(false);
+      // Un filtre est actif dès qu'un critère (catégorie, payeur ou état ≠ « tous ») est appliqué.
+      setFiltered(cat.trim() !== "" || payerId.trim() !== "" || st !== "all");
     } else {
       setFailed(true);
     }
@@ -164,6 +170,12 @@ export function SubscriptionsList() {
       {data && (
         <div data-testid="subscriptions-total">
           {t("subscriptions.total")}: {data.total.total} {data.total.currency}
+          {filtered && (
+            <span data-testid="subscriptions-total-filtered">
+              {" "}
+              {t("subscriptions.totalFiltered")}
+            </span>
+          )}
           {!data.total.complete && (
             <span data-testid="subscriptions-total-incomplete" role="status">
               {t("subscriptions.incomplete")}
