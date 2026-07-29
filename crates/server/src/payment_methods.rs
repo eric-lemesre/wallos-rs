@@ -16,7 +16,7 @@ use wallos_core::requirement;
 use wallos_proto::{
     CreatePaymentMethodRequest, PaymentMethodDto, RenamePaymentMethodRequest, problem,
 };
-use wallos_storage::{Db, PaymentMethodRepository};
+use wallos_storage::{CreateOutcome, Db, PaymentMethodRepository};
 
 use crate::auth::AuthActor;
 use crate::idempotency::{self, IdempotencyKey, Outcome};
@@ -28,6 +28,16 @@ fn internal_error() -> Response {
     problem_response(
         StatusCode::INTERNAL_SERVER_ERROR,
         problem(500, "about:blank", "Internal Server Error"),
+    )
+}
+
+/// `409` : l'`id` fourni par le client est **déjà pris** (collision de clé primaire, REQ-SYN-001,
+/// revue F2). Ne divulgue pas le foyer propriétaire (§9).
+#[requirement(REQ-SYN-001)]
+fn duplicate_id() -> Response {
+    problem_response(
+        StatusCode::CONFLICT,
+        problem(409, "about:blank", "Conflict").with_detail("id: identifiant déjà utilisé"),
     )
 }
 
@@ -61,8 +71,8 @@ fn invalid() -> Response {
     responses(
         (status = 201, description = "Moyen de paiement créé", body = PaymentMethodDto, content_type = "application/json"),
         (status = 401, description = "Non authentifié", body = wallos_proto::Problem, content_type = "application/problem+json"),
-        (status = 409, description = "Clé d'idempotence réutilisée avec un corps différent", body = wallos_proto::Problem, content_type = "application/problem+json"),
-        (status = 422, description = "Nom invalide", body = wallos_proto::Problem, content_type = "application/problem+json")
+        (status = 409, description = "Conflit : identifiant déjà utilisé, ou clé d'idempotence réutilisée avec un corps différent", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 422, description = "Identifiant ou nom invalide", body = wallos_proto::Problem, content_type = "application/problem+json")
     )
 )]
 #[requirement(REQ-SUB-011)]
@@ -108,7 +118,7 @@ async fn build_payment_method(
         .create(actor, pm.id(), pm.name())
         .await
     {
-        Ok(()) => {
+        Ok(CreateOutcome::Created) => {
             let dto = PaymentMethodDto {
                 id: pm.id().to_string(),
                 name: pm.name().to_string(),
@@ -118,7 +128,10 @@ async fn build_payment_method(
                 serde_json::to_string(&dto).unwrap_or_default(),
             ))
         }
-        _ => Err(internal_error()),
+        // Id client déjà pris (REQ-SYN-001, revue F2) : conflit au lieu d'un 500.
+        Ok(CreateOutcome::DuplicateId) => Err(duplicate_id()),
+        // Aucune unicité de nom sur les moyens de paiement : DuplicateName ne peut pas survenir.
+        Ok(CreateOutcome::DuplicateName) | Err(_) => Err(internal_error()),
     }
 }
 

@@ -10,6 +10,7 @@ use wallos_core::actor::Actor;
 use wallos_core::requirement;
 
 use crate::StorageError;
+use crate::outcomes::CreateOutcome;
 
 /// Moyen de paiement exposé aux lectures autorisées.
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -37,17 +38,33 @@ impl<'a> PaymentMethodRepository<'a> {
 
     /// Crée un moyen de paiement **dans le foyer de l'appelant**.
     ///
+    /// La seule contrainte d'unicité est la clé primaire `id` : une collision (id **fourni par le
+    /// client** déjà pris, REQ-SYN-001) renvoie [`CreateOutcome::DuplicateId`] (→ `409`) au lieu d'un
+    /// `500` (revue SYN-001 F2).
+    ///
     /// # Errors
-    /// `StorageError::Database` en cas d'échec d'insertion.
+    /// `StorageError::Database` en cas d'échec d'insertion (hors collision d'unicité).
     #[requirement(REQ-SUB-011)]
-    pub async fn create(&self, actor: &Actor, id: Uuid, name: &str) -> Result<(), StorageError> {
-        sqlx::query("insert into payment_methods (id, household_id, name) values ($1, $2, $3)")
-            .bind(id)
-            .bind(actor.household_id())
-            .bind(name)
-            .execute(self.pool)
-            .await?;
-        Ok(())
+    pub async fn create(
+        &self,
+        actor: &Actor,
+        id: Uuid,
+        name: &str,
+    ) -> Result<CreateOutcome, StorageError> {
+        let inserted =
+            sqlx::query("insert into payment_methods (id, household_id, name) values ($1, $2, $3)")
+                .bind(id)
+                .bind(actor.household_id())
+                .bind(name)
+                .execute(self.pool)
+                .await;
+        match inserted {
+            Ok(_) => Ok(CreateOutcome::Created),
+            Err(sqlx::Error::Database(db)) if db.is_unique_violation() => {
+                Ok(CreateOutcome::DuplicateId)
+            }
+            Err(other) => Err(other.into()),
+        }
     }
 
     /// Liste les moyens de paiement **du foyer de l'appelant**, dans un ordre déterministe (nom, id).
