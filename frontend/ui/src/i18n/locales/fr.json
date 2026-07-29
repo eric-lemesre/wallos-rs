@@ -70,7 +70,8 @@
     "create": "Ajouter une catégorie",
     "rename": "Renommer",
     "delete": "Supprimer",
-    "loadError": "Impossible de charger les catégories"
+    "loadError": "Impossible de charger les catégories",
+    "inUse": "Cette catégorie est utilisée par un abonnement et ne peut pas être supprimée"
   },
   "nextDue": {
     "title": "Prochaine échéance",
@@ -99,7 +100,9 @@
     "create": "Créer l'abonnement",
     "created": "Créé, prochaine échéance",
     "error": "Impossible de créer l'abonnement",
-    "endDate": "Date de fin (optionnelle)"
+    "endDate": "Date de fin (optionnelle)",
+    "category": "Catégorie",
+    "noCategory": "(aucune)"
   },
   "subscriptions": {
     "title": "Mes abonnements",

@@ -172,7 +172,7 @@ export class TargetDriver implements AppDriver, Harness {
   // --- Création d'abonnement (REQ-SUB-002) ---
 
   async createSubscription(input: {
-    name: string; amount: string; currency: string; unit: string; interval: string; firstPayment: string; endDate?: string;
+    name: string; amount: string; currency: string; unit: string; interval: string; firstPayment: string; endDate?: string; category?: string;
   }): Promise<void> {
     await this.page.getByTestId("sub-name").fill(input.name);
     await this.page.getByTestId("sub-amount").fill(input.amount);
@@ -182,6 +182,10 @@ export class TargetDriver implements AppDriver, Harness {
     await this.page.getByTestId("sub-first-payment").fill(input.firstPayment);
     if (input.endDate !== undefined) {
       await this.page.getByTestId("sub-end-date").fill(input.endDate);
+    }
+    // Rattachement à une catégorie (par nom) : le sélecteur est peuplé depuis GET /categories.
+    if (input.category !== undefined) {
+      await this.page.getByTestId("sub-category").selectOption({ label: input.category });
     }
     await this.page.getByTestId("sub-submit").click();
   }
@@ -347,6 +351,24 @@ export class TargetDriver implements AppDriver, Harness {
     return (
       (await this.page.getByTestId("category-name").filter({ hasText: name }).count()) === 0
     );
+  }
+
+  /** Clique « Supprimer » sur la ligne de la catégorie identifiée par son nom (REQ-CAT-003). */
+  async deleteCategory(name: string): Promise<void> {
+    const row = this.page.getByTestId("category-row").filter({ hasText: name });
+    await row.getByTestId(/^category-delete-/).click();
+  }
+
+  /** Vrai si le refus de suppression (catégorie référencée, 409) est affiché (REQ-CAT-003). */
+  async categoryDeleteRefused(): Promise<boolean> {
+    try {
+      await this.page
+        .getByTestId("category-delete-error")
+        .waitFor({ state: "visible", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   // --- Langue (REQ-I18N-001) ---

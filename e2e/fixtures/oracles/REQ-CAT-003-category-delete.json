@@ -1,0 +1,26 @@
+{
+  "_requirement": "REQ-CAT-003",
+  "_source": "Wallos 5.4.2 — endpoints/categories/category.php, fonction handleDeleteCategory (capturé §8.1 sur l'image épinglée bellamy/wallos@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f).",
+  "_note": "Comportement de référence GELÉ. Le rationale de l'exigence prévient qu'un agent inventerait une règle plausible mais divergente (SET NULL / CASCADE). La vérité capturée est le REFUS : Wallos compte les abonnements référents (SELECT COUNT(*) FROM subscriptions WHERE category_id = :id AND user_id = :userId) et, si le compte est non nul, renvoie success:false / message `category_in_use` SANS supprimer. subtrack mappe ce refus sur HTTP 409 (Conflict). L'isolation par foyer (§9, comptage limité aux abonnements du compte) est spécifique à subtrack et non reproductible sur Wallos mono-foyer.",
+  "delete_referenced_category": {
+    "when": "au moins un abonnement du compte référence la catégorie",
+    "wallos_response": { "success": false, "message_key": "category_in_use" },
+    "wallos_message_en": "Category is in use in subscriptions and can't be removed",
+    "wallos_message_fr": "La catégorie est utilisée dans des abonnements et ne peut pas être supprimée",
+    "category_deleted": false,
+    "subscriptions_reassigned": false,
+    "subscriptions_cascaded": false,
+    "subtrack_http_status": 409
+  },
+  "delete_unreferenced_category": {
+    "when": "aucun abonnement ne référence la catégorie",
+    "wallos_response": { "success": true, "message_key": "category_removed" },
+    "category_deleted": true,
+    "subtrack_http_status": 204
+  },
+  "default_category_protected": {
+    "_note": "Wallos protège la catégorie id=1 « No category » (categoryId == 1 -> refus). subtrack n'a pas encore de catégorie par défaut (REQ-CAT-002 en attente) ; hors périmètre CAT-003.",
+    "wallos_category_id": 1,
+    "deletable": false
+  }
+}

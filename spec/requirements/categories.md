@@ -48,7 +48,7 @@ depends_on: [REQ-CAT-001, REQ-I18N-001]
 id: REQ-CAT-003
 title: Suppression d'une catégorie référencée
 domain: categories
-status: draft
+status: verified
 criticality: medium
 layer: [core, api, ui]
 e2e: required

@@ -7,6 +7,7 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use wallos_core::actor::Actor;
+use wallos_core::category_is_deletable;
 use wallos_core::requirement;
 
 use crate::StorageError;
@@ -32,6 +33,18 @@ pub enum RenameOutcome {
     NotFound,
     /// Le nom entre en collision avec une autre catégorie du foyer (→ 422, unicité CAT-004).
     Duplicate,
+}
+
+/// Résultat d'une suppression de catégorie (REQ-CAT-003).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeleteOutcome {
+    /// La catégorie a été supprimée.
+    Deleted,
+    /// Aucune catégorie correspondante dans le foyer (inconnue ou autre foyer → 404).
+    NotFound,
+    /// La catégorie est **référencée** par au moins un abonnement du foyer : suppression refusée
+    /// (→ 409). Comportement capturé sur Wallos 5.4.2 (`category_in_use`), gelé en fixture (§8.1).
+    InUse,
 }
 
 /// Accès aux catégories.
@@ -133,19 +146,46 @@ impl<'a> CategoryRepository<'a> {
         }
     }
 
-    /// Supprime une catégorie **du foyer de l'appelant**.
+    /// Supprime une catégorie **du foyer de l'appelant**, sauf si elle est référencée.
     ///
-    /// Renvoie `true` si une catégorie a été supprimée, `false` sinon (inconnue ou autre foyer → 404).
+    /// **Comportement de référence capturé sur Wallos 5.4.2** (§8.1, `handleDeleteCategory`) : une
+    /// catégorie référencée par au moins un abonnement du foyer **ne peut pas être supprimée**
+    /// ([`DeleteOutcome::InUse`] → 409, `category_in_use`) — ni réaffectation, ni cascade. Le comptage
+    /// et la suppression sont exécutés dans une **transaction** pour rester cohérents. La décision de
+    /// suppressibilité est déléguée à la politique de domaine [`category_is_deletable`].
+    ///
+    /// Isolation (§9) : une catégorie inconnue ou d'un autre foyer se comporte comme inexistante
+    /// ([`DeleteOutcome::NotFound`] → 404), jamais 403.
     ///
     /// # Errors
     /// `StorageError::Database` en cas d'échec de requête.
-    #[requirement(REQ-CAT-001)]
-    pub async fn delete(&self, actor: &Actor, id: Uuid) -> Result<bool, StorageError> {
+    #[requirement(REQ-CAT-003)]
+    pub async fn delete(&self, actor: &Actor, id: Uuid) -> Result<DeleteOutcome, StorageError> {
+        let mut tx = self.pool.begin().await?;
+        // Nombre d'abonnements DU FOYER de l'appelant qui référencent la catégorie (isolation §9 :
+        // les abonnements d'un autre foyer ne comptent jamais).
+        let referencing: i64 = sqlx::query_scalar(
+            "select count(*) from subscriptions where household_id = $1 and category_id = $2",
+        )
+        .bind(actor.household_id())
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !category_is_deletable(referencing.max(0).unsigned_abs()) {
+            // Référencée : rien n'est modifié (transaction en lecture seule close sans écriture).
+            tx.rollback().await?;
+            return Ok(DeleteOutcome::InUse);
+        }
         let result = sqlx::query("delete from categories where id = $1 and household_id = $2")
             .bind(id)
             .bind(actor.household_id())
-            .execute(self.pool)
+            .execute(&mut *tx)
             .await?;
-        Ok(result.rows_affected() > 0)
+        tx.commit().await?;
+        Ok(if result.rows_affected() > 0 {
+            DeleteOutcome::Deleted
+        } else {
+            DeleteOutcome::NotFound
+        })
     }
 }

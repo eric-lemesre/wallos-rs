@@ -53,7 +53,11 @@ export interface paths {
         /** Renomme une catégorie du foyer de l'appelant. */
         put: operations["renameCategory"];
         post?: never;
-        /** Supprime une catégorie du foyer de l'appelant. */
+        /**
+         * Supprime une catégorie du foyer de l'appelant.
+         * @description Refuse la suppression d'une catégorie **référencée** par un abonnement (`409`, REQ-CAT-003 :
+         *     comportement capturé sur l'application d'origine, jamais de réaffectation ni de cascade).
+         */
         delete: operations["deleteCategory"];
         options?: never;
         head?: never;
@@ -1091,6 +1095,15 @@ export interface operations {
             };
             /** @description Catégorie inconnue ou hors du foyer */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Catégorie référencée par un abonnement : suppression refusée */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

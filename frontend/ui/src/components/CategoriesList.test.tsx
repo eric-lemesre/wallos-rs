@@ -97,4 +97,23 @@ describe("CategoriesList", () => {
       }),
     );
   });
+
+  it("indique le refus quand la catégorie est référencée par un abonnement (REQ-CAT-003, 409)", async () => {
+    // Comportement de référence capturé sur Wallos : une catégorie utilisée n'est PAS supprimée ;
+    // l'UI l'indique explicitement (jamais de réaffectation silencieuse) et la catégorie demeure.
+    vi.spyOn(api, "GET").mockResolvedValue(ok([CAT]));
+    const del = vi.spyOn(api, "DELETE").mockResolvedValue({
+      data: undefined,
+      response: new Response(null, { status: 409 }),
+    } as never);
+    const user = userEvent.setup();
+    renderList();
+
+    await screen.findByTestId("category-name");
+    await user.click(screen.getByTestId(`category-delete-${CAT.id}`));
+    // Le message de refus apparaît et la catégorie reste listée.
+    expect(await screen.findByTestId("category-delete-error")).toBeInTheDocument();
+    expect(del).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("category-name")).toHaveTextContent("Streaming");
+  });
 });
