@@ -236,10 +236,14 @@ mod tests {
     }
 
     fn sub_cycle(price: &str, unit: BillingUnit, interval: u32) -> Subscription {
+        sub_cycle_cur(price, unit, interval, "EUR")
+    }
+
+    fn sub_cycle_cur(price: &str, unit: BillingUnit, interval: u32, code: &str) -> Subscription {
         Subscription::new(
             uuid::Uuid::new_v4(),
             "X",
-            Money::new(price.parse().unwrap(), eur()).unwrap(),
+            Money::new(price.parse().unwrap(), CurrencyCode::new(code).unwrap()).unwrap(),
             BillingCycle::from_parts(unit, interval).unwrap(),
             NaiveDate::from_ymd_opt(2026, 1, 15).unwrap(),
         )
@@ -295,6 +299,35 @@ mod tests {
                 "{unit:?} interval={interval} price={price}"
             );
         }
+    }
+
+    #[test]
+    #[verifies(REQ-STA-001, case = "l'arrondi d'affichage suit les décimales de la DEVISE (JPY=0, borne half-to-even)")]
+    fn rounding_uses_the_currency_decimals() {
+        // JPY = 0 décimale (REQ-CUR-007) : exerce le chemin `round_to(decimals)` avec decimals ≠ 2 —
+        // un bug renvoyant un `2` codé en dur passerait tous les autres vecteurs (EUR). Revue STA-002 F3.
+        let jpy_day = sub_cycle_cur("100", BillingUnit::Day, 7, "JPY"); // mensuel brut 428.5714…
+        assert_eq!(
+            monthly_cost_rounded(*jpy_day.price(), jpy_day.cycle()).amount(),
+            Decimal::from(429), // 428.57 -> 429 (0 décimale)
+        );
+        assert_eq!(
+            yearly_cost_rounded(*jpy_day.price(), jpy_day.cycle()).amount(),
+            Decimal::from(5143), // 5142.857 -> 5143 (0 décimale)
+        );
+        // Borne half-to-even à 0 décimale : 2.5 -> 2 (pair), pas 3.
+        let jpy_half = sub_cycle_cur("5", BillingUnit::Month, 2, "JPY"); // mensuel brut 2.5
+        assert_eq!(
+            monthly_cost_rounded(*jpy_half.price(), jpy_half.cycle()).amount(),
+            Decimal::from(2),
+        );
+        // Contraste : le MÊME abonnement en EUR (2 décimales) donne 428.57, prouvant que les décimales
+        // viennent bien de la devise et ne sont pas codées en dur.
+        let eur_day = sub_cycle_cur("100", BillingUnit::Day, 7, "EUR");
+        assert_eq!(
+            monthly_cost_rounded(*eur_day.price(), eur_day.cycle()).amount(),
+            "428.57".parse::<Decimal>().unwrap(),
+        );
     }
 
     #[test]
