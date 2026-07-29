@@ -14,7 +14,54 @@ use wallos_req_macros::requirement;
 
 use crate::DomainError;
 use crate::Subscription;
+use crate::billing::BillingUnit;
 use crate::money::{CurrencyCode, Money};
+
+/// Coût **mensuel normalisé** d'un abonnement (REQ-STA-001), dans sa propre devise.
+///
+/// La méthode de normalisation d'un cycle (quotidien / hebdomadaire / annuel) vers un mois est une
+/// **convention capturée sur l'application d'origine** — pas une évidence mathématique. Facteurs gelés
+/// dans `e2e/fixtures/oracles/REQ-STA-001-monthly.json` (Wallos 5.4.2 `getPricePerMonth`, vérifiés en
+/// exécutant le PHP de l'image pinnée) :
+/// - **jour** : `prix × 30 / intervalle` (30 jours/mois) ;
+/// - **semaine** : `prix × 4.35 / intervalle` (4.35 semaines/mois) ;
+/// - **mois** : `prix / intervalle` ;
+/// - **année** : `prix / (12 × intervalle)` (12 mois/an).
+///
+/// Arithmétique **décimale exacte** (R4) : les facteurs `30`, `4.35`, `12` sont représentables sans
+/// perte. L'arrondi d'affichage relève de REQ-CUR-005 (hors de cette normalisation). La conversion
+/// entre devises (agrégats multi-devises) relève des `REQ-STA-*` suivantes ; ici le résultat reste
+/// dans la devise de l'abonnement.
+#[requirement(REQ-STA-001)]
+#[must_use]
+pub fn monthly_cost(price: Money, cycle: crate::billing::BillingCycle) -> Money {
+    let amount = price.amount();
+    let currency = price.currency();
+    let interval = Decimal::from(cycle.interval());
+    // Facteurs de normalisation capturés (décimaux exacts) : 30 j/mois, 4.35 sem/mois, 12 mois/an.
+    let monthly = match cycle.unit() {
+        BillingUnit::Day => amount * Decimal::from(30) / interval,
+        BillingUnit::Week => amount * Decimal::new(435, 2) / interval,
+        BillingUnit::Month => amount / interval,
+        BillingUnit::Year => amount / (Decimal::from(12) * interval),
+    };
+    // Toujours ≥ 0 (prix ≥ 0, facteurs et intervalle > 0) : le repli `zero` n'est jamais atteint,
+    // il évite seulement un `unwrap` (R5).
+    Money::new(monthly, currency).unwrap_or_else(|_| Money::zero(currency))
+}
+
+/// Coût mensuel normalisé **arrondi pour l'affichage** aux décimales de la devise — la valeur **exacte
+/// affichée par l'application d'origine** (REQ-STA-001 acceptation), composant la normalisation
+/// (facteurs capturés) et l'arrondi bancaire (REQ-CUR-005) au nombre de décimales de la devise
+/// (REQ-CUR-007 ; 2 pour EUR/USD, 0 pour JPY). [`monthly_cost`] reste la valeur **brute** (précision
+/// pleine) que les agrégats consomment.
+#[requirement(REQ-STA-001)]
+#[must_use]
+pub fn monthly_cost_rounded(price: Money, cycle: crate::billing::BillingCycle) -> Money {
+    let raw = monthly_cost(price, cycle);
+    let decimals = crate::currencies::find(price.currency().as_str()).map_or(2, |c| c.decimals);
+    raw.round_to(decimals)
+}
 
 /// Montants entrant dans les agrégats statistiques à la date `reference` (REQ-SUB-008 / REQ-SUB-009).
 ///
@@ -156,6 +203,68 @@ mod tests {
         )
         .unwrap();
         sub.with_active(active)
+    }
+
+    fn sub_cycle(price: &str, unit: BillingUnit, interval: u32) -> Subscription {
+        Subscription::new(
+            uuid::Uuid::new_v4(),
+            "X",
+            Money::new(price.parse().unwrap(), eur()).unwrap(),
+            BillingCycle::from_parts(unit, interval).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 1, 15).unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    #[verifies(REQ-STA-001, case = "facteurs de normalisation mensuelle capturés sur Wallos")]
+    fn monthly_cost_matches_the_wallos_oracle() {
+        // Vecteurs gelés dans e2e/fixtures/oracles/REQ-STA-001-monthly.json (Wallos 5.4.2
+        // getPricePerMonth, vérifiés en exécutant le PHP de l'image pinnée).
+        let cases: &[(BillingUnit, u32, &str, &str)] = &[
+            (BillingUnit::Year, 1, "120.00", "10"),
+            (BillingUnit::Year, 1, "99.99", "8.3325"),
+            (BillingUnit::Year, 2, "240.00", "10"),
+            (BillingUnit::Week, 1, "10.00", "43.5"),
+            (BillingUnit::Week, 2, "10.00", "21.75"),
+            (BillingUnit::Day, 1, "1.00", "30"),
+            (BillingUnit::Day, 7, "7.00", "30"),
+            (BillingUnit::Month, 1, "15.00", "15"),
+            (BillingUnit::Month, 3, "15.00", "5"),
+        ];
+        for (unit, interval, price, expected) in cases {
+            let sub = sub_cycle(price, *unit, *interval);
+            let normalized = monthly_cost(*sub.price(), sub.cycle());
+            assert_eq!(
+                normalized.amount(),
+                expected.parse::<Decimal>().unwrap(),
+                "{unit:?} interval={interval} price={price}"
+            );
+            // La normalisation ne change pas la devise (pas de conversion ici).
+            assert_eq!(normalized.currency(), eur());
+        }
+    }
+
+    #[test]
+    #[verifies(REQ-STA-001, case = "coût mensuel affiché = normalisation + arrondi devise (EUR, 2 déc.)")]
+    fn monthly_cost_rounded_matches_the_wallos_display() {
+        // Valeur AFFICHÉE (arrondi bancaire aux décimales EUR) : combine le facteur capturé et REQ-CUR-005.
+        let cases: &[(BillingUnit, u32, &str, &str)] = &[
+            (BillingUnit::Year, 1, "120.00", "10.00"),
+            (BillingUnit::Year, 1, "99.99", "8.33"), // 8.3325 arrondi à 2 déc. -> 8.33
+            (BillingUnit::Week, 1, "10.00", "43.50"),
+            (BillingUnit::Week, 2, "10.00", "21.75"),
+            (BillingUnit::Month, 3, "15.00", "5.00"),
+        ];
+        for (unit, interval, price, expected) in cases {
+            let sub = sub_cycle(price, *unit, *interval);
+            let shown = monthly_cost_rounded(*sub.price(), sub.cycle());
+            assert_eq!(
+                shown.amount(),
+                expected.parse::<Decimal>().unwrap(),
+                "{unit:?} interval={interval} price={price}"
+            );
+        }
     }
 
     #[test]

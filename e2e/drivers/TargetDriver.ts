@@ -263,6 +263,14 @@ export class TargetDriver implements AppDriver, Harness {
     return (await row.getByTestId("subscription-amount").textContent()) ?? "";
   }
 
+  // --- Coût mensuel normalisé (REQ-STA-001) ---
+
+  async subscriptionMonthlyCost(name: string): Promise<string> {
+    const row = this.page.getByTestId("subscription-row").filter({ hasText: name });
+    await row.getByTestId("subscription-monthly").waitFor({ state: "visible", timeout: 5000 });
+    return (await row.getByTestId("subscription-monthly").textContent()) ?? "";
+  }
+
   // --- Abonnement désactivé (REQ-SUB-008) ---
 
   async deactivateSubscription(name: string): Promise<void> {

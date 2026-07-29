@@ -234,6 +234,17 @@ fn row_to_dto(row: SubscriptionRow, today: NaiveDate) -> SubscriptionDto {
         .map(|d| d.to_string());
     // Terminé si la date de fin est strictement dépassée à la date du jour (REQ-SUB-009).
     let ended = row.end_date.is_some_and(|end| today > end);
+    // Coût mensuel normalisé (REQ-STA-001), dans la devise de l'abonnement. Une ligne à la devise ou
+    // au cycle illisible retombe sur le montant brut (jamais un zéro silencieux).
+    let monthly = match (CurrencyCode::new(&row.currency), cycle) {
+        (Ok(currency), Some(cycle)) => {
+            let price = Money::new(row.amount, currency).unwrap_or_else(|_| Money::zero(currency));
+            wallos_core::stats::monthly_cost_rounded(price, cycle)
+                .amount()
+                .to_string()
+        }
+        _ => row.amount.to_string(),
+    };
     SubscriptionDto {
         id: row.id.to_string(),
         name: row.name,
@@ -254,6 +265,7 @@ fn row_to_dto(row: SubscriptionRow, today: NaiveDate) -> SubscriptionDto {
         next_payment,
         end_date: row.end_date.map(|d| d.to_string()),
         ended,
+        monthly_cost: monthly,
     }
 }
 

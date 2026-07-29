@@ -843,6 +843,12 @@ export interface components {
             id: string;
             /** @description Logo (référence d'image ou substitut), le cas échéant. */
             logo?: string | null;
+            /**
+             * @description Coût **mensuel normalisé** (chaîne décimale, REQ-STA-001), dans la devise de l'abonnement.
+             *     Champ **dérivé** : facteur de cycle capturé sur l'application d'origine (30 j/mois, 4.35 sem/mois,
+             *     12 mois/an). L'arrondi d'affichage relève de REQ-CUR-005.
+             */
+            monthly_cost?: string;
             /** @description Nom de l'abonnement. */
             name: string;
             /**
