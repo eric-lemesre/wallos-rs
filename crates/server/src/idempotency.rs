@@ -99,24 +99,38 @@ pub async fn begin<T: Serialize>(db: &Db, actor: &Actor, key: Option<&str>, req:
 }
 
 /// Mémorise la réponse **réussie** d'une opération réservée (no-op si la clé est absente).
+///
+/// Best-effort **observable** (revue SYN-006 F2) : la réponse a déjà été produite, donc un échec de
+/// mémorisation n'est pas bloquant pour la requête courante ; il est **journalisé** (`warn`) et la
+/// réservation orpheline résultante est **auto-récupérée** au bout de `RESERVATION_TTL` par
+/// `reserve` (F1). Sans cela, un rejeu resterait bloqué en conflit.
 #[requirement(REQ-SYN-006)]
 pub async fn finish(db: &Db, actor: &Actor, key: Option<&str>, status: StatusCode, body: &str) {
-    if let Some(key) = key {
-        // Échec de mémorisation non bloquant : la réponse a bien été produite ; au pire un rejeu
-        // ré-exécutera (la réservation sera relâchée par une purge ultérieure).
-        let _ = IdempotencyRepository::new(db.pool())
+    if let Some(key) = key
+        && let Err(err) = IdempotencyRepository::new(db.pool())
             .complete(actor, key, status.as_u16(), body)
-            .await;
+            .await
+    {
+        tracing::warn!(
+            error = %err,
+            "échec de mémorisation d'idempotence (complete) ; réservation auto-récupérée après TTL"
+        );
     }
 }
 
 /// Relâche la réservation d'une opération **en échec** (no-op si la clé est absente), pour autoriser
-/// un nouvel essai avec la même clé.
+/// un nouvel essai avec la même clé. Un échec de relâche est **journalisé** (`warn`) ; la réservation
+/// orpheline reste néanmoins auto-récupérable après `RESERVATION_TTL` (F1/F2).
 #[requirement(REQ-SYN-006)]
 pub async fn abort(db: &Db, actor: &Actor, key: Option<&str>) {
-    if let Some(key) = key {
-        let _ = IdempotencyRepository::new(db.pool())
+    if let Some(key) = key
+        && let Err(err) = IdempotencyRepository::new(db.pool())
             .release(actor, key)
-            .await;
+            .await
+    {
+        tracing::warn!(
+            error = %err,
+            "échec de relâche d'idempotence (release) ; réservation auto-récupérée après TTL"
+        );
     }
 }
