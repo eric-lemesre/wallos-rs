@@ -42,18 +42,22 @@ test.describe("Coût mensuel normalisé", { tag: ["@legacy", "@REQ-STA-001"] }, 
     await app.login({ email, password: PASSWORD });
     expect(await app.currentUserVisible()).toBe(true);
 
+    const names = sample.map((v, i) => `Sub-${v.unit}-${v.interval}-${i}`);
     for (const [i, v] of sample.entries()) {
-      const name = `Sub-${v.unit}-${v.interval}-${i}`;
       await app.createSubscription({
-        name,
+        name: names[i],
         amount: v.price,
         currency: "EUR",
         unit: v.unit,
         interval: String(v.interval),
         firstPayment: "2030-01-31",
       });
+    }
+    // La liste ne se rafraîchit pas seule : on la recharge avant de lire (comme subscriptions-list).
+    await app.refreshSubscriptions();
+    for (const [i, v] of sample.entries()) {
       // Le coût mensuel affiché correspond EXACTEMENT à la valeur de l'oracle (facteur capturé + arrondi EUR).
-      expect(await app.subscriptionMonthlyCost(name)).toContain(v.displayed_eur);
+      expect(await app.subscriptionMonthlyCost(names[i])).toContain(v.displayed_eur);
     }
   });
 });
