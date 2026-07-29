@@ -78,8 +78,15 @@ impl Category {
 /// abonnements. C'est précisément le piège que l'exigence pointe : un agent inventerait volontiers un
 /// `SET NULL` ou un `CASCADE` plausibles mais divergents.
 ///
-/// Renvoie `true` si la catégorie peut être supprimée (aucun abonnement ne la référence). Garantit,
-/// par construction, qu'aucun abonnement ne référencera jamais une catégorie inexistante (CAT-003 #2).
+/// Renvoie `true` si la catégorie peut être supprimée (aucun abonnement ne la référence).
+///
+/// **Portée exacte de la garantie (CAT-003 #2)** : appliquée au chemin de suppression, cette politique
+/// assure qu'*une suppression qui aboutit ne laisse jamais un abonnement pointer vers une catégorie
+/// supprimée* — le critère « quand la suppression aboutit, aucun abonnement ne référence une catégorie
+/// inexistante ». Elle ne prétend **pas** garantir l'intégrité référentielle du *chemin de création*
+/// d'abonnement (qui, faute de clé étrangère — choix offline-first, ADR 0006/SYN-001 — ne vérifie pas
+/// aujourd'hui l'existence de la catégorie liée) : ce durcissement relève d'une passe d'intégrité
+/// référentielle dédiée, hors périmètre CAT-003 (cf. revue 2026-07-29-cat-003, F1).
 #[must_use]
 #[requirement(REQ-CAT-003)]
 pub const fn category_is_deletable(referencing_subscriptions: u64) -> bool {
