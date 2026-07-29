@@ -113,6 +113,7 @@
     "empty": "Aucun abonnement",
     "nextPayment": "Prochaine échéance",
     "monthlyCost": "Coût mensuel",
+    "yearlyCost": "Coût annuel",
     "total": "Total",
     "incomplete": "Total partiel : certains montants n'ont pas pu être convertis",
     "error": "Impossible de charger les abonnements",

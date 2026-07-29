@@ -1,0 +1,15 @@
+{
+  "_requirement": "REQ-STA-002",
+  "_rule": "Coût annuel normalisé : RELATION capturée sur l'application d'origine — annuel = mensuel × 12. Les deux indicateurs ne peuvent pas diverger.",
+  "_source": "Wallos 5.4.2 (image pinnée par digest sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f), includes/stats_calculations.php : `$totalCostPerYear = $totalCostPerMonth * 12`. Valeurs VÉRIFIÉES en exécutant le PHP de l'image (getPricePerMonth * 12).",
+  "_displayed": "`yearly` = valeur BRUTE (mensuel brut × 12). `displayed_eur` = arrondi bancaire 2 déc. (REQ-CUR-005/CUR-007), comparé à l'UI par l'e2e.",
+  "vectors": [
+    { "unit": "year",  "interval": 1, "price": "120.00", "yearly": "120.00", "displayed_eur": "120.00", "why": "annuel 120 -> mensuel 10 -> annuel 120" },
+    { "unit": "year",  "interval": 1, "price": "99.99",  "yearly": "99.99",  "displayed_eur": "99.99",  "why": "annuel 99.99 -> mensuel 8.3325 -> annuel 99.99 (relation exacte)" },
+    { "unit": "week",  "interval": 1, "price": "10.00",  "yearly": "522.00", "displayed_eur": "522.00", "why": "hebdo 10 -> mensuel 43.5 -> annuel 522" },
+    { "unit": "week",  "interval": 2, "price": "10.00",  "yearly": "261.00", "displayed_eur": "261.00", "why": "bihebdo -> mensuel 21.75 -> annuel 261" },
+    { "unit": "day",   "interval": 1, "price": "1.00",   "yearly": "360.00", "displayed_eur": "360.00", "why": "quotidien -> mensuel 30 -> annuel 360" },
+    { "unit": "month", "interval": 1, "price": "15.00",  "yearly": "180.00", "displayed_eur": "180.00", "why": "mensuel 15 -> annuel 180" },
+    { "unit": "month", "interval": 3, "price": "15.00",  "yearly": "60.00",  "displayed_eur": "60.00",  "why": "trimestriel -> mensuel 5 -> annuel 60" }
+  ]
+}

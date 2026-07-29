@@ -864,6 +864,12 @@ export interface components {
             payment_method?: string | null;
             /** @description URL du service, le cas échéant. */
             url?: string | null;
+            /**
+             * @description Coût **annuel normalisé** (chaîne décimale, REQ-STA-002), dans la devise de l'abonnement.
+             *     Champ **dérivé** : `annuel = mensuel × 12` (relation capturée sur l'application d'origine — les
+             *     deux indicateurs ne divergent jamais).
+             */
+            yearly_cost?: string;
         };
         /**
          * @description Liste d'abonnements filtrée avec son **total agrégé** (REQ-SUB-006).

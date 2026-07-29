@@ -486,7 +486,7 @@ requirements:
 - id: REQ-STA-002
   title: Coût annuel normalisé
   domain: statistics
-  status: draft
+  status: verified
   criticality: high
   layer:
   - core
