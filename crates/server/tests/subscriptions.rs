@@ -851,3 +851,41 @@ async fn modification_timestamp_is_server_provided(pool: PgPool) {
         "updated_at doit avancer après modification"
     );
 }
+
+// --- REQ-SYN-006 : idempotence de la création d'abonnement ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-006, case = "rejeu clé+corps identiques : même abonnement, aucun doublon")]
+async fn idempotent_create_replays_without_side_effect(pool: PgPool) {
+    let web = account(&pool, "idem-sub@example.com").await;
+    let with_key = |body: Value| {
+        let pool = pool.clone();
+        let cookie = web.clone();
+        async move {
+            let req = Request::builder()
+                .method("POST")
+                .uri("/api/v1/subscriptions")
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("idempotency-key", "sub-key-1")
+                .body(Body::from(body.to_string()))
+                .unwrap();
+            app(pool).oneshot(req).await.unwrap()
+        }
+    };
+
+    let first = with_key(valid_body()).await;
+    assert_eq!(first.status(), StatusCode::CREATED);
+    let body1 = body_json(first).await;
+
+    // Rejeu identique : réponse mémorisée renvoyée à l'identique (mêmes id + prochaine échéance).
+    let replay = with_key(valid_body()).await;
+    assert_eq!(replay.status(), StatusCode::CREATED);
+    let body2 = body_json(replay).await;
+    assert_eq!(body1["id"], body2["id"]);
+    assert_eq!(body1["next_payment"], body2["next_payment"]);
+
+    // Aucun doublon : un seul abonnement.
+    let listed = list(&pool, &web, "").await;
+    assert_eq!(listed["subscriptions"].as_array().unwrap().len(), 1);
+}

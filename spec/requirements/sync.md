@@ -130,7 +130,7 @@ depends_on: [REQ-SYN-001, REQ-SYN-002]
 id: REQ-SYN-006
 title: Idempotence des opérations d'écriture
 domain: sync
-status: draft
+status: verified
 criticality: high
 layer: [api]
 e2e: required

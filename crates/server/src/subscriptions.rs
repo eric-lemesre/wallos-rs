@@ -6,10 +6,11 @@
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use chrono::{NaiveDate, Utc};
 use uuid::Uuid;
+use wallos_core::actor::Actor;
 use wallos_core::billing::{BillingCycle, BillingUnit};
 use wallos_core::money::{CurrencyCode, Money};
 use wallos_core::requirement;
@@ -25,7 +26,17 @@ use wallos_storage::{
 
 use crate::auth::AuthActor;
 use crate::exchange::load_rate_table;
+use crate::idempotency::{self, IdempotencyKey, Outcome};
 use crate::problem_response;
+
+/// `500` générique (défaut interne non divulgué).
+#[requirement(REQ-SUB-002)]
+fn internal_error() -> Response {
+    problem_response(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        problem(500, "about:blank", "Internal Server Error"),
+    )
+}
 
 /// `422` identifiant le champ fautif (RFC 9457 `detail`), REQ-SUB-002 critère #2.
 #[requirement(REQ-SUB-002)]
@@ -47,34 +58,56 @@ fn subscription_not_found() -> Response {
 }
 
 /// Crée un abonnement dans le foyer de l'appelant ; renvoie l'abonnement et sa prochaine échéance.
+/// **Idempotent** via `Idempotency-Key` (REQ-SYN-006).
 #[utoipa::path(
     post,
     path = "/subscriptions",
     operation_id = "createSubscription",
-    extensions(("x-requirements" = json!(["REQ-SUB-002"]))),
+    extensions(("x-requirements" = json!(["REQ-SUB-002", "REQ-SYN-006"]))),
+    params(("Idempotency-Key" = Option<String>, Header, description = "Clé d'idempotence (REQ-SYN-006)")),
     request_body = CreateSubscriptionRequest,
     responses(
         (status = 201, description = "Abonnement créé (avec prochaine échéance)", body = SubscriptionDto, content_type = "application/json"),
         (status = 401, description = "Non authentifié", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 409, description = "Clé d'idempotence réutilisée avec un corps différent", body = wallos_proto::Problem, content_type = "application/problem+json"),
         (status = 422, description = "Validation par champ", body = wallos_proto::Problem, content_type = "application/problem+json")
     )
 )]
 #[requirement(REQ-SUB-002)]
+#[requirement(REQ-SYN-006)]
 pub async fn create_subscription(
     AuthActor(actor): AuthActor,
     State(db): State<Db>,
+    IdempotencyKey(idem): IdempotencyKey,
     Json(req): Json<CreateSubscriptionRequest>,
 ) -> Response {
+    if let Outcome::Short(response) = idempotency::begin(&db, &actor, idem.as_deref(), &req).await {
+        return response;
+    }
+    match build_subscription(&db, &actor, req).await {
+        Ok((status, body)) => {
+            idempotency::finish(&db, &actor, idem.as_deref(), status, &body).await;
+            (status, [(header::CONTENT_TYPE, "application/json")], body).into_response()
+        }
+        Err(response) => {
+            idempotency::abort(&db, &actor, idem.as_deref()).await;
+            response
+        }
+    }
+}
+
+/// Exécute la création (validation + calcul d'échéance + persistance) et renvoie `(statut, corps JSON)`
+/// mémorisable, ou une réponse d'erreur (non mémorisée).
+#[requirement(REQ-SUB-002)]
+async fn build_subscription(
+    db: &Db,
+    actor: &Actor,
+    req: CreateSubscriptionRequest,
+) -> Result<(StatusCode, String), Response> {
     // L'identifiant peut être **fourni par le client** (offline-first, REQ-SYN-001) : conservé tel
     // quel s'il est présent et valide, sinon généré par le serveur.
-    let id = match req.resolve_id() {
-        Ok(id) => id,
-        Err(err) => return field_error(&err),
-    };
-    let subscription = match req.into_core(id) {
-        Ok(sub) => sub,
-        Err(err) => return field_error(&err),
-    };
+    let id = req.resolve_id().map_err(|err| field_error(&err))?;
+    let subscription = req.into_core(id).map_err(|err| field_error(&err))?;
 
     // Prochaine échéance : première occurrence à partir d'aujourd'hui (inclus), bornée par la date de
     // fin (REQ-SUB-009). Horloge serveur — le domaine reste pur (l'instant est injecté ici).
@@ -85,26 +118,24 @@ pub async fn create_subscription(
     // Un abonnement déjà terminé n'a pas de prochaine échéance (légitime) ; sinon l'absence d'échéance
     // signale une date hors plage.
     if next.is_none() && !ended {
-        return field_error(&FieldError::new("first_payment", "échéance hors plage"));
+        return Err(field_error(&FieldError::new(
+            "first_payment",
+            "échéance hors plage",
+        )));
     }
 
     match SubscriptionRepository::new(db.pool())
-        .create(&actor, &subscription)
+        .create(actor, &subscription)
         .await
     {
-        Ok(()) => (
-            StatusCode::CREATED,
-            Json(SubscriptionDto::from_core_derived(
-                &subscription,
-                next,
-                ended,
-            )),
-        )
-            .into_response(),
-        _ => problem_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            problem(500, "about:blank", "Internal Server Error"),
-        ),
+        Ok(()) => {
+            let dto = SubscriptionDto::from_core_derived(&subscription, next, ended);
+            Ok((
+                StatusCode::CREATED,
+                serde_json::to_string(&dto).unwrap_or_default(),
+            ))
+        }
+        _ => Err(internal_error()),
     }
 }
 

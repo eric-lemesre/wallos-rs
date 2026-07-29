@@ -628,3 +628,92 @@ async fn modification_timestamp_is_server_provided(pool: PgPool) {
         "updated_at doit avancer après modification"
     );
 }
+
+// --- REQ-SYN-006 : idempotence des opérations d'écriture ---
+
+/// POST /categories en portant un en-tête `Idempotency-Key`.
+async fn create_with_key(
+    pool: &PgPool,
+    cookie: &str,
+    name: &str,
+    key: &str,
+) -> axum::http::Response<Body> {
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/categories")
+        .header(header::COOKIE, cookie)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("idempotency-key", key)
+        .body(Body::from(json!({ "name": name }).to_string()))
+        .unwrap();
+    app(pool.clone()).oneshot(req).await.unwrap()
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-006, case = "rejeu clé+corps identiques : même réponse, aucun doublon")]
+async fn idempotent_replay_returns_same_response_without_side_effect(pool: PgPool) {
+    let web = account(&pool, "idem@example.com").await;
+    let first = create_with_key(&pool, &web, "Streaming", "key-abc").await;
+    assert_eq!(first.status(), StatusCode::CREATED);
+    let id1 = created_id(first).await;
+
+    // Rejeu avec la même clé et le même corps : réponse identique (même id), sans nouvelle création.
+    let replay = create_with_key(&pool, &web, "Streaming", "key-abc").await;
+    assert_eq!(replay.status(), StatusCode::CREATED);
+    assert_eq!(created_id(replay).await, id1);
+
+    // Aucun effet de bord supplémentaire : une seule catégorie existe.
+    assert_eq!(categories(&pool, &web).await.len(), 1);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-006, case = "clé réutilisée avec un corps différent : 409")]
+async fn idempotency_key_reused_with_different_body_is_conflict(pool: PgPool) {
+    let web = account(&pool, "idem-conflict@example.com").await;
+    assert_eq!(
+        create_with_key(&pool, &web, "Streaming", "key-x")
+            .await
+            .status(),
+        StatusCode::CREATED
+    );
+    // Même clé, corps différent -> conflit (409).
+    let conflict = create_with_key(&pool, &web, "Musique", "key-x").await;
+    assert_eq!(conflict.status(), StatusCode::CONFLICT);
+    // La seconde n'a rien créé : une seule catégorie (l'originale).
+    let names: Vec<String> = categories(&pool, &web)
+        .await
+        .iter()
+        .map(|c| c["name"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(names, vec!["Streaming"]);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-006, case = "portée par utilisateur : même clé, comptes distincts")]
+async fn idempotency_keys_are_scoped_per_user(pool: PgPool) {
+    let a = account(&pool, "idem-a@example.com").await;
+    let b = account(&pool, "idem-b@example.com").await;
+    // Les deux comptes emploient la même clé : aucune interférence (isolation §9).
+    assert_eq!(
+        create_with_key(&pool, &a, "Streaming", "shared")
+            .await
+            .status(),
+        StatusCode::CREATED
+    );
+    let b_resp = create_with_key(&pool, &b, "Musique", "shared").await;
+    assert_eq!(b_resp.status(), StatusCode::CREATED);
+    // Chacun voit sa propre catégorie.
+    assert_eq!(categories(&pool, &a).await[0]["name"], "Streaming");
+    assert_eq!(categories(&pool, &b).await[0]["name"], "Musique");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-006, case = "sans clé : le comportement est inchangé (idempotence opt-in)")]
+async fn without_key_creation_is_unaffected(pool: PgPool) {
+    let web = account(&pool, "idem-nokey@example.com").await;
+    assert_eq!(
+        create_category(&pool, &web, "Streaming").await.status(),
+        StatusCode::CREATED
+    );
+    assert_eq!(categories(&pool, &web).await.len(), 1);
+}

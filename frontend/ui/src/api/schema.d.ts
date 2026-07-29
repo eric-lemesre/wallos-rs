@@ -31,7 +31,10 @@ export interface paths {
         /** Liste les catégories du foyer de l'appelant (disponibles immédiatement pour le formulaire). */
         get: operations["listCategories"];
         put?: never;
-        /** Crée une catégorie dans le foyer de l'appelant. */
+        /**
+         * Crée une catégorie dans le foyer de l'appelant. **Idempotent** via l'en-tête `Idempotency-Key`
+         *     (REQ-SYN-006) : un rejeu à clé + corps identiques renvoie la réponse initiale sans nouvelle création.
+         */
         post: operations["createCategory"];
         delete?: never;
         options?: never;
@@ -217,7 +220,10 @@ export interface paths {
         /** Liste les moyens de paiement du foyer de l'appelant. */
         get: operations["listPaymentMethods"];
         put?: never;
-        /** Crée un moyen de paiement dans le foyer de l'appelant. */
+        /**
+         * Crée un moyen de paiement dans le foyer de l'appelant. **Idempotent** via `Idempotency-Key`
+         *     (REQ-SYN-006).
+         */
         post: operations["createPaymentMethod"];
         delete?: never;
         options?: never;
@@ -327,7 +333,10 @@ export interface paths {
         /** Liste les abonnements du foyer, filtrés (conjonctifs), avec le total agrégé du sous-ensemble actif. */
         get: operations["listSubscriptions"];
         put?: never;
-        /** Crée un abonnement dans le foyer de l'appelant ; renvoie l'abonnement et sa prochaine échéance. */
+        /**
+         * Crée un abonnement dans le foyer de l'appelant ; renvoie l'abonnement et sa prochaine échéance.
+         *     **Idempotent** via `Idempotency-Key` (REQ-SYN-006).
+         */
         post: operations["createSubscription"];
         delete?: never;
         options?: never;
@@ -935,7 +944,10 @@ export interface operations {
     createCategory: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Clé d'idempotence (REQ-SYN-006) */
+                "Idempotency-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -956,6 +968,15 @@ export interface operations {
             };
             /** @description Non authentifié */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Clé d'idempotence réutilisée avec un corps différent */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1387,7 +1408,10 @@ export interface operations {
     createPaymentMethod: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Clé d'idempotence (REQ-SYN-006) */
+                "Idempotency-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1408,6 +1432,15 @@ export interface operations {
             };
             /** @description Non authentifié */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Clé d'idempotence réutilisée avec un corps différent */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1814,7 +1847,10 @@ export interface operations {
     createSubscription: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Clé d'idempotence (REQ-SYN-006) */
+                "Idempotency-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1835,6 +1871,15 @@ export interface operations {
             };
             /** @description Non authentifié */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Clé d'idempotence réutilisée avec un corps différent */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
