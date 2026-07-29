@@ -20,5 +20,6 @@
     { "unit": "day",   "interval": 7, "price": "7.00",   "monthly": "30.00",   "displayed_eur": "30.00", "why": "tous les 7 jours 7 * 30 / 7" },
     { "unit": "month", "interval": 1, "price": "15.00",  "monthly": "15.00",   "displayed_eur": "15.00", "why": "mensuel : inchangé" },
     { "unit": "month", "interval": 3, "price": "15.00",  "monthly": "5.00",    "displayed_eur": "5.00",  "why": "trimestriel (tous les 3 mois) 15 / 3" }
-  ]
+  ],
+  "_currency_decimals": "L'affichage arrondit au nombre de décimales de la DEVISE (REQ-CUR-007). Vérifié en core (test rounding_uses_the_currency_decimals) : JPY (0 décimale) day/interval=7/100 -> mensuel 429 (EUR : 428.57), borne half-to-even 2.5 -> 2. Les vecteurs ci-dessus sont en EUR (2 décimales)."
 }
