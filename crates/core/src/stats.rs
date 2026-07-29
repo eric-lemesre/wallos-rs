@@ -45,8 +45,10 @@ pub fn monthly_cost(price: Money, cycle: crate::billing::BillingCycle) -> Money 
         BillingUnit::Month => amount / interval,
         BillingUnit::Year => amount / (Decimal::from(12) * interval),
     };
-    // Toujours ≥ 0 (prix ≥ 0, facteurs et intervalle > 0) : le repli `zero` n'est jamais atteint,
-    // il évite seulement un `unwrap` (R5).
+    // `Money::new` ne rejette que le négatif ; le résultat est toujours ≥ 0 (prix ≥ 0, facteurs et
+    // intervalle > 0), donc il **ne peut pas échouer** ici. Le repli est **purement mécanique**
+    // (satisfaction de R5, pas d'`unwrap`) — il n'a **aucune** sémantique métier et ne couvre pas un
+    // éventuel overflow décimal (propriété partagée par toute l'arithmétique `Decimal` du dépôt).
     Money::new(monthly, currency).unwrap_or_else(|_| Money::zero(currency))
 }
 
@@ -74,7 +76,8 @@ pub fn monthly_cost_rounded(price: Money, cycle: crate::billing::BillingCycle) -
 pub fn yearly_cost(price: Money, cycle: crate::billing::BillingCycle) -> Money {
     let monthly = monthly_cost(price, cycle);
     let currency = monthly.currency();
-    // Toujours ≥ 0 : repli `zero` jamais atteint (évite un `unwrap`, R5).
+    // Résultat toujours ≥ 0 : `Money::new` ne peut pas échouer ici. Repli **purement mécanique** (R5),
+    // sans sémantique métier (cf. `monthly_cost`).
     Money::new(monthly.amount() * Decimal::from(12), currency)
         .unwrap_or_else(|_| Money::zero(currency))
 }

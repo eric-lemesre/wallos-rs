@@ -235,20 +235,23 @@ fn row_to_dto(row: SubscriptionRow, today: NaiveDate) -> SubscriptionDto {
     // Terminé si la date de fin est strictement dépassée à la date du jour (REQ-SUB-009).
     let ended = row.end_date.is_some_and(|end| today > end);
     // Coûts normalisés (mensuel REQ-STA-001, annuel REQ-STA-002), dans la devise de l'abonnement. Une
-    // ligne à la devise ou au cycle illisible retombe sur le montant brut (jamais un zéro silencieux).
+    // ligne à la devise, au cycle ou au montant illisible (négatif) retombe sur le montant brut
+    // (jamais un zéro silencieux — revue STA-001 F2).
+    let raw = || (row.amount.to_string(), row.amount.to_string());
     let (monthly, yearly) = match (CurrencyCode::new(&row.currency), cycle) {
-        (Ok(currency), Some(cycle)) => {
-            let price = Money::new(row.amount, currency).unwrap_or_else(|_| Money::zero(currency));
-            (
+        (Ok(currency), Some(cycle)) => match Money::new(row.amount, currency) {
+            Ok(price) => (
                 wallos_core::stats::monthly_cost_rounded(price, cycle)
                     .amount()
                     .to_string(),
                 wallos_core::stats::yearly_cost_rounded(price, cycle)
                     .amount()
                     .to_string(),
-            )
-        }
-        _ => (row.amount.to_string(), row.amount.to_string()),
+            ),
+            // Montant corrompu (négatif) : on expose le brut, jamais un « 0 » mensonger.
+            Err(_) => raw(),
+        },
+        _ => raw(),
     };
     SubscriptionDto {
         id: row.id.to_string(),
