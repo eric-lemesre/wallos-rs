@@ -63,6 +63,33 @@ pub fn monthly_cost_rounded(price: Money, cycle: crate::billing::BillingCycle) -
     raw.round_to(decimals)
 }
 
+/// Coût **annuel normalisé** d'un abonnement (REQ-STA-002), dans sa propre devise.
+///
+/// **Relation capturée sur l'application d'origine** : `annuel = mensuel × 12` (Wallos 5.4.2
+/// `stats_calculations.php` — `$totalCostPerYear = $totalCostPerMonth * 12`). Les deux indicateurs
+/// ne peuvent donc pas diverger : le coût annuel est **exactement** douze fois le coût mensuel
+/// normalisé (valeur brute, précision pleine). Arithmétique décimale exacte (R4).
+#[requirement(REQ-STA-002)]
+#[must_use]
+pub fn yearly_cost(price: Money, cycle: crate::billing::BillingCycle) -> Money {
+    let monthly = monthly_cost(price, cycle);
+    let currency = monthly.currency();
+    // Toujours ≥ 0 : repli `zero` jamais atteint (évite un `unwrap`, R5).
+    Money::new(monthly.amount() * Decimal::from(12), currency)
+        .unwrap_or_else(|_| Money::zero(currency))
+}
+
+/// Coût annuel normalisé **arrondi pour l'affichage** aux décimales de la devise (REQ-STA-002 +
+/// REQ-CUR-005/CUR-007) — la valeur affichée par l'application d'origine. [`yearly_cost`] reste la
+/// valeur brute.
+#[requirement(REQ-STA-002)]
+#[must_use]
+pub fn yearly_cost_rounded(price: Money, cycle: crate::billing::BillingCycle) -> Money {
+    let raw = yearly_cost(price, cycle);
+    let decimals = crate::currencies::find(price.currency().as_str()).map_or(2, |c| c.decimals);
+    raw.round_to(decimals)
+}
+
 /// Montants entrant dans les agrégats statistiques à la date `reference` (REQ-SUB-008 / REQ-SUB-009).
 ///
 /// Un abonnement **désactivé** (REQ-SUB-008) ou **terminé** (date de fin dépassée à `reference`,
@@ -264,6 +291,50 @@ mod tests {
                 expected.parse::<Decimal>().unwrap(),
                 "{unit:?} interval={interval} price={price}"
             );
+        }
+    }
+
+    #[test]
+    #[verifies(REQ-STA-002, case = "coût annuel = mensuel × 12, valeurs capturées sur Wallos")]
+    fn yearly_cost_matches_the_wallos_oracle() {
+        // Vecteurs gelés dans e2e/fixtures/oracles/REQ-STA-002-yearly.json (annuel = mensuel*12,
+        // vérifié en exécutant le PHP de l'image pinnée).
+        let cases: &[(BillingUnit, u32, &str, &str)] = &[
+            (BillingUnit::Year, 1, "120.00", "120"),
+            (BillingUnit::Year, 1, "99.99", "99.99"),
+            (BillingUnit::Week, 1, "10.00", "522"),
+            (BillingUnit::Week, 2, "10.00", "261"),
+            (BillingUnit::Day, 1, "1.00", "360"),
+            (BillingUnit::Month, 1, "15.00", "180"),
+            (BillingUnit::Month, 3, "15.00", "60"),
+        ];
+        for (unit, interval, price, expected) in cases {
+            let sub = sub_cycle(price, *unit, *interval);
+            let yearly = yearly_cost(*sub.price(), sub.cycle());
+            assert_eq!(
+                yearly.amount(),
+                expected.parse::<Decimal>().unwrap(),
+                "{unit:?} interval={interval} price={price}"
+            );
+        }
+    }
+
+    #[test]
+    #[verifies(REQ-STA-002, case = "relation stable : annuel ≡ mensuel × 12 (les deux ne divergent pas)")]
+    fn yearly_is_always_twelve_times_monthly() {
+        // La cohérence entre les deux indicateurs (REQ-STA-002) : pour tout cycle/prix, annuel = mensuel*12.
+        for unit in [
+            BillingUnit::Day,
+            BillingUnit::Week,
+            BillingUnit::Month,
+            BillingUnit::Year,
+        ] {
+            for interval in [1u32, 2, 3, 7] {
+                let sub = sub_cycle("42.37", unit, interval);
+                let monthly = monthly_cost(*sub.price(), sub.cycle());
+                let yearly = yearly_cost(*sub.price(), sub.cycle());
+                assert_eq!(yearly.amount(), monthly.amount() * Decimal::from(12));
+            }
         }
     }
 

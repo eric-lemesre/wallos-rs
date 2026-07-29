@@ -33,7 +33,7 @@ depends_on: [REQ-SUB-003, REQ-CUR-005]
 id: REQ-STA-002
 title: Coût annuel normalisé
 domain: statistics
-status: draft
+status: verified
 criticality: high
 layer: [core, api, ui]
 e2e: required

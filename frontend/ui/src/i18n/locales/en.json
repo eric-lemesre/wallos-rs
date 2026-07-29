@@ -113,6 +113,7 @@
     "empty": "No subscriptions",
     "nextPayment": "Next payment",
     "monthlyCost": "Monthly cost",
+    "yearlyCost": "Yearly cost",
     "total": "Total",
     "incomplete": "Partial total: some amounts could not be converted",
     "error": "Could not load subscriptions",
