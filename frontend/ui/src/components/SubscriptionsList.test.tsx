@@ -91,8 +91,20 @@ describe("SubscriptionsList", () => {
     await screen.findByTestId("subscriptions-total");
     expect(screen.queryByTestId("subscriptions-total-filtered")).toBeNull();
 
-    // Après application d'un filtre : le total l'indique explicitement.
+    // Filtre par **état** appliqué : le total l'indique explicitement.
     await user.selectOptions(screen.getByTestId("subscriptions-filter-state"), "active");
+    await user.click(screen.getByTestId("subscriptions-apply"));
+    expect(await screen.findByTestId("subscriptions-total-filtered")).toBeInTheDocument();
+
+    // Retour à « tous » : l'indication **disparaît** (revue STA-007 F1).
+    await user.selectOptions(screen.getByTestId("subscriptions-filter-state"), "all");
+    await user.click(screen.getByTestId("subscriptions-apply"));
+    await waitFor(() =>
+      expect(screen.queryByTestId("subscriptions-total-filtered")).toBeNull(),
+    );
+
+    // Filtre par **catégorie** (autre axe) : l'indication réapparaît (revue STA-007 F2).
+    await user.type(screen.getByTestId("subscriptions-filter-category"), CAT1);
     await user.click(screen.getByTestId("subscriptions-apply"));
     expect(await screen.findByTestId("subscriptions-total-filtered")).toBeInTheDocument();
   });
