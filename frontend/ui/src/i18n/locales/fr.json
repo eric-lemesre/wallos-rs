@@ -124,7 +124,8 @@
     "editInterval": "Intervalle",
     "editActive": "Actif",
     "saveError": "Impossible d'enregistrer la modification",
-    "ended": "Terminé"
+    "ended": "Terminé",
+    "totalFiltered": "(ensemble filtré)"
   },
   "paymentMethods": {
     "title": "Moyens de paiement",

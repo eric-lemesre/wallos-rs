@@ -82,6 +82,21 @@ describe("SubscriptionsList", () => {
     );
   });
 
+  it("indique explicitement quand le total porte sur un ensemble filtré (REQ-STA-007)", async () => {
+    vi.spyOn(api, "GET").mockResolvedValue(response([sub("1", "Netflix", "9.99")], "9.99"));
+    const user = userEvent.setup();
+    renderList();
+
+    // Sans filtre appliqué : le total ne porte aucune indication de filtre.
+    await screen.findByTestId("subscriptions-total");
+    expect(screen.queryByTestId("subscriptions-total-filtered")).toBeNull();
+
+    // Après application d'un filtre : le total l'indique explicitement.
+    await user.selectOptions(screen.getByTestId("subscriptions-filter-state"), "active");
+    await user.click(screen.getByTestId("subscriptions-apply"));
+    expect(await screen.findByTestId("subscriptions-total-filtered")).toBeInTheDocument();
+  });
+
   it("modifie un abonnement en place (PUT, échéance recalculée côté serveur)", async () => {
     vi.spyOn(api, "GET").mockResolvedValue(response([sub("1", "Netflix", "9.99")], "9.99"));
     const put = vi.spyOn(api, "PUT").mockResolvedValue({

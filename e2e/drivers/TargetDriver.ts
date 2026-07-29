@@ -242,6 +242,24 @@ export class TargetDriver implements AppDriver, Harness {
     return (await this.page.getByTestId("subscriptions-total").textContent()) ?? "";
   }
 
+  // --- Cohérence total / filtre (REQ-STA-007) ---
+
+  async totalIndicatesFiltered(): Promise<boolean> {
+    try {
+      await this.page
+        .getByTestId("subscriptions-total-filtered")
+        .waitFor({ state: "visible", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async filterSubscriptionsByState(state: "all" | "active" | "inactive"): Promise<void> {
+    await this.page.getByTestId("subscriptions-filter-state").selectOption(state);
+    await this.page.getByTestId("subscriptions-apply").click();
+  }
+
   // --- Modification (REQ-SUB-004) ---
 
   async editSubscriptionAmount(name: string, amount: string): Promise<void> {
