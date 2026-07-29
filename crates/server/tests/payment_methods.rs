@@ -496,3 +496,52 @@ async fn modification_timestamp_is_server_provided(pool: PgPool) {
         "updated_at doit avancer après modification"
     );
 }
+
+// --- REQ-SYN-006 (revue F4) : idempotence de la création de moyen de paiement ---
+
+/// POST /payment-methods en portant un en-tête `Idempotency-Key`.
+async fn create_pm_with_key(
+    pool: &PgPool,
+    cookie: &str,
+    name: &str,
+    key: &str,
+) -> axum::http::Response<Body> {
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/payment-methods")
+        .header(header::COOKIE, cookie)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("idempotency-key", key)
+        .body(Body::from(json!({ "name": name }).to_string()))
+        .unwrap();
+    app(pool.clone()).oneshot(req).await.unwrap()
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-006, case = "rejeu clé+corps identiques : même réponse, aucun doublon")]
+async fn idempotent_replay_returns_same_response(pool: PgPool) {
+    let web = account(&pool, "idem-pm@example.com").await;
+    let first = create_pm_with_key(&pool, &web, "Carte", "pm-key").await;
+    assert_eq!(first.status(), StatusCode::CREATED);
+    let id1 = created_id(first).await;
+
+    let replay = create_pm_with_key(&pool, &web, "Carte", "pm-key").await;
+    assert_eq!(replay.status(), StatusCode::CREATED);
+    assert_eq!(created_id(replay).await, id1);
+    assert_eq!(list(&pool, &web).await.len(), 1);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-006, case = "clé réutilisée avec un corps différent : 409")]
+async fn idempotency_key_reused_with_different_body_is_conflict(pool: PgPool) {
+    let web = account(&pool, "idem-pm-conflict@example.com").await;
+    assert_eq!(
+        create_pm_with_key(&pool, &web, "Carte", "pm-x")
+            .await
+            .status(),
+        StatusCode::CREATED
+    );
+    let conflict = create_pm_with_key(&pool, &web, "PayPal", "pm-x").await;
+    assert_eq!(conflict.status(), StatusCode::CONFLICT);
+    assert_eq!(list(&pool, &web).await.len(), 1);
+}

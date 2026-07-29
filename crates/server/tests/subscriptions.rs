@@ -912,3 +912,37 @@ async fn client_provided_id_collision_is_conflict(pool: PgPool) {
         StatusCode::CONFLICT
     );
 }
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-006, case = "abonnement : clé réutilisée avec un corps différent → 409")]
+async fn idempotency_key_reused_with_different_body_is_conflict(pool: PgPool) {
+    let web = account(&pool, "idem-sub-conflict@example.com").await;
+    let post_key = |body: Value| {
+        let pool = pool.clone();
+        let cookie = web.clone();
+        async move {
+            let req = Request::builder()
+                .method("POST")
+                .uri("/api/v1/subscriptions")
+                .header(header::COOKIE, cookie)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("idempotency-key", "sub-conflict-key")
+                .body(Body::from(body.to_string()))
+                .unwrap();
+            app(pool).oneshot(req).await.unwrap()
+        }
+    };
+    assert_eq!(post_key(valid_body()).await.status(), StatusCode::CREATED);
+    // Même clé, montant différent : conflit (409).
+    let mut other = valid_body();
+    other["amount"] = json!("19.99");
+    assert_eq!(post_key(other).await.status(), StatusCode::CONFLICT);
+    // Un seul abonnement créé.
+    assert_eq!(
+        list(&pool, &web, "").await["subscriptions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}

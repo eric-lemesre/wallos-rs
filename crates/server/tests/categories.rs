@@ -753,3 +753,71 @@ async fn client_provided_id_collision_is_conflict(pool: PgPool) {
         StatusCode::UNPROCESSABLE_ENTITY
     );
 }
+
+// --- REQ-SYN-006 (revue F3/F5) : concurrence réelle + rejeu après erreur retryable ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-006, case = "concurrence : deux rejeux simultanés → un seul effet de bord")]
+async fn concurrent_replays_produce_a_single_side_effect(pool: PgPool) {
+    let web = account(&pool, "idem-conc@example.com").await;
+    // Deux requêtes **strictement simultanées** avec la même clé + le même corps.
+    let (r1, r2) = tokio::join!(
+        create_with_key(&pool, &web, "Streaming", "conc-key"),
+        create_with_key(&pool, &web, "Streaming", "conc-key"),
+    );
+    // La réservation atomique (`insert ... on conflict do nothing`) garantit un unique effet de bord :
+    // au plus une catégorie est créée, quel que soit l'entrelacement.
+    assert_eq!(categories(&pool, &web).await.len(), 1);
+    // Au moins une requête réussit (201) ; l'autre est soit un rejeu (201) soit un conflit en cours (409).
+    let statuses = [r1.status(), r2.status()];
+    assert!(
+        statuses.contains(&StatusCode::CREATED),
+        "au moins une création réussie, obtenu {statuses:?}"
+    );
+    assert!(
+        statuses
+            .iter()
+            .all(|s| *s == StatusCode::CREATED || *s == StatusCode::CONFLICT),
+        "chaque réponse est 201 ou 409, obtenu {statuses:?}"
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-006, case = "erreur retryable relâchée : rejeu ultérieur avec la même clé réussit")]
+async fn retryable_error_releases_the_key(pool: PgPool) {
+    let web = account(&pool, "idem-retry@example.com").await;
+    // Corps invalide (nom vide) avec une clé : 422 — la réservation est **relâchée** (non mémorisée).
+    let invalid = create_with_key(&pool, &web, "   ", "retry-key").await;
+    assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    // Même clé, corps valide : la création réussit (la clé n'a pas été bloquée par l'échec précédent).
+    let ok = create_with_key(&pool, &web, "Streaming", "retry-key").await;
+    assert_eq!(ok.status(), StatusCode::CREATED);
+    assert_eq!(categories(&pool, &web).await.len(), 1);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-006, case = "réservation PENDING orpheline (handler mort) récupérée après TTL")]
+async fn stale_pending_reservation_is_reclaimed(pool: PgPool) {
+    let email = "idem-stale@example.com";
+    let web = account(&pool, email).await;
+    let user_id: uuid::Uuid = sqlx::query_scalar("select id from users where email = $1")
+        .bind(email)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    // Simule un handler mort entre `reserve` et `complete`/`release` : une réservation `PENDING`
+    // orpheline vieille de 10 minutes (> TTL 5 min).
+    sqlx::query(
+        "insert into idempotency_keys \
+             (user_id, idempotency_key, request_fingerprint, response_status, response_body, created_at) \
+         values ($1, 'stale', 'orphan', 0, '', now() - interval '10 minutes')",
+    )
+    .bind(user_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    // La clé n'est **pas** bloquée à vie : la réservation orpheline est récupérée, la création réussit.
+    let r = create_with_key(&pool, &web, "Streaming", "stale").await;
+    assert_eq!(r.status(), StatusCode::CREATED);
+    assert_eq!(categories(&pool, &web).await.len(), 1);
+}

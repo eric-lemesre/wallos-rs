@@ -16,6 +16,13 @@ use crate::StorageError;
 /// Statut sentinelle d'une réservation **en cours** (jamais un vrai code HTTP, tous ≥ 100).
 const PENDING: i16 = 0;
 
+/// Durée au-delà de laquelle une réservation **encore en cours** (`PENDING`) est considérée
+/// **orpheline** (revue SYN-006 F1) : le handler qui l'a posée est mort avant `complete`/`release`
+/// (panic, arrêt du nœud, coupure). Un handler nominal se termine en millisecondes ; 5 minutes est
+/// une marge très large qui ne peut jamais recouvrir une exécution légitime en cours. Passé ce délai,
+/// la clé est **récupérable** — sinon un incident bloquerait la clé indéfiniment.
+const RESERVATION_TTL: &str = "5 minutes";
+
 /// Résultat d'une tentative de réservation d'une clé d'idempotence.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Reservation {
@@ -50,7 +57,9 @@ impl<'a> IdempotencyRepository<'a> {
     /// Insère une réservation « en cours » de façon **atomique**. Si la clé est neuve, renvoie
     /// [`Reservation::Proceed`]. Sinon, décide d'après l'empreinte du corps :
     /// - même empreinte **et** réponse mémorisée → [`Reservation::Replay`] ;
-    /// - empreinte différente, ou exécution encore en cours → [`Reservation::Conflict`].
+    /// - empreinte différente, ou exécution encore en cours (récente) → [`Reservation::Conflict`] ;
+    /// - réservation `PENDING` **orpheline** (plus vieille que [`RESERVATION_TTL`], handler mort) →
+    ///   **récupérée** (revue F1) et renvoie [`Reservation::Proceed`].
     ///
     /// # Errors
     /// `StorageError::Database` en cas d'échec de requête.
@@ -86,14 +95,41 @@ impl<'a> IdempotencyRepository<'a> {
         .await?;
         match existing {
             Some((fingerprint_stored, status, body))
-                if fingerprint_stored == fingerprint && status != PENDING =>
+                if status != PENDING && fingerprint_stored == fingerprint =>
             {
                 Ok(Reservation::Replay {
                     status: u16::try_from(status).unwrap_or(0),
                     body,
                 })
             }
-            _ => Ok(Reservation::Conflict),
+            // Réponse mémorisée mais corps différent : conflit franc (409).
+            Some((_, status, _)) if status != PENDING => Ok(Reservation::Conflict),
+            // Réservation encore `PENDING` : soit une exécution concurrente légitime (récente →
+            // conflit), soit un orphelin (handler mort → récupérable). Le `UPDATE` conditionnel sur
+            // l'âge tranche **atomiquement** : un seul appelant récupère l'orphelin.
+            Some(_) => {
+                let reclaimed = sqlx::query(&format!(
+                    "update idempotency_keys \
+                         set request_fingerprint = $3, response_status = $4, response_body = '', \
+                             created_at = now() \
+                     where user_id = $1 and idempotency_key = $2 \
+                       and response_status = $4 \
+                       and created_at < now() - interval '{RESERVATION_TTL}'",
+                ))
+                .bind(actor.user_id())
+                .bind(key)
+                .bind(fingerprint)
+                .bind(PENDING)
+                .execute(self.pool)
+                .await?;
+                if reclaimed.rows_affected() == 1 {
+                    Ok(Reservation::Proceed)
+                } else {
+                    Ok(Reservation::Conflict)
+                }
+            }
+            // Supprimée entre l'insertion et la relecture (course rare) : traité comme conflit.
+            None => Ok(Reservation::Conflict),
         }
     }
 
