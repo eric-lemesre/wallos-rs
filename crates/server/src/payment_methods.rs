@@ -57,7 +57,12 @@ pub async fn create_payment_method(
     State(db): State<Db>,
     Json(req): Json<CreatePaymentMethodRequest>,
 ) -> Response {
-    let Ok(pm) = PaymentMethod::new(Uuid::new_v4(), req.name) else {
+    // Identifiant **fourni par le client** (offline-first, REQ-SYN-001) conservé s'il est présent et
+    // valide, sinon généré par le serveur.
+    let Ok(id) = req.resolve_id() else {
+        return invalid();
+    };
+    let Ok(pm) = PaymentMethod::new(id, req.name) else {
         return invalid();
     };
     match PaymentMethodRepository::new(db.pool())

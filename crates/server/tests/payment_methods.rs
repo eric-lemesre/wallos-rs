@@ -377,3 +377,25 @@ async fn authz_anon_delete_payment_method(pool: PgPool) {
         StatusCode::UNAUTHORIZED
     );
 }
+
+// --- REQ-SYN-001 : identifiant stable généré côté client ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SYN-001, case = "l'UUID généré côté client est conservé à la création")]
+async fn client_provided_uuid_is_preserved(pool: PgPool) {
+    let web = account(&pool, "syn-pm@example.com").await;
+    let client_id = uuid::Uuid::new_v4().to_string();
+    let created = send(
+        &pool,
+        "POST",
+        "/api/v1/payment-methods",
+        Some(&web),
+        Some(json!({ "id": client_id, "name": "PayPal" })),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    assert_eq!(created_id(created).await, client_id);
+    let items = list(&pool, &web).await;
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["id"], client_id);
+}

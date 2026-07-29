@@ -318,6 +318,17 @@ mod tests {
     }
 
     #[test]
+    #[verifies(REQ-SYN-001, case = "l'identifiant (UUID) fourni est conservé tel quel")]
+    fn identity_uuid_is_preserved() {
+        // Un UUID généré côté client (offline-first) est conservé à l'identique, jamais réécrit :
+        // préalable à la réplication (REQ-SYN-001).
+        let client_id = Uuid::from_u128(0xdead_beef);
+        let sub =
+            Subscription::new(client_id, "Netflix", money("9.99", "EUR"), cycle(), day()).unwrap();
+        assert_eq!(sub.id(), client_id);
+    }
+
+    #[test]
     #[verifies(REQ-SUB-001, case = "nom vide refusé")]
     fn empty_name_is_rejected() {
         assert!(

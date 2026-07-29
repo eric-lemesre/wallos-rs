@@ -73,6 +73,15 @@ mod tests {
     }
 
     #[test]
+    #[verifies(REQ-SYN-001, case = "l'identifiant (UUID) fourni est conservé tel quel")]
+    fn identity_uuid_is_preserved() {
+        // Un UUID généré côté client est conservé à l'identique (offline-first, REQ-SYN-001).
+        let client_id = Uuid::from_u128(0xdead_beef);
+        let pm = PaymentMethod::new(client_id, "PayPal").unwrap();
+        assert_eq!(pm.id(), client_id);
+    }
+
+    #[test]
     #[verifies(REQ-SUB-011, case = "nom vide refusé")]
     fn empty_name_is_rejected() {
         assert!(PaymentMethod::new(Uuid::from_u128(1), "").is_err());

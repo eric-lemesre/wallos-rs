@@ -478,6 +478,11 @@ export interface components {
         /** @description Requête de création d'une catégorie (REQ-CAT-001). */
         CreateCategoryRequest: {
             /**
+             * @description Identifiant (UUID) **généré côté client** (offline-first, REQ-SYN-001), le cas échéant. Absent
+             *     ⇒ le serveur en génère un. Présent ⇒ il est **conservé tel quel**.
+             */
+            id?: string | null;
+            /**
              * @description Nom de la catégorie (non vide, ≤ 100 caractères ; les espaces de bord sont normalisés).
              * @example Streaming
              */
@@ -514,6 +519,11 @@ export interface components {
         };
         /** @description Requête de création d'un moyen de paiement (REQ-SUB-011). */
         CreatePaymentMethodRequest: {
+            /**
+             * @description Identifiant (UUID) **généré côté client** (offline-first, REQ-SYN-001), le cas échéant. Absent
+             *     ⇒ le serveur en génère un. Présent ⇒ il est **conservé tel quel**.
+             */
+            id?: string | null;
             /**
              * @description Nom (non vide, ≤ 100 caractères ; les espaces de bord sont normalisés).
              * @example Carte de crédit
@@ -562,6 +572,11 @@ export interface components {
              * @example 2025-01-31
              */
             first_payment: string;
+            /**
+             * @description Identifiant (UUID) **généré côté client** (offline-first, REQ-SYN-001), le cas échéant. Absent
+             *     ⇒ le serveur en génère un. Présent ⇒ il est **conservé tel quel**.
+             */
+            id?: string | null;
             /** @description Logo, le cas échéant. */
             logo?: string | null;
             /** @description Nom de l'abonnement. */

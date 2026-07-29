@@ -9,7 +9,7 @@
 id: REQ-SYN-001
 title: Horodatage de modification et identifiants stables
 domain: sync
-status: draft
+status: verified
 criticality: high
 layer: [core, api]
 e2e: n-a

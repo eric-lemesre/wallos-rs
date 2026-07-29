@@ -64,7 +64,12 @@ pub async fn create_category(
     State(db): State<Db>,
     Json(req): Json<CreateCategoryRequest>,
 ) -> Response {
-    let Ok(category) = Category::new(Uuid::new_v4(), req.name) else {
+    // L'identifiant peut être **fourni par le client** (offline-first, REQ-SYN-001) : conservé tel
+    // quel s'il est présent et valide, sinon généré par le serveur.
+    let Ok(id) = req.resolve_id() else {
+        return invalid_category();
+    };
+    let Ok(category) = Category::new(id, req.name) else {
         return invalid_category();
     };
     match CategoryRepository::new(db.pool())
