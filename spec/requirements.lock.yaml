@@ -527,7 +527,7 @@ requirements:
 - id: REQ-STA-005
   title: Échéancier des prochains paiements
   domain: statistics
-  status: draft
+  status: verified
   criticality: medium
   layer:
   - core

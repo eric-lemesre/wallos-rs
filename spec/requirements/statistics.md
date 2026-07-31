@@ -99,7 +99,7 @@ depends_on: [REQ-STA-001, REQ-CAT-001]
 id: REQ-STA-005
 title: Échéancier des prochains paiements
 domain: statistics
-status: draft
+status: verified
 criticality: medium
 layer: [core, api, ui]
 e2e: required

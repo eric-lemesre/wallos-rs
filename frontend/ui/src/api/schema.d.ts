@@ -269,6 +269,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/schedule/upcoming": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Échéancier des prochains paiements sur une fenêtre de `days` jours (REQ-STA-005).
+         * @description Énumère, pour chaque abonnement **actif** du foyer (oracle Wallos `inactive = 0`, REQ-SUB-008),
+         *     **toutes** ses occurrences de paiement dans `[from, from + days]` (bornes incluses), en respectant
+         *     sa date de fin (REQ-SUB-009). `from` par défaut = date du jour (horloge serveur). Le résultat est
+         *     trié par date, puis nom, puis id (ordre déterministe).
+         */
+        get: operations["getUpcomingPayments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sessions": {
         parameters: {
             query?: never;
@@ -893,6 +916,40 @@ export interface components {
             subscriptions: components["schemas"]["SubscriptionDto"][];
             /** @description Total agrégé des abonnements actifs de la liste, dans la devise cible. */
             total: components["schemas"]["ConvertedTotalResponse"];
+        };
+        /**
+         * @description Une occurrence de paiement attendue dans la fenêtre (REQ-STA-005). Un même abonnement peut
+         *     apparaître **plusieurs fois** (une entrée par occurrence).
+         */
+        UpcomingPayment: {
+            /**
+             * @description Montant de l'échéance (décimal exact en chaîne, R4), dans la devise de l'abonnement.
+             * @example 9.99
+             */
+            amount: string;
+            /**
+             * @description Code devise ISO 4217 de l'abonnement.
+             * @example EUR
+             */
+            currency: string;
+            /**
+             * @description Date de l'occurrence, `YYYY-MM-DD`.
+             * @example 2025-01-15
+             */
+            date: string;
+            /** @description Nom de l'abonnement. */
+            name: string;
+            /** @description Identifiant (UUID) de l'abonnement concerné. */
+            subscription_id: string;
+        };
+        /** @description Échéancier des prochains paiements sur la fenêtre demandée (REQ-STA-005), trié par date. */
+        UpcomingPaymentsResponse: {
+            /** @description Début de fenêtre (incluse), `YYYY-MM-DD`. */
+            from: string;
+            /** @description Occurrences attendues, ordonnées par date puis nom puis id (ordre déterministe). */
+            payments: components["schemas"]["UpcomingPayment"][];
+            /** @description Fin de fenêtre (incluse), `YYYY-MM-DD`. */
+            to: string;
         };
     };
     responses: never;
@@ -1625,6 +1682,64 @@ export interface operations {
             };
             /** @description Entrée invalide */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getUpcomingPayments: {
+        parameters: {
+            query: {
+                /**
+                 * @description Taille de la fenêtre en jours (borné côté serveur ; hors bornes → 422).
+                 * @example 30
+                 */
+                days: number;
+                /**
+                 * @description Début de fenêtre `YYYY-MM-DD` (optionnel) ; par défaut la date du jour (horloge serveur).
+                 * @example 2025-01-01
+                 */
+                from?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Échéancier des prochains paiements */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpcomingPaymentsResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Fenêtre invalide */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -154,5 +154,12 @@
       "en": "Anglais",
       "fr": "Français"
     }
+  },
+  "upcoming": {
+    "title": "Prochains paiements",
+    "days": "Fenêtre (jours)",
+    "load": "Afficher",
+    "empty": "Aucun paiement dans cette fenêtre",
+    "error": "Impossible de charger les prochains paiements"
   }
 }
