@@ -520,6 +520,11 @@ export interface components {
          */
         CostEvolutionResponse: {
             /**
+             * @description `false` si au moins un abonnement actif a été **exclu** de la série (donnée illisible ou taux de
+             *     conversion manquant, REQ-CUR-003) : la série est alors partielle, jamais un total nul silencieux.
+             */
+            complete: boolean;
+            /**
              * @description Devise cible de la série (code ISO 4217).
              * @example EUR
              */

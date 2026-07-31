@@ -9,12 +9,13 @@ import { CostEvolutionCard } from "./CostEvolutionCard";
 
 /** @implements REQ-STA-006 */
 
-function response(points: { month: string; total: string }[]) {
+function response(points: { month: string; total: string }[], complete = true) {
   return {
     data: {
       currency: "EUR",
       from: points[0]?.month ?? "",
       to: points[points.length - 1]?.month ?? "",
+      complete,
       points,
     },
     response: new Response(null, { status: 200 }),
@@ -55,6 +56,21 @@ describe("CostEvolutionCard", () => {
     await waitFor(() =>
       expect(get).toHaveBeenCalledWith("/statistics/cost-evolution", { params: { query: {} } }),
     );
+  });
+
+  it("signale une série partielle (complete=false, REQ-CUR-003)", async () => {
+    vi.spyOn(api, "GET").mockResolvedValue(
+      response([{ month: "2026-06", total: "0.00" }], false),
+    );
+    renderCard();
+    expect(await screen.findByTestId("evolution-incomplete")).toBeInTheDocument();
+  });
+
+  it("n'affiche pas l'indicateur partiel quand la série est complète", async () => {
+    vi.spyOn(api, "GET").mockResolvedValue(response([{ month: "2026-06", total: "10.00" }], true));
+    renderCard();
+    await screen.findByTestId("evolution-list");
+    expect(screen.queryByTestId("evolution-incomplete")).toBeNull();
   });
 
   it("signale une erreur de chargement", async () => {
