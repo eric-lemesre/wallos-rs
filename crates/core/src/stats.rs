@@ -8,7 +8,7 @@
 //! (normalisation mensuelle, répartitions, échéancier) consommeront. Il reste volontairement
 //! générique et ne préempte aucune sémantique métier `oracle: legacy`.
 
-use chrono::NaiveDate;
+use chrono::{Datelike, Days, Months, NaiveDate};
 use rust_decimal::Decimal;
 use wallos_req_macros::requirement;
 
@@ -107,6 +107,82 @@ pub fn billable_amounts(subscriptions: &[Subscription], reference: NaiveDate) ->
         .iter()
         .filter(|s| s.is_active() && !s.has_ended(reference))
         .map(|s| *s.price())
+        .collect()
+}
+
+/// Fenêtre d'activité d'un abonnement pour la série d'évolution (REQ-STA-006), avec son **coût mensuel
+/// déjà normalisé** (REQ-STA-001) et exprimé dans une **devise commune** — la conversion multi-devises
+/// relève de l'appelant (le domaine reste sans I/O ni table de taux).
+#[derive(Debug, Clone)]
+pub struct CostSpan {
+    /// Début d'activité : date de premier paiement (l'abonnement n'existe pas avant).
+    pub start: NaiveDate,
+    /// Fin d'activité **incluse**, le cas échéant (date de fin programmée, REQ-SUB-009).
+    pub end: Option<NaiveDate>,
+    /// Coût mensuel normalisé, dans la devise commune de la série.
+    pub monthly: Decimal,
+}
+
+/// Point de la série d'évolution : premier jour du mois considéré + total mensuel **à cette date**.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MonthlyCostPoint {
+    /// Premier jour du mois du point.
+    pub month: NaiveDate,
+    /// Somme des coûts mensuels des abonnements actifs ce mois-là (devise commune).
+    pub total: Decimal,
+}
+
+/// Premier jour du mois de `date` (jamais `None` : le 1 existe dans tout mois).
+#[requirement(REQ-STA-006)]
+fn first_of_month(date: NaiveDate) -> NaiveDate {
+    date.with_day(1).unwrap_or(date)
+}
+
+/// Dernier jour du mois de `date` : (1er du mois + 1 mois) − 1 jour.
+#[requirement(REQ-STA-006)]
+fn last_of_month(date: NaiveDate) -> NaiveDate {
+    let first = first_of_month(date);
+    first
+        .checked_add_months(Months::new(1))
+        .and_then(|d| d.checked_sub_days(Days::new(1)))
+        .unwrap_or(date)
+}
+
+/// Série d'évolution du coût mensuel sur `months` mois **s'achevant au mois de `anchor`** (inclus),
+/// du plus ancien au plus récent (REQ-STA-006).
+///
+/// Chaque point somme les coûts des abonnements **actifs à ce mois-là** — c.-à-d. dont la fenêtre
+/// d'activité `[start, end]` **recoupe** le mois : `start <= dernier jour du mois` ET (`end` absente OU
+/// `end >= premier jour du mois`). La série reflète ainsi l'historique via les dates de début/fin
+/// (un abonnement récent n'apparaît que sur les derniers points ; un abonnement terminé disparaît après
+/// sa date de fin), **jamais l'état courant projeté** sur toute la période (acceptation STA-006).
+///
+/// Fonction **pure** (REQ-STA-008) : `anchor` est fourni par l'appelant, aucun accès à l'horloge. Un
+/// `months` nul donne une série vide.
+#[requirement(REQ-STA-006)]
+#[must_use]
+pub fn monthly_cost_evolution(
+    spans: &[CostSpan],
+    anchor: NaiveDate,
+    months: u32,
+) -> Vec<MonthlyCostPoint> {
+    let anchor_month = first_of_month(anchor);
+    // Du plus ancien au plus récent : `anchor_month - (months-1)` … `anchor_month`.
+    (0..months)
+        .rev()
+        .filter_map(|back| anchor_month.checked_sub_months(Months::new(back)))
+        .map(|month_first| {
+            let month_last = last_of_month(month_first);
+            let total = spans
+                .iter()
+                .filter(|s| s.start <= month_last && s.end.is_none_or(|end| end >= month_first))
+                .map(|s| s.monthly)
+                .sum();
+            MonthlyCostPoint {
+                month: month_first,
+                total,
+            }
+        })
         .collect()
 }
 
@@ -472,5 +548,90 @@ mod tests {
             prop_assert_eq!(first, second);
             prop_assert_eq!(first.count(), units.len());
         }
+    }
+
+    // --- Évolution du coût sur douze mois (REQ-STA-006) ---
+
+    fn ymd(y: i32, m: u32, d: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
+    fn dec(s: &str) -> Decimal {
+        s.parse().unwrap()
+    }
+
+    fn span(start: NaiveDate, end: Option<NaiveDate>, monthly: &str) -> CostSpan {
+        CostSpan {
+            start,
+            end,
+            monthly: monthly.parse().unwrap(),
+        }
+    }
+
+    fn totals(points: &[MonthlyCostPoint]) -> Vec<Decimal> {
+        points.iter().map(|p| p.total).collect()
+    }
+
+    #[test]
+    #[verifies(REQ-STA-006)]
+    fn series_covers_the_requested_months_ending_at_anchor() {
+        let s = [span(ymd(2020, 1, 1), None, "10")];
+        let points = monthly_cost_evolution(&s, ymd(2026, 6, 15), 12);
+        assert_eq!(points.len(), 12);
+        // Du plus ancien (juillet 2025) au plus récent (juin 2026), premiers de mois.
+        assert_eq!(points.first().unwrap().month, ymd(2025, 7, 1));
+        assert_eq!(points.last().unwrap().month, ymd(2026, 6, 1));
+        // Abonnement actif tout du long : total constant.
+        assert!(totals(&points).iter().all(|t| *t == dec("10")));
+    }
+
+    #[test]
+    #[verifies(REQ-STA-006)]
+    fn recent_subscription_appears_only_from_its_start_month() {
+        // Commence en avril 2026 : nul avant, 25 à partir d'avril (le mois du start compte).
+        let s = [span(ymd(2026, 4, 10), None, "25")];
+        let points = monthly_cost_evolution(&s, ymd(2026, 6, 1), 12);
+        // Points: 2025-07 .. 2026-06. Avril 2026 est l'indice 9.
+        assert_eq!(points[8].month, ymd(2026, 3, 1));
+        assert_eq!(points[8].total, dec("0"));
+        assert_eq!(points[9].month, ymd(2026, 4, 1));
+        assert_eq!(points[9].total, dec("25"));
+        assert_eq!(points[11].total, dec("25"));
+    }
+
+    #[test]
+    #[verifies(REQ-STA-006)]
+    fn ended_subscription_disappears_after_its_end_month() {
+        // Se termine le 15 mars 2026 : compte jusqu'en mars (recoupe le mois), nul ensuite.
+        let s = [span(ymd(2020, 1, 1), Some(ymd(2026, 3, 15)), "40")];
+        let points = monthly_cost_evolution(&s, ymd(2026, 6, 1), 12);
+        // mars 2026 = indice 8, avril = 9.
+        assert_eq!(points[8].month, ymd(2026, 3, 1));
+        assert_eq!(points[8].total, dec("40"));
+        assert_eq!(points[9].month, ymd(2026, 4, 1));
+        assert_eq!(points[9].total, dec("0"));
+    }
+
+    #[test]
+    #[verifies(REQ-STA-006)]
+    fn point_sums_subscriptions_live_that_month_not_current_state() {
+        // Deux abonnements : A actif depuis toujours, B seulement de févr. à avril 2026.
+        let s = [
+            span(ymd(2020, 1, 1), None, "10"),
+            span(ymd(2026, 2, 1), Some(ymd(2026, 4, 30)), "5"),
+        ];
+        let points = monthly_cost_evolution(&s, ymd(2026, 6, 1), 12);
+        // janv 2026 (idx 6) = 10 ; févr (7) = 15 ; mars (8) = 15 ; avril (9) = 15 ; mai (10) = 10.
+        assert_eq!(points[6].total, dec("10"));
+        assert_eq!(points[7].total, dec("15"));
+        assert_eq!(points[9].total, dec("15"));
+        assert_eq!(points[10].total, dec("10"));
+    }
+
+    #[test]
+    #[verifies(REQ-STA-006)]
+    fn zero_months_yields_empty_series() {
+        let s = [span(ymd(2020, 1, 1), None, "10")];
+        assert!(monthly_cost_evolution(&s, ymd(2026, 6, 1), 0).is_empty());
     }
 }

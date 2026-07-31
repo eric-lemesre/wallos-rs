@@ -246,6 +246,49 @@ pub struct UpcomingPaymentsResponse {
     pub payments: Vec<UpcomingPayment>,
 }
 
+/// Paramètres de la série d'évolution du coût mensuel (REQ-STA-006).
+#[derive(Debug, Clone, Deserialize, Serialize, IntoParams)]
+pub struct CostEvolutionQuery {
+    /// Nombre de mois de la série s'achevant au mois courant (défaut 12 ; borné côté serveur, hors
+    /// bornes → 422).
+    #[serde(default)]
+    #[param(example = 12)]
+    pub months: Option<u32>,
+    /// Devise cible de la série (code ISO 4217) ; défaut : devise de référence du foyer (REQ-CUR-001).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[param(example = "EUR")]
+    pub currency: Option<String>,
+}
+
+/// Un point de la série d'évolution : le mois considéré et le coût mensuel total **à cette date**
+/// (REQ-STA-006), dans la devise cible.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct MonthlyCostPointDto {
+    /// Mois du point, `YYYY-MM` (premier jour du mois).
+    #[schema(example = "2026-06")]
+    pub month: String,
+    /// Coût mensuel total des abonnements actifs ce mois-là (décimal exact en chaîne, R4).
+    #[schema(example = "42.50")]
+    pub total: String,
+}
+
+/// Série d'évolution du coût mensuel sur la période demandée (REQ-STA-006), du plus ancien au plus
+/// récent. Chaque point reflète les abonnements **actifs à ce mois-là**, pas l'état courant projeté.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct CostEvolutionResponse {
+    /// Devise cible de la série (code ISO 4217).
+    #[schema(example = "EUR")]
+    pub currency: String,
+    /// Mois du premier point (le plus ancien), `YYYY-MM`.
+    #[schema(example = "2025-07")]
+    pub from: String,
+    /// Mois du dernier point (le plus récent, mois courant), `YYYY-MM`.
+    #[schema(example = "2026-06")]
+    pub to: String,
+    /// Points mensuels, ordonnés du plus ancien au plus récent.
+    pub points: Vec<MonthlyCostPointDto>,
+}
+
 /// Une catégorie d'abonnements exposée à l'interface (REQ-CAT-001).
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct CategoryDto {
