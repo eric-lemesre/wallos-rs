@@ -128,7 +128,15 @@
     "editActive": "Actif",
     "saveError": "Impossible d'enregistrer la modification",
     "ended": "Terminé",
-    "totalFiltered": "(ensemble filtré)"
+    "totalFiltered": "(ensemble filtré)",
+    "search": "Rechercher",
+    "searchPlaceholder": "Rechercher dans le nom ou les notes",
+    "sort": "Trier par",
+    "sortBy": {
+      "name": "Nom",
+      "amount": "Montant",
+      "next_due": "Prochaine échéance"
+    }
   },
   "paymentMethods": {
     "title": "Moyens de paiement",

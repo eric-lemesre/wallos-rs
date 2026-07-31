@@ -23,6 +23,7 @@ pub mod reference_currency;
 pub mod schedule;
 pub mod stats;
 pub mod subscription;
+pub mod text;
 
 pub use billing::{BillingCycle, BillingUnit};
 pub use category::{
@@ -37,3 +38,4 @@ pub use payment_method::PaymentMethod;
 pub use reference_currency::ReferenceCurrency;
 pub use schedule::{next_due, occurrences_in_range};
 pub use subscription::Subscription;
+pub use text::{fold_for_search, matches_search};

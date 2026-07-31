@@ -267,6 +267,24 @@ export class TargetDriver implements AppDriver, Harness {
     return (await this.page.getByTestId("subscriptions-total").textContent()) ?? "";
   }
 
+  // --- Recherche et tri (REQ-SUB-007) ---
+
+  async searchSubscriptions(term: string): Promise<void> {
+    await this.page.getByTestId("subscriptions-search").fill(term);
+    await this.page.getByTestId("subscriptions-apply").click();
+  }
+
+  async sortSubscriptionsBy(sort: "name" | "amount" | "next_due"): Promise<void> {
+    await this.page.getByTestId("subscriptions-sort").selectOption(sort);
+    await this.page.getByTestId("subscriptions-apply").click();
+  }
+
+  /** Noms des abonnements affichés, **dans l'ordre du DOM** (pour vérifier le tri). */
+  async subscriptionNames(): Promise<string[]> {
+    await this.page.getByTestId("subscriptions-total").waitFor({ state: "visible", timeout: 5000 });
+    return this.page.getByTestId("subscription-name").allInnerTexts();
+  }
+
   // --- Cohérence total / filtre (REQ-STA-007) ---
 
   async totalIndicatesFiltered(): Promise<boolean> {
