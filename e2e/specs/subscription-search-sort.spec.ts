@@ -30,16 +30,17 @@ test.describe("Recherche et tri des abonnements", { tag: ["@design", "@REQ-SUB-0
     });
 
     // Tri par montant décroissant : Alpha (30) > Beta (10/mois) ≈ Gamma (5) → Alpha, Beta, Gamma.
+    // `expect.poll` réessaie la lecture jusqu'à ce que la liste rechargée reflète l'ordre attendu.
     await app.sortSubscriptionsBy("amount");
-    expect(await app.subscriptionNames()).toEqual(["Alpha", "Beta", "Gamma"]);
+    await expect.poll(() => app.subscriptionNames()).toEqual(["Alpha", "Beta", "Gamma"]);
 
     // Recherche sur le nom, insensible à la casse : « alpha » ne ramène qu'Alpha.
     await app.searchSubscriptions("alpha");
-    expect(await app.subscriptionNames()).toEqual(["Alpha"]);
+    await expect.poll(() => app.subscriptionNames()).toEqual(["Alpha"]);
 
     // Recherche vidée : les trois réapparaissent, triés par nom (défaut).
     await app.searchSubscriptions("");
     await app.sortSubscriptionsBy("name");
-    expect(await app.subscriptionNames()).toEqual(["Alpha", "Beta", "Gamma"]);
+    await expect.poll(() => app.subscriptionNames()).toEqual(["Alpha", "Beta", "Gamma"]);
   });
 });
