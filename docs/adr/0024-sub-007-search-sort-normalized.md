@@ -33,8 +33,9 @@ avec la spec et le modèle de subtrack :
 1. **Recherche plein-texte repliée, côté serveur.** Un paramètre `?search=<terme>` filtre les
    abonnements dont le **nom OU les notes** contiennent le terme, en comparaison **insensible casse +
    diacritiques**. Le repli vit dans `core` (`text::fold_for_search` : décomposition NFD, suppression
-   des marques combinantes U+0300..=U+036F, minuscule ; périmètre écriture latine en/fr — limitation
-   assumée pour ø/ß qui n'ont pas de forme décomposée). Le filtrage s'applique **avant** l'agrégat et le
+   des marques combinantes U+0300..=U+036F, minuscule, puis **développement des ligatures latines**
+   `œ`→`oe` et `æ`→`ae` — cas français réels : cœur, œuvre, ex æquo ; périmètre écriture latine en/fr —
+   limitation assumée pour ø/ß qui restent non repliés faute de forme décomposée). Le filtrage s'applique **avant** l'agrégat et le
    tri : le total reflète exactement la vue recherchée (cohérent avec REQ-STA-007). Requête vide/absente
    ⇒ aucun filtrage.
 
