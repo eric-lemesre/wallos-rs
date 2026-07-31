@@ -632,6 +632,16 @@ pub struct SubscriptionListQuery {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[param(example = "EUR")]
     pub currency: Option<String>,
+    /// Recherche plein-texte **insensible casse+diacritiques** sur le nom **et** les notes
+    /// (REQ-SUB-007). Vide/absente → aucun filtrage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[param(example = "netflix")]
+    pub search: Option<String>,
+    /// Critère de tri (REQ-SUB-007) : `name` (défaut), `amount` (coût mensuel normalisé en devise de
+    /// référence, décroissant), `next_due` (prochaine échéance, croissant). Valeur inconnue → `name`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[param(example = "name")]
+    pub sort: Option<String>,
 }
 
 /// Liste d'abonnements filtrée avec son **total agrégé** (REQ-SUB-006).
