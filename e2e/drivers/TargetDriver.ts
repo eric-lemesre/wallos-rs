@@ -267,6 +267,28 @@ export class TargetDriver implements AppDriver, Harness {
     return (await this.page.getByTestId("subscriptions-total").textContent()) ?? "";
   }
 
+  // --- Évolution du coût sur 12 mois (REQ-STA-006) ---
+
+  async reloadCostEvolution(): Promise<void> {
+    await this.page.getByTestId("evolution-reload").click();
+  }
+
+  /** Nombre de points affichés dans la série d'évolution (instantané ; encapsuler dans expect.poll). */
+  async costEvolutionPointCount(): Promise<number> {
+    return this.page.getByTestId("evolution-point").count();
+  }
+
+  /** Total affiché pour le mois `yyyyMm` (`YYYY-MM`), ou chaîne vide s'il est absent. */
+  async costEvolutionTotal(yyyyMm: string): Promise<string> {
+    const point = this.page
+      .getByTestId("evolution-point")
+      .filter({ has: this.page.getByTestId("evolution-month").filter({ hasText: yyyyMm }) });
+    if ((await point.count()) === 0) {
+      return "";
+    }
+    return (await point.getByTestId("evolution-total").innerText()) ?? "";
+  }
+
   // --- Recherche et tri (REQ-SUB-007) ---
 
   async searchSubscriptions(term: string): Promise<void> {

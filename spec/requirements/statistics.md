@@ -122,7 +122,7 @@ depends_on: [REQ-SUB-012, REQ-SUB-013, REQ-SUB-009]
 id: REQ-STA-006
 title: Évolution du coût sur douze mois
 domain: statistics
-status: draft
+status: verified
 criticality: low
 layer: [core, api, ui]
 e2e: optional

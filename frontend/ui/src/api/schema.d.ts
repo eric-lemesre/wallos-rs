@@ -349,6 +349,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/statistics/cost-evolution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Série d'évolution du coût mensuel sur `months` mois (REQ-STA-006), du plus ancien au plus récent.
+         * @description Chaque point somme les coûts mensuels des abonnements **actifs à ce mois-là** (fenêtre `[first_payment,
+         *     end_date]`), convertis dans la devise cible. Les abonnements **désactivés** (REQ-SUB-008) sont exclus
+         *     de toute la série ; les abonnements **terminés** (REQ-SUB-009) ne contribuent qu'aux mois antérieurs à
+         *     leur date de fin (portés par la fenêtre du domaine). La série reflète ainsi l'historique, pas l'état
+         *     courant projeté.
+         */
+        get: operations["getCostEvolution"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/subscriptions": {
         parameters: {
             query?: never;
@@ -489,6 +513,29 @@ export interface components {
              * @example 142.50
              */
             total: string;
+        };
+        /**
+         * @description Série d'évolution du coût mensuel sur la période demandée (REQ-STA-006), du plus ancien au plus
+         *     récent. Chaque point reflète les abonnements **actifs à ce mois-là**, pas l'état courant projeté.
+         */
+        CostEvolutionResponse: {
+            /**
+             * @description Devise cible de la série (code ISO 4217).
+             * @example EUR
+             */
+            currency: string;
+            /**
+             * @description Mois du premier point (le plus ancien), `YYYY-MM`.
+             * @example 2025-07
+             */
+            from: string;
+            /** @description Points mensuels, ordonnés du plus ancien au plus récent. */
+            points: components["schemas"]["MonthlyCostPointDto"][];
+            /**
+             * @description Mois du dernier point (le plus récent, mois courant), `YYYY-MM`.
+             * @example 2026-06
+             */
+            to: string;
         };
         /**
          * @description Requête de création de compte (REQ-AUT-001).
@@ -732,6 +779,22 @@ export interface components {
              * @example EUR
              */
             currency: string;
+        };
+        /**
+         * @description Un point de la série d'évolution : le mois considéré et le coût mensuel total **à cette date**
+         *     (REQ-STA-006), dans la devise cible.
+         */
+        MonthlyCostPointDto: {
+            /**
+             * @description Mois du point, `YYYY-MM` (premier jour du mois).
+             * @example 2026-06
+             */
+            month: string;
+            /**
+             * @description Coût mensuel total des abonnements actifs ce mois-là (décimal exact en chaîne, R4).
+             * @example 42.50
+             */
+            total: string;
         };
         /**
          * @description Requête de calcul de la prochaine échéance (REQ-SUB-012).
@@ -1940,6 +2003,65 @@ export interface operations {
             };
             /** @description Devise hors référentiel */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getCostEvolution: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Nombre de mois de la série s'achevant au mois courant (défaut 12 ; borné côté serveur, hors
+                 *     bornes → 422).
+                 * @example 12
+                 */
+                months?: number | null;
+                /**
+                 * @description Devise cible de la série (code ISO 4217) ; défaut : devise de référence du foyer (REQ-CUR-001).
+                 * @example EUR
+                 */
+                currency?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Série d'évolution du coût mensuel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CostEvolutionResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Paramètres invalides */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
