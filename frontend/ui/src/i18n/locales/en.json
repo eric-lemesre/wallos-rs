@@ -173,6 +173,7 @@
   "evolution": {
     "title": "Monthly cost over 12 months",
     "reload": "Reload",
-    "error": "Could not load the cost evolution"
+    "error": "Could not load the cost evolution",
+    "incomplete": "Partial series: some subscriptions could not be converted"
   }
 }

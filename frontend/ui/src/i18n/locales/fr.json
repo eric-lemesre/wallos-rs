@@ -173,6 +173,7 @@
   "evolution": {
     "title": "Coût mensuel sur 12 mois",
     "reload": "Recharger",
-    "error": "Impossible de charger l'évolution du coût"
+    "error": "Impossible de charger l'évolution du coût",
+    "incomplete": "Série partielle : certains abonnements n'ont pas pu être convertis"
   }
 }
