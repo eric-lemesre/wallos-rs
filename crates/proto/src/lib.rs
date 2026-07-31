@@ -285,6 +285,9 @@ pub struct CostEvolutionResponse {
     /// Mois du dernier point (le plus récent, mois courant), `YYYY-MM`.
     #[schema(example = "2026-06")]
     pub to: String,
+    /// `false` si au moins un abonnement actif a été **exclu** de la série (donnée illisible ou taux de
+    /// conversion manquant, REQ-CUR-003) : la série est alors partielle, jamais un total nul silencieux.
+    pub complete: bool,
     /// Points mensuels, ordonnés du plus ancien au plus récent.
     pub points: Vec<MonthlyCostPointDto>,
 }

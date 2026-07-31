@@ -35,10 +35,13 @@ Conséquences concrètes de cette définition :
    désactivé, on ne peut pas reconstruire ses fenêtres d'activité passées — mieux vaut l'exclure que
    d'inventer un historique. C'est une limitation assumée de la conception, cohérente avec le reste.
 3. **Devise de référence + arrondi d'affichage.** Chaque coût mensuel est converti dans la devise de
-   référence du foyer (REQ-CUR-001/003 ; override `?currency=` possible). Un abonnement au coût non
-   convertible (taux manquant) est **exclu** (jamais compté zéro, revue STA-001 F2). Le total de chaque
-   point est arrondi puis **formaté aux décimales de la devise** (REQ-CUR-005/007) pour un axe cohérent
-   (« 0.00 » comme « 42.50 », jamais « 0 » nu).
+   référence du foyer (REQ-CUR-001/003 ; override `?currency=` possible) en **précision pleine** ;
+   l'arrondi n'intervient qu'**une fois**, sur la **somme mensuelle** (REQ-CUR-004, revue kimi F2), puis
+   le total est **formaté au nombre de décimales de la devise** (REQ-CUR-005/007) pour un axe cohérent
+   (« 0.00 »/« 42.50 » en EUR, « 0 »/« 4200 » en JPY). Un abonnement au coût non convertible (taux
+   manquant) est **exclu** (jamais compté zéro, revue STA-001 F2) et la réponse porte alors
+   `complete = false` (revue kimi F3) — la partialité est signalée, jamais un total nul silencieux
+   (REQ-CUR-003), à l'image de `ConvertedTotalResponse.complete`.
 4. **Fenêtre paramétrable, bornée.** `?months=N` (défaut 12), série du plus ancien au plus récent
    s'achevant au **mois courant**. `N` hors `1..=60` → 422 (garde-fou).
 
