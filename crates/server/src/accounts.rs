@@ -27,17 +27,34 @@ fn enforce_password_policy(password: &str) -> Result<(), PasswordPolicyError> {
 }
 
 /// Crée un compte utilisateur.
+/// Résout la langue optionnelle fournie à l'inscription (REQ-I18N-001) : `None` = non renseignée
+/// (jeu par défaut anglais, langue système côté UI) ; un code supporté est accepté ; un code **non
+/// supporté** est refusé (l'appelant produit un `422`), comme `PUT /settings/language`.
+#[requirement(REQ-I18N-001)]
+fn resolve_registration_language(code: Option<&str>) -> Result<Option<Language>, ()> {
+    match code {
+        Some(code) => Language::parse(code).map(Some).map_err(|_| ()),
+        None => Ok(None),
+    }
+}
+
 #[utoipa::path(
     post,
     path = "/accounts",
     operation_id = "createAccount",
     request_body = CreateAccountRequest,
-    extensions(("x-requirements" = json!(["REQ-AUT-001"]))),
+    extensions(("x-requirements" = json!(["REQ-AUT-001", "REQ-CAT-002", "REQ-I18N-001"]))),
     responses(
         (status = 201, description = "Compte créé — réponse identique que l'e-mail existe ou non"),
         (
             status = 422,
-            description = "Requête invalide",
+            description = "Requête invalide (politique de mot de passe ou langue non supportée)",
+            body = wallos_proto::Problem,
+            content_type = "application/problem+json"
+        ),
+        (
+            status = 500,
+            description = "Erreur interne (hachage ou base de données)",
             body = wallos_proto::Problem,
             content_type = "application/problem+json"
         )
@@ -54,19 +71,12 @@ pub async fn create_account(
         return problem_response(StatusCode::UNPROCESSABLE_ENTITY, body);
     }
 
-    // REQ-CAT-002 / REQ-I18N-001 — langue optionnelle à l'inscription : absente = compte sans langue
-    // explicite (jeu par défaut anglais) ; présente mais non supportée = 422 (cohérent avec
-    // PUT /settings/language), refusé avant tout hachage.
-    let language = match &req.language {
-        Some(code) => match Language::parse(code) {
-            Ok(lang) => Some(lang),
-            Err(_) => {
-                let body = problem(422, "about:blank", "Unprocessable Entity")
-                    .with_detail("language_unsupported");
-                return problem_response(StatusCode::UNPROCESSABLE_ENTITY, body);
-            }
-        },
-        None => None,
+    // REQ-CAT-002 / REQ-I18N-001 — langue optionnelle : absente = jeu par défaut anglais ; présente mais
+    // non supportée = 422, refusé avant tout hachage.
+    let Ok(language) = resolve_registration_language(req.language.as_deref()) else {
+        let body =
+            problem(422, "about:blank", "Unprocessable Entity").with_detail("language_unsupported");
+        return problem_response(StatusCode::UNPROCESSABLE_ENTITY, body);
     };
 
     let Ok(hash) = hash_password(req.password.expose_secret()) else {

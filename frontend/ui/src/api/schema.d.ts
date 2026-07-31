@@ -13,7 +13,6 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Crée un compte utilisateur. */
         post: operations["createAccount"];
         delete?: never;
         options?: never;
@@ -924,8 +923,17 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Requête invalide */
+            /** @description Requête invalide (politique de mot de passe ou langue non supportée) */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne (hachage ou base de données) */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
