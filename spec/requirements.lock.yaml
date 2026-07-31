@@ -542,7 +542,7 @@ requirements:
 - id: REQ-STA-006
   title: Évolution du coût sur douze mois
   domain: statistics
-  status: draft
+  status: verified
   criticality: low
   layer:
   - core

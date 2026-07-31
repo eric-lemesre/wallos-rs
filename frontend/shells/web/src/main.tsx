@@ -7,6 +7,7 @@ import { ConvertedTotalCard } from "../../../ui/src/components/ConvertedTotalCar
 import { CategoriesList } from "../../../ui/src/components/CategoriesList";
 import { NextDueCard } from "../../../ui/src/components/NextDueCard";
 import { UpcomingPaymentsCard } from "../../../ui/src/components/UpcomingPaymentsCard";
+import { CostEvolutionCard } from "../../../ui/src/components/CostEvolutionCard";
 import { SubscriptionForm } from "../../../ui/src/components/SubscriptionForm";
 import { SubscriptionsList } from "../../../ui/src/components/SubscriptionsList";
 import { PaymentMethodsList } from "../../../ui/src/components/PaymentMethodsList";
@@ -38,6 +39,7 @@ if (root) {
           <PaymentMethodsList />
           <NextDueCard />
           <UpcomingPaymentsCard />
+          <CostEvolutionCard />
           <SubscriptionForm />
           <SubscriptionsList />
         </main>
