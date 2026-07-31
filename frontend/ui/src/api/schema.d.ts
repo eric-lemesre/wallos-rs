@@ -1963,6 +1963,18 @@ export interface operations {
                  * @example EUR
                  */
                 currency?: string;
+                /**
+                 * @description Recherche plein-texte **insensible casse+diacritiques** sur le nom **et** les notes
+                 *     (REQ-SUB-007). Vide/absente → aucun filtrage.
+                 * @example netflix
+                 */
+                search?: string;
+                /**
+                 * @description Critère de tri (REQ-SUB-007) : `name` (défaut), `amount` (coût mensuel normalisé en devise de
+                 *     référence, décroissant), `next_due` (prochaine échéance, croissant). Valeur inconnue → `name`.
+                 * @example name
+                 */
+                sort?: string;
             };
             header?: never;
             path?: never;

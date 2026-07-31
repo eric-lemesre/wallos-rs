@@ -1,0 +1,37 @@
+{
+  "_requirement": "REQ-SUB-007",
+  "_source": "Wallos 5.4.2 — endpoints/subscriptions/get.php (construction du tri SQL, lignes 34-158) et scripts/subscriptions.js (la « recherche » de l'UI ne porte que sur les logos, pas sur le texte des abonnements). Capturé sur l'image épinglée bellamy/wallos@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f.",
+  "_note": "Comportement de tri GELÉ. Wallos trie côté SQL via ORDER BY sur des colonnes brutes ; le tri par prix se fait sur le montant STOCKÉ (aucune normalisation de cycle ni conversion de devise), en DESCENDANT. Wallos n'offre PAS de recherche plein-texte sur nom/notes : ses filtres sont catégorie, moyen de paiement, membre, état, type de renouvellement, notifications.",
+  "wallos_semantics": {
+    "sort_is_sql_order_by": true,
+    "allowed_sort_criteria": ["name", "id", "next_payment", "price", "payer_user_id", "category_id", "payment_method_id", "inactive", "alphanumeric", "renewal_type"],
+    "default_sort": "next_payment ASC",
+    "price_sort": "price DESC — montant BRUT stocké, sans normalisation de cycle ni conversion de devise",
+    "name_sort": "name ASC — collation SQL brute (sensible aux diacritiques selon la collation)",
+    "no_fulltext_search": "aucune recherche texte sur nom/notes ; la recherche de l'UI ne cible que les logos"
+  },
+  "subtrack_divergences": {
+    "_note": "Divergences ASSUMÉES, cohérentes avec les choix déjà figés du projet (argent Decimal, devise de référence, normalisation mensuelle STA-001).",
+    "fulltext_search_name_and_notes": {
+      "reason": "subtrack ajoute une recherche plein-texte INSENSIBLE À LA CASSE ET AUX DIACRITIQUES sur le nom ET les notes (paramètre ?search=), absente de Wallos. Repli NFD + suppression des marques combinantes U+0300..U+036F + minuscule (périmètre écriture latine en/fr). La recherche filtre AVANT l'agrégat : le total reflète exactement la vue affichée.",
+      "endpoint": "GET /subscriptions?search=<terme>"
+    },
+    "sort_by_normalized_amount": {
+      "reason": "Le tri par montant s'effectue sur le COÛT MENSUEL NORMALISÉ (REQ-STA-001) CONVERTI EN DEVISE DE RÉFÉRENCE (REQ-CUR-001/003), pas sur le montant brut de Wallos. Comparer un mensuel et un annuel de devises différentes n'aurait sinon aucun sens. Sens DÉCROISSANT conservé (les plus coûteux d'abord, comme le price DESC de Wallos). Les abonnements sans coût calculable (devise/cycle illisible, taux manquant) sont placés en fin de liste, jamais assimilés à un coût nul (revue STA-001 F2).",
+      "endpoint": "GET /subscriptions?sort=amount",
+      "requirements": ["REQ-STA-001", "REQ-CUR-001", "REQ-CUR-003"]
+    },
+    "default_sort_by_name": {
+      "reason": "Le tri par défaut de subtrack est le NOM (replié, croissant) — cohérent avec l'ordre de liste SUB-006 déjà figé — et non next_payment comme Wallos. Le tri est un confort d'affichage : une valeur ?sort= inconnue retombe silencieusement sur le nom (jamais 422).",
+      "endpoint": "GET /subscriptions?sort=name (défaut)"
+    },
+    "next_due_sort": {
+      "reason": "Le tri par prochaine échéance (?sort=next_due, croissant) s'appuie sur l'échéance dérivée (ancrage+clamp, ADR 0022) ; les abonnements sans échéance à venir (terminés / hors plage) sont placés en fin de liste.",
+      "endpoint": "GET /subscriptions?sort=next_due"
+    },
+    "stable_tiebreak": {
+      "reason": "Départage déterministe et stable : nom replié puis identifiant, pour tous les critères (esprit REQ-CAT-005)."
+    }
+  },
+  "_e2e_mode": "@design — pas de rejeu TARGET=legacy (recherche texte absente de Wallos, tri montant normalisé vs brut) ; l'oracle Wallos est figé ici pour mémoire, la règle subtrack est vérifiée par les tests core/api/e2e."
+}
