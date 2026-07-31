@@ -11,12 +11,12 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use wallos_core::requirement;
 use wallos_proto::{
     AggregateRequest, CategoryDto, ChangePasswordRequest, ConvertedTotalResponse,
-    CreateAccountRequest, CreateCategoryRequest, CreateDeviceSessionRequest,
+    CostEvolutionResponse, CreateAccountRequest, CreateCategoryRequest, CreateDeviceSessionRequest,
     CreatePaymentMethodRequest, CreateSessionRequest, CreateSubscriptionRequest, CurrencyDto,
     CurrentUser, DeviceSummary, DeviceToken, HealthResponse, LanguageResponse, MoneyInput,
-    NextDueRequest, NextDueResponse, PaymentMethodDto, Problem, ReferenceCurrencyDto,
-    RenameCategoryRequest, RenamePaymentMethodRequest, SetLanguageRequest, SubscriptionDto,
-    SubscriptionListResponse, problem,
+    MonthlyCostPointDto, NextDueRequest, NextDueResponse, PaymentMethodDto, Problem,
+    ReferenceCurrencyDto, RenameCategoryRequest, RenamePaymentMethodRequest, SetLanguageRequest,
+    SubscriptionDto, SubscriptionListResponse, problem,
 };
 use wallos_storage::Db;
 
@@ -29,6 +29,7 @@ pub mod idempotency;
 pub mod payment_methods;
 pub mod schedule;
 pub mod settings;
+pub mod statistics;
 pub mod subscriptions;
 
 /// API wallos-rs v1.
@@ -58,6 +59,7 @@ pub mod subscriptions;
         categories::delete_category,
         schedule::compute_next_due,
         schedule::get_upcoming_payments,
+        statistics::get_cost_evolution,
         subscriptions::create_subscription,
         subscriptions::list_subscriptions,
         subscriptions::update_subscription,
@@ -89,6 +91,8 @@ pub mod subscriptions;
         RenameCategoryRequest,
         NextDueRequest,
         NextDueResponse,
+        CostEvolutionResponse,
+        MonthlyCostPointDto,
         CreateSubscriptionRequest,
         SubscriptionDto,
         SubscriptionListResponse,
@@ -176,6 +180,7 @@ pub fn app_with_db(db: Db) -> Router {
         ))
         .routes(routes!(schedule::compute_next_due))
         .routes(routes!(schedule::get_upcoming_payments))
+        .routes(routes!(statistics::get_cost_evolution))
         .routes(routes!(
             subscriptions::create_subscription,
             subscriptions::list_subscriptions

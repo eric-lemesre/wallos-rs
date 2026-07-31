@@ -169,5 +169,10 @@
     "load": "Afficher",
     "empty": "Aucun paiement dans cette fenêtre",
     "error": "Impossible de charger les prochains paiements"
+  },
+  "evolution": {
+    "title": "Coût mensuel sur 12 mois",
+    "reload": "Recharger",
+    "error": "Impossible de charger l'évolution du coût"
   }
 }
