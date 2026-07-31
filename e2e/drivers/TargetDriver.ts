@@ -279,9 +279,14 @@ export class TargetDriver implements AppDriver, Harness {
     await this.page.getByTestId("subscriptions-apply").click();
   }
 
-  /** Noms des abonnements affichés, **dans l'ordre du DOM** (pour vérifier le tri). */
+  /**
+   * Noms des abonnements affichés, **dans l'ordre du DOM** (pour vérifier le tri).
+   *
+   * Instantané non bloquant : la liste étant rechargée de façon asynchrone après « Appliquer », le
+   * réordonnancement/filtrage n'est pas forcément visible au premier appel. L'appelant enveloppe cette
+   * lecture dans un `expect.poll(...)` (assertion web-first à réessai) pour absorber la course de rendu.
+   */
   async subscriptionNames(): Promise<string[]> {
-    await this.page.getByTestId("subscriptions-total").waitFor({ state: "visible", timeout: 5000 });
     return this.page.getByTestId("subscription-name").allInnerTexts();
   }
 
