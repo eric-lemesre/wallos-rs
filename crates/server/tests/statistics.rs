@@ -261,3 +261,88 @@ async fn authz_anon_get_cost_evolution(pool: PgPool) {
         StatusCode::UNAUTHORIZED
     );
 }
+
+// --- Compléments de revue kimi STA-006 (F3/F4) ---
+
+/// Poste un abonnement au corps JSON libre (cycle/end_date personnalisés) ; renvoie le statut.
+async fn create_raw(pool: &PgPool, cookie: &str, body: Value) -> StatusCode {
+    post(pool, "/api/v1/subscriptions", body, Some(cookie))
+        .await
+        .status()
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-STA-006)]
+async fn subscription_ended_before_the_window_contributes_nothing(pool: PgPool) {
+    let web = account(&pool, "sta006-ended@example.com").await;
+    // Actif mais terminé en 2020 : sa fenêtre ne recoupe aucun des 12 derniers mois → série nulle,
+    // mais la série reste COMPLÈTE (l'abonnement est convertible, juste hors fenêtre temporelle).
+    assert_eq!(
+        create_raw(
+            &pool,
+            &web,
+            json!({
+                "name": "Old-ended", "amount": "10.00", "currency": "EUR",
+                "cycle": { "unit": "month", "interval": 1 },
+                "first_payment": "2020-01-01", "end_date": "2020-06-30", "active": true
+            })
+        )
+        .await,
+        StatusCode::CREATED
+    );
+    let body = body_json(evolution(&pool, Some(&web), "?months=12").await).await;
+    assert_eq!(body["complete"], true);
+    assert!(totals(&body).iter().all(|t| t == "0.00"));
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-STA-006)]
+async fn missing_rate_excludes_and_marks_incomplete(pool: PgPool) {
+    // Devise de référence EUR, aucun taux JPY→EUR : l'abonnement est exclu et la série signalée partielle.
+    let web = account(&pool, "sta006-partial@example.com").await;
+    assert_eq!(
+        create_sub(&pool, &web, "Yen", "4200", "JPY", "2020-01-01", true).await,
+        StatusCode::CREATED
+    );
+    let body = body_json(evolution(&pool, Some(&web), "?months=3").await).await;
+    assert_eq!(body["complete"], false);
+    assert!(totals(&body).iter().all(|t| t == "0.00"));
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-STA-006)]
+async fn annual_cycle_is_normalized_to_monthly(pool: PgPool) {
+    let web = account(&pool, "sta006-annual@example.com").await;
+    // 120 EUR/an = 10 EUR/mois (normalisation STA-001).
+    assert_eq!(
+        create_raw(
+            &pool,
+            &web,
+            json!({
+                "name": "Annual", "amount": "120.00", "currency": "EUR",
+                "cycle": { "unit": "year", "interval": 1 },
+                "first_payment": "2020-01-01", "active": true
+            })
+        )
+        .await,
+        StatusCode::CREATED
+    );
+    let body = body_json(evolution(&pool, Some(&web), "?months=2").await).await;
+    assert_eq!(body["complete"], true);
+    assert!(totals(&body).iter().all(|t| t == "10.00"));
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-STA-006)]
+async fn jpy_reference_formats_with_zero_decimals(pool: PgPool) {
+    // Override devise cible = JPY (0 décimale) : identité JPY→JPY, formatage sans décimale.
+    let web = account(&pool, "sta006-jpy@example.com").await;
+    assert_eq!(
+        create_sub(&pool, &web, "Yen", "4200", "JPY", "2020-01-01", true).await,
+        StatusCode::CREATED
+    );
+    let body = body_json(evolution(&pool, Some(&web), "?months=2&currency=JPY").await).await;
+    assert_eq!(body["currency"], "JPY");
+    assert_eq!(body["complete"], true);
+    assert!(totals(&body).iter().all(|t| t == "4200"));
+}

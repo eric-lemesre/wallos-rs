@@ -53,6 +53,12 @@ export function CostEvolutionCard() {
         </p>
       )}
 
+      {result && !result.complete && (
+        <p data-testid="evolution-incomplete" role="status">
+          {t("evolution.incomplete")}
+        </p>
+      )}
+
       {result && (
         <ol data-testid="evolution-list">
           {points.map((p) => {

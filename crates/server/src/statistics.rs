@@ -14,7 +14,7 @@ use chrono::Utc;
 use wallos_core::billing::{BillingCycle, BillingUnit};
 use wallos_core::money::{CurrencyCode, Money};
 use wallos_core::requirement;
-use wallos_core::stats::monthly_cost_rounded;
+use wallos_core::stats::monthly_cost;
 use wallos_core::{CostSpan, RateTable, convert, monthly_cost_evolution};
 use wallos_proto::{
     CostEvolutionQuery, CostEvolutionResponse, FieldError, MonthlyCostPointDto, problem,
@@ -52,11 +52,14 @@ fn internal_error() -> Response {
     )
 }
 
-/// Coût mensuel normalisé (REQ-STA-001) d'une ligne, **converti dans la devise cible** (REQ-CUR-003).
+/// Coût mensuel normalisé (REQ-STA-001) d'une ligne, **converti dans la devise cible** (REQ-CUR-003),
+/// en **précision pleine** (aucun arrondi ici — l'arrondi d'affichage n'intervient qu'une fois, sur la
+/// **somme mensuelle**, revue kimi STA-006 F2 ; conforme à REQ-CUR-004).
 ///
 /// `None` si la devise, le cycle ou le montant sont illisibles, ou si aucun taux n'est connu pour la
 /// paire — l'abonnement est alors **exclu de la série** (jamais assimilé à un coût nul, revue STA-001 F2),
-/// exactement comme les agrégats multi-devises excluent un montant non convertible.
+/// exactement comme les agrégats multi-devises excluent un montant non convertible ; l'appelant signale
+/// cette partialité via `complete = false` (revue kimi STA-006 F3).
 #[requirement(REQ-STA-006)]
 fn monthly_in_target(
     row: &SubscriptionRow,
@@ -68,7 +71,7 @@ fn monthly_in_target(
     let unit = BillingUnit::parse(&row.cycle_unit).ok()?;
     let interval = u32::try_from(row.cycle_interval).ok()?;
     let cycle = BillingCycle::from_parts(unit, interval).ok()?;
-    let monthly = monthly_cost_rounded(price, cycle);
+    let monthly = monthly_cost(price, cycle);
     convert(&monthly, target, table).map(|m| m.amount())
 }
 
@@ -154,14 +157,19 @@ pub async fn get_cost_evolution(
             })
         })
         .collect();
+    // Partialité (REQ-CUR-003) : au moins un abonnement actif a été exclu (donnée illisible ou taux
+    // manquant). La série est alors incomplète — signalé au client, jamais présenté comme un total nul
+    // silencieux (revue kimi STA-006 F3, cohérent avec `ConvertedTotalResponse.complete`).
+    let complete = spans.len() == rows.len();
 
     let today = Utc::now().date_naive();
     let points = monthly_cost_evolution(&spans, today, months);
 
-    // Total mensuel arrondi puis **formaté à un nombre fixe de décimales** = celles de la devise cible
-    // (REQ-CUR-005/007). On arrondit la **somme** du mois (plus juste qu'un arrondi par abonnement), et
-    // le formatage à précision fixe garantit un axe cohérent (« 0.00 » comme « 42.50 », jamais « 0 » nu
-    // pour les mois sans abonnement actif). Le total étant toujours ≥ 0, `Money::new` ne peut échouer.
+    // Les coûts par abonnement sont sommés en **précision pleine** (F2) ; on n'arrondit qu'ici, **une
+    // seule fois**, la somme mensuelle, puis on la **formate au nombre de décimales de la devise cible**
+    // (REQ-CUR-005/007). Le formatage à précision fixe garantit un axe cohérent au sein de la série
+    // (p. ex. « 0.00 »/« 42.50 » pour EUR, « 0 »/« 4200 » pour JPY à 0 décimale). Le total étant toujours
+    // ≥ 0, `Money::new` ne peut échouer.
     let decimals = wallos_core::currencies::find(target.as_str()).map_or(2, |c| c.decimals);
     let point_dtos: Vec<MonthlyCostPointDto> = points
         .iter()
@@ -186,6 +194,7 @@ pub async fn get_cost_evolution(
         currency: target.as_str().to_string(),
         from,
         to,
+        complete,
         points: point_dtos,
     })
     .into_response()
