@@ -25,7 +25,9 @@ pub mod stats;
 pub mod subscription;
 
 pub use billing::{BillingCycle, BillingUnit};
-pub use category::{Category, category_is_deletable};
+pub use category::{
+    Category, DEFAULT_CATEGORY_COUNT, category_is_deletable, default_category_names,
+};
 pub use error::DomainError;
 pub use exchange::{
     ConvertedTotal, ExchangeRate, RateProvider, RateTable, aggregate_converted, convert,

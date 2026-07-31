@@ -92,6 +92,12 @@ pub struct CreateAccountRequest {
         format = "password"
     )]
     pub password: Secret<String>,
+    /// Langue choisie à l'inscription (REQ-I18N-001), code court `en`/`fr`. Optionnelle : si absente,
+    /// le compte n'a pas de langue explicite (repli langue système côté UI) et le jeu de catégories
+    /// par défaut (REQ-CAT-002) est semé en anglais. Un code non supporté est refusé (422).
+    #[serde(default)]
+    #[schema(example = "fr", nullable = true)]
+    pub language: Option<String>,
 }
 
 /// Requête d'authentification (REQ-AUT-002).

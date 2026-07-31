@@ -7,7 +7,8 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 use wallos_core::actor::Actor;
-use wallos_core::requirement;
+use wallos_core::language::Language;
+use wallos_core::{default_category_names, requirement};
 
 use crate::StorageError;
 
@@ -53,11 +54,18 @@ impl<'a> UserRepository<'a> {
         Self { pool }
     }
 
-    /// Crée un compte : un foyer personnel puis l'utilisateur, en une transaction.
+    /// Crée un compte : un foyer personnel, l'utilisateur, puis son jeu de catégories par défaut,
+    /// en une **seule transaction**.
     ///
     /// **Anti-énumération** : si l'e-mail est déjà enregistré, renvoie `Ok(None)` **sans rien
-    /// créer**, afin que l'appelant produise une réponse identique au cas nominal (REQ-AUT-001,
-    /// critère 2). Le `password_hash` est fourni déjà calculé (le hachage argon2id vit côté serveur).
+    /// créer** (ni foyer, ni catégories), afin que l'appelant produise une réponse identique au cas
+    /// nominal (REQ-AUT-001, critère 2). Le `password_hash` est fourni déjà calculé (le hachage
+    /// argon2id vit côté serveur).
+    ///
+    /// `language` est la langue choisie à l'inscription (REQ-I18N-001) : elle est persistée sur
+    /// l'utilisateur *et* détermine la langue du jeu de catégories par défaut semé (REQ-CAT-002).
+    /// `None` = non renseignée → colonne `language` à `NULL` (repli langue système côté UI) et jeu par
+    /// défaut en anglais (langue de base).
     ///
     /// # Errors
     /// `StorageError::Database` pour toute erreur autre qu'une violation d'unicité.
@@ -66,6 +74,7 @@ impl<'a> UserRepository<'a> {
         &self,
         email: &str,
         password_hash: &str,
+        language: Option<Language>,
     ) -> Result<Option<CreatedAccount>, StorageError> {
         let household_id = Uuid::new_v4();
         let user_id = Uuid::new_v4();
@@ -77,17 +86,26 @@ impl<'a> UserRepository<'a> {
             .await?;
 
         let inserted = sqlx::query(
-            "insert into users (id, household_id, email, password_hash) values ($1, $2, $3, $4)",
+            "insert into users (id, household_id, email, password_hash, language) \
+             values ($1, $2, $3, $4, $5)",
         )
         .bind(user_id)
         .bind(household_id)
         .bind(email)
         .bind(password_hash)
+        .bind(language.map(Language::code))
         .execute(&mut *tx)
         .await;
 
         match inserted {
             Ok(_) => {
+                // REQ-CAT-002 — semé dans la MÊME transaction : catégories ↔ compte tout-ou-rien.
+                seed_default_categories(
+                    &mut tx,
+                    household_id,
+                    language.unwrap_or(Language::English),
+                )
+                .await?;
                 tx.commit().await?;
                 Ok(Some(CreatedAccount {
                     user_id,
@@ -194,4 +212,27 @@ impl<'a> UserRepository<'a> {
             }),
         )
     }
+}
+
+/// Sème le jeu de catégories par défaut d'un foyer nouvellement créé (REQ-CAT-002), dans la langue
+/// fournie. Chaque catégorie reçoit un UUID serveur. Exécuté dans la transaction de création de compte
+/// (l'appelant en garantit l'atomicité) : la moindre erreur d'insertion propage et annule tout.
+///
+/// # Errors
+/// `StorageError::Database` en cas d'échec d'insertion.
+#[requirement(REQ-CAT-002)]
+async fn seed_default_categories(
+    conn: &mut sqlx::PgConnection,
+    household_id: Uuid,
+    language: Language,
+) -> Result<(), StorageError> {
+    for name in default_category_names(language) {
+        sqlx::query("insert into categories (id, household_id, name) values ($1, $2, $3)")
+            .bind(Uuid::new_v4())
+            .bind(household_id)
+            .bind(name)
+            .execute(&mut *conn)
+            .await?;
+    }
+    Ok(())
 }

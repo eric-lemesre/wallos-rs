@@ -11,6 +11,7 @@ use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use wallos_core::language::Language;
 use wallos_core::password_policy::{PasswordPolicyError, validate_password};
 use wallos_core::requirement;
 use wallos_proto::{CreateAccountRequest, problem};
@@ -53,13 +54,28 @@ pub async fn create_account(
         return problem_response(StatusCode::UNPROCESSABLE_ENTITY, body);
     }
 
+    // REQ-CAT-002 / REQ-I18N-001 — langue optionnelle à l'inscription : absente = compte sans langue
+    // explicite (jeu par défaut anglais) ; présente mais non supportée = 422 (cohérent avec
+    // PUT /settings/language), refusé avant tout hachage.
+    let language = match &req.language {
+        Some(code) => match Language::parse(code) {
+            Ok(lang) => Some(lang),
+            Err(_) => {
+                let body = problem(422, "about:blank", "Unprocessable Entity")
+                    .with_detail("language_unsupported");
+                return problem_response(StatusCode::UNPROCESSABLE_ENTITY, body);
+            }
+        },
+        None => None,
+    };
+
     let Ok(hash) = hash_password(req.password.expose_secret()) else {
         let body = problem(500, "about:blank", "Internal Server Error");
         return problem_response(StatusCode::INTERNAL_SERVER_ERROR, body);
     };
 
     match UserRepository::new(db.pool())
-        .create_account(&req.email, &hash)
+        .create_account(&req.email, &hash, language)
         .await
     {
         // Anti-énumération : succès comme e-mail déjà pris renvoient le même 201, sans corps.

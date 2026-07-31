@@ -8,7 +8,10 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use serde_json::json;
 use sqlx::PgPool;
+use std::collections::HashSet;
 use tower::ServiceExt;
+use wallos_core::language::Language;
+use wallos_core::{DEFAULT_CATEGORY_COUNT, default_category_names};
 use wallos_req_macros::verifies;
 use wallos_server::app_with_db;
 use wallos_storage::Db;
@@ -55,6 +58,19 @@ async fn signup(pool: &PgPool, email: &str) {
     assert_eq!(r.status(), StatusCode::CREATED);
 }
 
+/// Inscription en précisant la langue (REQ-CAT-002 / I18N-001) ; renvoie le statut HTTP.
+async fn signup_with_language(pool: &PgPool, email: &str, language: &str) -> StatusCode {
+    send(
+        pool,
+        "POST",
+        "/api/v1/accounts",
+        None,
+        Some(json!({ "email": email, "password": PASSWORD, "language": language })),
+    )
+    .await
+    .status()
+}
+
 async fn login_cookie(pool: &PgPool, email: &str) -> String {
     let r = send(
         pool,
@@ -98,12 +114,81 @@ async fn categories(pool: &PgPool, cookie: &str) -> Vec<serde_json::Value> {
     serde_json::from_slice(&bytes).unwrap()
 }
 
+/// Catégories **hors jeu par défaut** (REQ-CAT-002) : depuis le seed automatique, chaque compte naît
+/// avec [`DEFAULT_CATEGORY_COUNT`] catégories. Les tests CRUD/isolation raisonnent sur les catégories
+/// que le test crée lui-même ; ce filtre retire les défauts pour préserver leur intention d'origine.
+/// (Les comptes des tests sont créés sans langue → jeu par défaut anglais.)
+async fn custom_categories(pool: &PgPool, cookie: &str) -> Vec<serde_json::Value> {
+    let defaults: HashSet<&str> = default_category_names(Language::English)
+        .into_iter()
+        .collect();
+    categories(pool, cookie)
+        .await
+        .into_iter()
+        .filter(|c| !defaults.contains(c["name"].as_str().unwrap_or_default()))
+        .collect()
+}
+
 async fn created_id(r: axum::http::Response<Body>) -> String {
     let bytes = axum::body::to_bytes(r.into_body(), usize::MAX)
         .await
         .unwrap();
     let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     v["id"].as_str().unwrap().to_string()
+}
+
+// --- REQ-CAT-002 : jeu de catégories par défaut à la création du compte ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-002, case = "compte fraîchement créé → jeu par défaut présent, dans la langue du compte")]
+async fn new_account_has_default_categories_in_its_language(pool: PgPool) {
+    // Compte créé en français : le formulaire d'abonnement (qui consomme GET /categories) offre
+    // d'emblée le jeu par défaut traduit — jamais une liste vide (acceptance CAT-002).
+    assert_eq!(
+        signup_with_language(&pool, "fr-user@example.com", "fr").await,
+        StatusCode::CREATED
+    );
+    let fr = login_cookie(&pool, "fr-user@example.com").await;
+    let names_fr: Vec<String> = categories(&pool, &fr)
+        .await
+        .iter()
+        .map(|c| c["name"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        names_fr.len(),
+        DEFAULT_CATEGORY_COUNT,
+        "liste non vide et complète"
+    );
+    for expected in default_category_names(Language::French) {
+        assert!(
+            names_fr.iter().any(|n| n == expected),
+            "catégorie par défaut FR manquante: {expected:?}"
+        );
+    }
+
+    // Compte créé sans langue : jeu par défaut en anglais (langue de base).
+    let en = account(&pool, "en-user@example.com").await;
+    let names_en: Vec<String> = categories(&pool, &en)
+        .await
+        .iter()
+        .map(|c| c["name"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(names_en.len(), DEFAULT_CATEGORY_COUNT);
+    assert!(names_en.iter().any(|n| n == "Music"));
+    assert!(!names_en.iter().any(|n| n == "Musique"));
+    // Sentinelle « No category » non semée (subtrack : « sans catégorie » = category_id NULL).
+    assert!(!names_en.iter().any(|n| n == "No category"));
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-CAT-002, case = "langue non supportée à l'inscription → 422")]
+async fn signup_with_unsupported_language_is_rejected(pool: PgPool) {
+    // Cohérent avec PUT /settings/language : un code de langue non supporté est refusé (422),
+    // jamais silencieusement ignoré.
+    assert_eq!(
+        signup_with_language(&pool, "de-user@example.com", "de").await,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
 }
 
 // --- Parcours fonctionnels ---
@@ -115,7 +200,7 @@ async fn created_category_is_listed_immediately(pool: PgPool) {
     let created = create_category(&pool, &web, "Streaming").await;
     assert_eq!(created.status(), StatusCode::CREATED);
 
-    let list = categories(&pool, &web).await;
+    let list = custom_categories(&pool, &web).await;
     assert_eq!(list.len(), 1);
     assert_eq!(list[0]["name"], "Streaming");
 }
@@ -132,7 +217,7 @@ async fn categories_are_listed_in_a_deterministic_order(pool: PgPool) {
             StatusCode::CREATED
         );
     }
-    let first: Vec<String> = categories(&pool, &web)
+    let first: Vec<String> = custom_categories(&pool, &web)
         .await
         .iter()
         .map(|c| c["name"].as_str().unwrap().to_string())
@@ -140,7 +225,7 @@ async fn categories_are_listed_in_a_deterministic_order(pool: PgPool) {
     // Ordre alphabétique déterministe, indépendant de l'ordre d'insertion.
     assert_eq!(first, vec!["Alpha", "Beta", "Gamma"]);
     // Stable : un second appel renvoie exactement le même ordre.
-    let second: Vec<String> = categories(&pool, &web)
+    let second: Vec<String> = custom_categories(&pool, &web)
         .await
         .iter()
         .map(|c| c["name"].as_str().unwrap().to_string())
@@ -165,7 +250,7 @@ async fn duplicate_name_in_same_household_is_rejected(pool: PgPool) {
         StatusCode::UNPROCESSABLE_ENTITY
     );
     // Une seule catégorie a été créée.
-    assert_eq!(categories(&pool, &web).await.len(), 1);
+    assert_eq!(custom_categories(&pool, &web).await.len(), 1);
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
@@ -222,7 +307,7 @@ async fn rename_and_delete_own_category(pool: PgPool) {
     )
     .await;
     assert_eq!(renamed.status(), StatusCode::OK);
-    assert_eq!(categories(&pool, &web).await[0]["name"], "Musique");
+    assert_eq!(custom_categories(&pool, &web).await[0]["name"], "Musique");
 
     // Supprimer.
     let deleted = send(
@@ -234,7 +319,7 @@ async fn rename_and_delete_own_category(pool: PgPool) {
     )
     .await;
     assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
-    assert!(categories(&pool, &web).await.is_empty());
+    assert!(custom_categories(&pool, &web).await.is_empty());
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
@@ -257,7 +342,7 @@ async fn categories_are_isolated_between_accounts(pool: PgPool) {
     let alice_cat = created_id(create_category(&pool, &alice, "Alice Only").await).await;
 
     // Bob ne voit pas la catégorie d'Alice.
-    assert!(categories(&pool, &bob).await.is_empty());
+    assert!(custom_categories(&pool, &bob).await.is_empty());
     // Bob ne peut ni renommer ni supprimer celle d'Alice -> 404 (jamais 403).
     assert_eq!(
         send(
@@ -284,7 +369,10 @@ async fn categories_are_isolated_between_accounts(pool: PgPool) {
         StatusCode::NOT_FOUND
     );
     // La catégorie d'Alice est intacte.
-    assert_eq!(categories(&pool, &alice).await[0]["name"], "Alice Only");
+    assert_eq!(
+        custom_categories(&pool, &alice).await[0]["name"],
+        "Alice Only"
+    );
 }
 
 // --- Cas limites d'identifiant (dans le propre foyer de l'appelant) ---
@@ -406,7 +494,7 @@ async fn authz_other_list_categories(pool: PgPool) {
     let owner = account(&pool, "owner-lc@example.com").await;
     let _ = create_category(&pool, &owner, "Secret").await;
     let other = account(&pool, "other-lc@example.com").await;
-    assert!(categories(&pool, &other).await.is_empty());
+    assert!(custom_categories(&pool, &other).await.is_empty());
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
@@ -591,7 +679,7 @@ async fn referenced_category_cannot_be_deleted(pool: PgPool) {
     )
     .await;
     assert_eq!(refused.status(), StatusCode::CONFLICT);
-    assert_eq!(categories(&pool, &web).await[0]["name"], "Streaming");
+    assert_eq!(custom_categories(&pool, &web).await[0]["name"], "Streaming");
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
@@ -647,7 +735,7 @@ async fn category_becomes_deletable_once_no_longer_referenced(pool: PgPool) {
         StatusCode::NO_CONTENT
     );
     // Critère #2 : plus aucune catégorie (donc aucun abonnement ne pointe vers une catégorie fantôme).
-    assert!(categories(&pool, &web).await.is_empty());
+    assert!(custom_categories(&pool, &web).await.is_empty());
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
@@ -713,7 +801,7 @@ async fn client_provided_uuid_is_preserved(pool: PgPool) {
     assert_eq!(created.status(), StatusCode::CREATED);
     assert_eq!(created_id(created).await, client_id);
     // La liste renvoie bien l'entité sous l'identifiant fourni par le client.
-    let list = categories(&pool, &web).await;
+    let list = custom_categories(&pool, &web).await;
     assert_eq!(list.len(), 1);
     assert_eq!(list[0]["id"], client_id);
 }
@@ -732,7 +820,7 @@ async fn invalid_client_provided_id_is_rejected(pool: PgPool) {
     .await;
     assert_eq!(bad.status(), StatusCode::UNPROCESSABLE_ENTITY);
     // Rien n'a été créé.
-    assert_eq!(categories(&pool, &web).await.len(), 0);
+    assert_eq!(custom_categories(&pool, &web).await.len(), 0);
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
@@ -819,7 +907,7 @@ async fn idempotent_replay_returns_same_response_without_side_effect(pool: PgPoo
     assert_eq!(created_id(replay).await, id1);
 
     // Aucun effet de bord supplémentaire : une seule catégorie existe.
-    assert_eq!(categories(&pool, &web).await.len(), 1);
+    assert_eq!(custom_categories(&pool, &web).await.len(), 1);
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
@@ -836,7 +924,7 @@ async fn idempotency_key_reused_with_different_body_is_conflict(pool: PgPool) {
     let conflict = create_with_key(&pool, &web, "Musique", "key-x").await;
     assert_eq!(conflict.status(), StatusCode::CONFLICT);
     // La seconde n'a rien créé : une seule catégorie (l'originale).
-    let names: Vec<String> = categories(&pool, &web)
+    let names: Vec<String> = custom_categories(&pool, &web)
         .await
         .iter()
         .map(|c| c["name"].as_str().unwrap().to_string())
@@ -859,8 +947,8 @@ async fn idempotency_keys_are_scoped_per_user(pool: PgPool) {
     let b_resp = create_with_key(&pool, &b, "Musique", "shared").await;
     assert_eq!(b_resp.status(), StatusCode::CREATED);
     // Chacun voit sa propre catégorie.
-    assert_eq!(categories(&pool, &a).await[0]["name"], "Streaming");
-    assert_eq!(categories(&pool, &b).await[0]["name"], "Musique");
+    assert_eq!(custom_categories(&pool, &a).await[0]["name"], "Streaming");
+    assert_eq!(custom_categories(&pool, &b).await[0]["name"], "Musique");
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
@@ -871,7 +959,7 @@ async fn without_key_creation_is_unaffected(pool: PgPool) {
         create_category(&pool, &web, "Streaming").await.status(),
         StatusCode::CREATED
     );
-    assert_eq!(categories(&pool, &web).await.len(), 1);
+    assert_eq!(custom_categories(&pool, &web).await.len(), 1);
 }
 
 // --- REQ-SYN-001 (revue F1) : collision d'id client distincte du doublon de nom ---
@@ -923,7 +1011,7 @@ async fn concurrent_replays_produce_a_single_side_effect(pool: PgPool) {
     );
     // La réservation atomique (`insert ... on conflict do nothing`) garantit un unique effet de bord :
     // au plus une catégorie est créée, quel que soit l'entrelacement.
-    assert_eq!(categories(&pool, &web).await.len(), 1);
+    assert_eq!(custom_categories(&pool, &web).await.len(), 1);
     // Au moins une requête réussit (201) ; l'autre est soit un rejeu (201) soit un conflit en cours (409).
     let statuses = [r1.status(), r2.status()];
     assert!(
@@ -948,7 +1036,7 @@ async fn retryable_error_releases_the_key(pool: PgPool) {
     // Même clé, corps valide : la création réussit (la clé n'a pas été bloquée par l'échec précédent).
     let ok = create_with_key(&pool, &web, "Streaming", "retry-key").await;
     assert_eq!(ok.status(), StatusCode::CREATED);
-    assert_eq!(categories(&pool, &web).await.len(), 1);
+    assert_eq!(custom_categories(&pool, &web).await.len(), 1);
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
@@ -975,5 +1063,5 @@ async fn stale_pending_reservation_is_reclaimed(pool: PgPool) {
     // La clé n'est **pas** bloquée à vie : la réservation orpheline est récupérée, la création réussit.
     let r = create_with_key(&pool, &web, "Streaming", "stale").await;
     assert_eq!(r.status(), StatusCode::CREATED);
-    assert_eq!(categories(&pool, &web).await.len(), 1);
+    assert_eq!(custom_categories(&pool, &web).await.len(), 1);
 }

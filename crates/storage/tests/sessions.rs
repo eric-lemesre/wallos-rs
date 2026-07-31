@@ -9,7 +9,7 @@ const HASH: &str = "$argon2id$v=19$m=19456,t=2,p=1$fakefakefake$deadbeef";
 
 async fn seed_account(pool: &sqlx::PgPool, email: &str) -> Actor {
     let created = UserRepository::new(pool)
-        .create_account(email, HASH)
+        .create_account(email, HASH, None)
         .await
         .unwrap()
         .unwrap();
