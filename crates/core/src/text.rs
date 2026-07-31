@@ -3,10 +3,15 @@
 //! La recherche d'abonnements est **insensible à la casse et aux diacritiques** : « Été » doit
 //! correspondre à « ete », « Café » à « cafe ». Le repli décompose la chaîne en forme **NFD**
 //! (les caractères accentués se scindent en lettre de base + marque combinante), supprime les
-//! marques combinantes, puis met en minuscule. Le périmètre visé est l'écriture latine (langues
-//! `en`/`fr`) : les diacritiques du bloc *Combining Diacritical Marks* (U+0300..=U+036F) couvrent
-//! é, è, ê, ë, à, ç, ñ, ü, å… Les lettres sans forme décomposée (ø, ß) sont conservées telles quelles
-//! (repliées en minuscule seulement) — limitation assumée, sans incidence sur en/fr.
+//! marques combinantes, met en minuscule, puis **développe les ligatures latines** (`œ`→`oe`,
+//! `æ`→`ae`). Le périmètre visé est l'écriture latine (langues `en`/`fr`) : les diacritiques du bloc
+//! *Combining Diacritical Marks* (U+0300..=U+036F) couvrent é, è, ê, ë, à, ç, ñ, ü, å… et les ligatures
+//! `œ`/`æ` (cœur, œuvre, ex æquo) sont rendues cherchables via « oeur »/« ae ».
+//!
+//! **Hors périmètre (limitation assumée, sans incidence en/fr)** : les lettres non latines et les
+//! caractères latins sans décomposition NFD ni ligature connue restent inchangés hors minuscule —
+//! notamment le `ß` allemand (non replié en « ss ») et le `ø` nordique (non replié en « o »). La casse
+//! suit `char::to_lowercase` (règles Unicode par défaut, sans traitement spécifique du turc `İ`/`ı`).
 
 use unicode_normalization::UnicodeNormalization;
 use wallos_req_macros::requirement;
@@ -28,11 +33,18 @@ const fn is_combining_diacritic(c: char) -> bool {
 #[must_use]
 #[requirement(REQ-SUB-007)]
 pub fn fold_for_search(input: &str) -> String {
-    input
-        .nfd()
-        .filter(|c| !is_combining_diacritic(*c))
-        .flat_map(char::to_lowercase)
-        .collect()
+    let mut out = String::with_capacity(input.len());
+    for base in input.nfd().filter(|c| !is_combining_diacritic(*c)) {
+        for lower in base.to_lowercase() {
+            // Ligatures latines développées après passage en minuscule (Œ/Æ → œ/æ via to_lowercase).
+            match lower {
+                'œ' => out.push_str("oe"),
+                'æ' => out.push_str("ae"),
+                other => out.push(other),
+            }
+        }
+    }
+    out
 }
 
 /// Vrai si `haystack` contient `needle` en comparaison repliée (casse + diacritiques ignorées).
@@ -62,9 +74,37 @@ mod tests {
     }
 
     #[test]
+    fn expands_latin_ligatures() {
+        // Ligatures françaises rendues cherchables sans ligature (revue kimi F2).
+        assert_eq!(fold_for_search("Cœur"), "coeur");
+        assert_eq!(fold_for_search("Œuvre"), "oeuvre");
+        assert_eq!(fold_for_search("ex æquo"), "ex aequo");
+        assert!(matches_search("Cœur de Pirate", "coeur"));
+        assert!(matches_search("Ex Æquo", "aequo"));
+    }
+
+    #[test]
+    fn out_of_scope_letters_are_only_lowercased() {
+        // Limitation ASSUMÉE (périmètre en/fr) : ß et ø ne sont PAS repliés en « ss »/« o ».
+        // Test de garde : si le repli est un jour étendu, cette attente devra être révisée sciemment.
+        assert_eq!(fold_for_search("Straße"), "straße");
+        assert!(!matches_search("Straße", "strasse"));
+        assert_eq!(fold_for_search("København"), "københavn");
+        assert!(!matches_search("København", "kobenhavn"));
+    }
+
+    #[test]
     fn fold_is_idempotent() {
-        let once = fold_for_search("Disney+ Éducation Çà");
+        let once = fold_for_search("Disney+ Éducation Çà Cœur ex Æquo");
         assert_eq!(fold_for_search(&once), once);
+    }
+
+    #[test]
+    fn leading_and_trailing_spaces_are_significant() {
+        // `fold_for_search`/`matches_search` ne trime PAS : l'appelant (handler, UI) s'en charge.
+        // Test de garde documentant ce contrat.
+        assert!(!matches_search("Café", "  cafe"));
+        assert!(matches_search("mon café serré", " café "));
     }
 
     #[test]
