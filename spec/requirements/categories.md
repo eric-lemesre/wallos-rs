@@ -28,7 +28,7 @@ depends_on: [REQ-SEC-001]
 id: REQ-CAT-002
 title: Catégories par défaut à la création du compte
 domain: categories
-status: draft
+status: verified
 criticality: low
 layer: [core, api]
 e2e: optional

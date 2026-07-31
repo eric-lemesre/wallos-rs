@@ -1,0 +1,38 @@
+{
+  "_requirement": "REQ-CAT-002",
+  "_source": "Wallos 5.4.2 — registration.php (tableau $categories, lignes 112-129, puis boucle d'INSERT `INSERT INTO categories (name, \"order\", user_id)` lignes 242-249). Capturé sur l'image épinglée bellamy/wallos@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f.",
+  "_note": "Comportement de seed GELÉ. À l'inscription, Wallos insère un jeu FIXE de 17 catégories, TOUJOURS en anglais littéral quelle que soit la langue choisie (le champ `language` est stocké sur l'utilisateur mais n'est PAS appliqué au seed ; la traduction n'existe qu'à la demande via endpoints/ai/translate_categories.php). L'ordre d'insertion est matérialisé par la colonne `\"order\"` (1..17), « No category » (id=1) en tête.",
+  "wallos_default_categories_en": [
+    "No category", "Entertainment", "Music", "Utilities", "Food & Beverages",
+    "Health & Wellbeing", "Productivity", "Banking", "Transport", "Education",
+    "Insurance", "Gaming", "News & Magazines", "Software", "Technology",
+    "Cloud Services", "Charity & Donations"
+  ],
+  "wallos_seed_is_translated": false,
+  "wallos_language_field_applied_to_seed": false,
+  "subtrack_divergences": {
+    "_note": "Deux divergences ASSUMÉES et documentées (validées avec Eric 2026-07-31), justifiées par la spec CAT-002 (« dans la langue du compte ») et par le modèle de données de subtrack.",
+    "translated_seed": {
+      "reason": "La spec CAT-002 exige « dans la langue du compte » + « traduite » (dépendance REQ-I18N-001). subtrack ÉTEND le comportement legacy en semant le jeu par défaut traduit selon la langue fournie à l'inscription (champ `language` optionnel de createAccount ; défaut anglais si absent). Les traductions FR sont propres à subtrack (le legacy n'en fournit aucune canonique).",
+      "en": [
+        "Entertainment", "Music", "Utilities", "Food & Beverages", "Health & Wellbeing",
+        "Productivity", "Banking", "Transport", "Education", "Insurance", "Gaming",
+        "News & Magazines", "Software", "Technology", "Cloud Services", "Charity & Donations"
+      ],
+      "fr": [
+        "Divertissement", "Musique", "Services publics", "Alimentation et boissons",
+        "Santé et bien-être", "Productivité", "Banque", "Transport", "Éducation",
+        "Assurance", "Jeux vidéo", "Actualités et magazines", "Logiciels", "Technologie",
+        "Services cloud", "Dons et charité"
+      ]
+    },
+    "sentinel_excluded": {
+      "reason": "Wallos sème une 17ᵉ catégorie sentinelle « No category » (id=1, protégée contre la suppression). subtrack modélise « sans catégorie » par un category_id NULL (libellé UI « (aucune) »), pas par une ligne réelle : la sentinelle est donc EXCLUE du seed. Évite la redondance NULL/ligne et ne rouvre pas la dette de protection différée par CAT-003.",
+      "excluded_name": "No category",
+      "subtrack_default_category_count": 16
+    },
+    "order_not_persisted": {
+      "reason": "subtrack ne persiste pas de colonne d'ordre (REQ-CAT-005 : ordre alphabétique déterministe au listage). L'ordre d'insertion legacy (« No category » en tête) n'est donc pas reproduit ; sans portée fonctionnelle pour CAT-002 (l'acceptance ne demande que la PRÉSENCE du jeu par défaut)."
+    }
+  }
+}

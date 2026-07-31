@@ -126,7 +126,7 @@ requirements:
 - id: REQ-CAT-002
   title: Catégories par défaut à la création du compte
   domain: categories
-  status: draft
+  status: verified
   criticality: low
   layer:
   - core

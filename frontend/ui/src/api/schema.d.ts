@@ -482,6 +482,13 @@ export interface components {
              */
             email: string;
             /**
+             * @description Langue choisie à l'inscription (REQ-I18N-001), code court `en`/`fr`. Optionnelle : si absente,
+             *     le compte n'a pas de langue explicite (repli langue système côté UI) et le jeu de catégories
+             *     par défaut (REQ-CAT-002) est semé en anglais. Un code non supporté est refusé (422).
+             * @example fr
+             */
+            language?: string | null;
+            /**
              * Format: password
              * @description Mot de passe (longueur minimale vérifiée côté serveur, REQ-AUT-003).
              * @example correct horse battery staple
