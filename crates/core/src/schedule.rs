@@ -53,6 +53,50 @@ pub fn next_due(anchor: NaiveDate, cycle: BillingCycle, after: NaiveDate) -> Opt
     None
 }
 
+/// Toutes les occurrences de paiement dans la fenêtre **`[from, to]` (bornes incluses)**, pour un
+/// abonnement démarré à `anchor`, de cycle `cycle`, se terminant éventuellement à `end_date`
+/// (REQ-STA-005 — échéancier des prochains paiements).
+///
+/// - Énumère depuis l'**ancre** (occurrences `k = 0, 1, …`, mêmes ancrage + clamp que [`next_due`],
+///   ADR 0022) ; une même récurrence peut produire **plusieurs** occurrences dans la fenêtre.
+/// - Ignore les occurrences antérieures à `from` (avant le début de fenêtre / l'ancre).
+/// - **Respecte `end_date`** (REQ-SUB-009) : aucune occurrence strictement postérieure à la date de fin
+///   n'est incluse (la borne haute effective est `min(to, end_date)`).
+/// - Bornée par [`MAX_STEPS`] : au-delà, l'énumération s'arrête (garde-fou anti-emballement).
+///
+/// L'appelant est responsable d'exclure les abonnements **inactifs** (oracle Wallos `inactive = 0`,
+/// REQ-SUB-008) : cette fonction pure ne connaît que les dates.
+#[must_use]
+#[requirement(REQ-STA-005)]
+pub fn occurrences_in_range(
+    anchor: NaiveDate,
+    cycle: BillingCycle,
+    from: NaiveDate,
+    to: NaiveDate,
+    end_date: Option<NaiveDate>,
+) -> Vec<NaiveDate> {
+    // Borne haute effective : la fin de fenêtre, resserrée par la date de fin d'abonnement si elle est
+    // antérieure (REQ-SUB-009). Si `end_date` précède le début de fenêtre, le résultat sera vide.
+    let upper = match end_date {
+        Some(end) if end < to => end,
+        _ => to,
+    };
+    let mut out = Vec::new();
+    for k in 0..MAX_STEPS {
+        // Occurrences strictement croissantes : dès qu'on dépasse la borne haute, on peut s'arrêter.
+        let Some(occ) = occurrence(anchor, cycle, k) else {
+            break;
+        };
+        if occ > upper {
+            break;
+        }
+        if occ >= from {
+            out.push(occ);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use wallos_req_macros::verifies;
@@ -243,6 +287,99 @@ mod tests {
         // interval × 12 déborde u32 -> occurrence renvoie None -> next_due renvoie None (jamais un panic).
         let cycle = cycle(BillingUnit::Year, u32::MAX);
         assert_eq!(next_due(day(2025, 1, 1), cycle, day(2025, 1, 1)), None);
+    }
+
+    #[test]
+    #[verifies(REQ-STA-005, case = "plusieurs occurrences d'un même abonnement dans la fenêtre")]
+    fn lists_every_occurrence_in_window() {
+        // Mensuel ancré au 15 : sur [2025-01-01, 2025-03-31], trois échéances (15 janv/févr/mars).
+        assert_eq!(
+            occurrences_in_range(
+                day(2025, 1, 15),
+                monthly(1),
+                day(2025, 1, 1),
+                day(2025, 3, 31),
+                None
+            ),
+            vec![day(2025, 1, 15), day(2025, 2, 15), day(2025, 3, 15)]
+        );
+        // Hebdomadaire sur 30 jours : plusieurs occurrences (ancre incluse car >= from).
+        assert_eq!(
+            occurrences_in_range(
+                day(2025, 1, 1),
+                cycle(BillingUnit::Week, 1),
+                day(2025, 1, 1),
+                day(2025, 1, 31),
+                None
+            ),
+            vec![
+                day(2025, 1, 1),
+                day(2025, 1, 8),
+                day(2025, 1, 15),
+                day(2025, 1, 22),
+                day(2025, 1, 29)
+            ]
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-STA-005, case = "date de fin dans la fenêtre : aucune occurrence postérieure")]
+    fn stops_at_end_date_within_window() {
+        // Mensuel ancré au 15, fenêtre jan→avril, mais fin d'abonnement au 2025-02-20 : seules les
+        // occurrences <= 20 févr (15 janv, 15 févr) — jamais 15 mars/avril (REQ-SUB-009).
+        assert_eq!(
+            occurrences_in_range(
+                day(2025, 1, 15),
+                monthly(1),
+                day(2025, 1, 1),
+                day(2025, 4, 30),
+                Some(day(2025, 2, 20)),
+            ),
+            vec![day(2025, 1, 15), day(2025, 2, 15)]
+        );
+        // Date de fin **antérieure** à la fenêtre : aucune occurrence.
+        assert!(
+            occurrences_in_range(
+                day(2025, 1, 15),
+                monthly(1),
+                day(2025, 3, 1),
+                day(2025, 4, 30),
+                Some(day(2025, 2, 1)),
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-STA-005, case = "occurrences avant la fenêtre exclues ; clamp fin de mois conservé")]
+    fn excludes_occurrences_before_window_and_keeps_clamp() {
+        // Ancre au 31 janv, fenêtre févr→mars : 31 janv est avant `from` (exclu) ; 28 févr (clamp) et
+        // 31 mars sont inclus.
+        assert_eq!(
+            occurrences_in_range(
+                day(2025, 1, 31),
+                monthly(1),
+                day(2025, 2, 1),
+                day(2025, 3, 31),
+                None
+            ),
+            vec![day(2025, 2, 28), day(2025, 3, 31)]
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-STA-005, case = "fenêtre vide (to < ancre) -> aucune occurrence")]
+    fn empty_when_window_precedes_anchor() {
+        assert!(
+            occurrences_in_range(
+                day(2025, 6, 1),
+                monthly(1),
+                day(2025, 1, 1),
+                day(2025, 5, 31),
+                None
+            )
+            .is_empty()
+        );
     }
 
     #[test]

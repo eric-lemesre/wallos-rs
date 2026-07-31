@@ -154,5 +154,12 @@
       "en": "English",
       "fr": "French"
     }
+  },
+  "upcoming": {
+    "title": "Upcoming payments",
+    "days": "Window (days)",
+    "load": "Show",
+    "empty": "No payment in this window",
+    "error": "Could not load upcoming payments"
   }
 }

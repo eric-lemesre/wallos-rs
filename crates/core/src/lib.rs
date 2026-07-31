@@ -35,5 +35,5 @@ pub use exchange::{
 pub use language::Language;
 pub use payment_method::PaymentMethod;
 pub use reference_currency::ReferenceCurrency;
-pub use schedule::next_due;
+pub use schedule::{next_due, occurrences_in_range};
 pub use subscription::Subscription;

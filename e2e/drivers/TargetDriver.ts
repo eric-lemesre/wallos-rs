@@ -205,6 +205,27 @@ export class TargetDriver implements AppDriver, Harness {
     return (await this.page.getByTestId("sub-success").textContent()) ?? "";
   }
 
+  // --- Échéancier des prochains paiements (REQ-STA-005) ---
+
+  async loadUpcoming(days: string): Promise<void> {
+    await this.page.getByTestId("upcoming-days").fill(days);
+    await this.page.getByTestId("upcoming-load").click();
+  }
+
+  /** Nombre d'occurrences de l'échéancier portant le nom `name`. */
+  async upcomingOccurrences(name: string): Promise<number> {
+    const list = this.page.getByTestId("upcoming-list");
+    try {
+      await list.waitFor({ state: "visible", timeout: 5000 });
+    } catch {
+      return 0;
+    }
+    return this.page
+      .getByTestId("upcoming-row")
+      .filter({ hasText: name })
+      .count();
+  }
+
   // --- Liste et filtres (REQ-SUB-006) ---
 
   async refreshSubscriptions(): Promise<void> {

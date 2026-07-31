@@ -57,6 +57,7 @@ pub mod subscriptions;
         categories::rename_category,
         categories::delete_category,
         schedule::compute_next_due,
+        schedule::get_upcoming_payments,
         subscriptions::create_subscription,
         subscriptions::list_subscriptions,
         subscriptions::update_subscription,
@@ -174,6 +175,7 @@ pub fn app_with_db(db: Db) -> Router {
             categories::delete_category
         ))
         .routes(routes!(schedule::compute_next_due))
+        .routes(routes!(schedule::get_upcoming_payments))
         .routes(routes!(
             subscriptions::create_subscription,
             subscriptions::list_subscriptions

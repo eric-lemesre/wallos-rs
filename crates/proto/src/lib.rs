@@ -204,6 +204,48 @@ pub struct NextDueResponse {
     pub next_payment: String,
 }
 
+/// Paramètres de l'échéancier des prochains paiements (REQ-STA-005).
+#[derive(Debug, Clone, Deserialize, Serialize, IntoParams)]
+pub struct UpcomingPaymentsQuery {
+    /// Taille de la fenêtre en jours (borné côté serveur ; hors bornes → 422).
+    #[param(example = 30)]
+    pub days: u32,
+    /// Début de fenêtre `YYYY-MM-DD` (optionnel) ; par défaut la date du jour (horloge serveur).
+    #[serde(default)]
+    #[param(example = "2025-01-01")]
+    pub from: Option<String>,
+}
+
+/// Une occurrence de paiement attendue dans la fenêtre (REQ-STA-005). Un même abonnement peut
+/// apparaître **plusieurs fois** (une entrée par occurrence).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct UpcomingPayment {
+    /// Date de l'occurrence, `YYYY-MM-DD`.
+    #[schema(example = "2025-01-15")]
+    pub date: String,
+    /// Identifiant (UUID) de l'abonnement concerné.
+    pub subscription_id: String,
+    /// Nom de l'abonnement.
+    pub name: String,
+    /// Montant de l'échéance (décimal exact en chaîne, R4), dans la devise de l'abonnement.
+    #[schema(example = "9.99")]
+    pub amount: String,
+    /// Code devise ISO 4217 de l'abonnement.
+    #[schema(example = "EUR")]
+    pub currency: String,
+}
+
+/// Échéancier des prochains paiements sur la fenêtre demandée (REQ-STA-005), trié par date.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct UpcomingPaymentsResponse {
+    /// Début de fenêtre (incluse), `YYYY-MM-DD`.
+    pub from: String,
+    /// Fin de fenêtre (incluse), `YYYY-MM-DD`.
+    pub to: String,
+    /// Occurrences attendues, ordonnées par date puis nom puis id (ordre déterministe).
+    pub payments: Vec<UpcomingPayment>,
+}
+
 /// Une catégorie d'abonnements exposée à l'interface (REQ-CAT-001).
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct CategoryDto {

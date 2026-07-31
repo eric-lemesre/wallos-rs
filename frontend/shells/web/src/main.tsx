@@ -6,6 +6,7 @@ import { ChangePasswordForm } from "../../../ui/src/components/ChangePasswordFor
 import { ConvertedTotalCard } from "../../../ui/src/components/ConvertedTotalCard";
 import { CategoriesList } from "../../../ui/src/components/CategoriesList";
 import { NextDueCard } from "../../../ui/src/components/NextDueCard";
+import { UpcomingPaymentsCard } from "../../../ui/src/components/UpcomingPaymentsCard";
 import { SubscriptionForm } from "../../../ui/src/components/SubscriptionForm";
 import { SubscriptionsList } from "../../../ui/src/components/SubscriptionsList";
 import { PaymentMethodsList } from "../../../ui/src/components/PaymentMethodsList";
@@ -36,6 +37,7 @@ if (root) {
           <CategoriesList />
           <PaymentMethodsList />
           <NextDueCard />
+          <UpcomingPaymentsCard />
           <SubscriptionForm />
           <SubscriptionsList />
         </main>

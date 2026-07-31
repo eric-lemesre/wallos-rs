@@ -1,0 +1,38 @@
+{
+  "_requirement": "REQ-STA-005",
+  "_source": "Wallos 5.4.2 — calendar.php (boucle d'énumération des paiements du mois affiché, lignes 202-253). Capturé sur l'image épinglée bellamy/wallos@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f.",
+  "_note": "Comportement d'énumération GELÉ. Wallos affiche un CALENDRIER MENSUEL : pour chaque abonnement ACTIF (inactive=0), il part de next_payment, recule d'un intervalle jusqu'avant le mois affiché, puis avance d'intervalle en intervalle et enregistre chaque occurrence tombant dans le mois. Occurrences antérieures à start_date ignorées. Achats uniques (cycle=5) affichés seulement à leur date exacte.",
+  "wallos_semantics": {
+    "active_only": true,
+    "active_flag": "inactive = 0",
+    "per_occurrence": true,
+    "occurrence_comment": "un même abonnement peut apparaître plusieurs fois (une par occurrence dans la fenêtre)",
+    "lower_bound": "start_date (occurrences antérieures ignorées)",
+    "increment": "strtotime('+{frequency} {days|weeks|months|years}') — arithmétique PHP",
+    "window_model": "mois calendaire affiché (navigation par mois)"
+  },
+  "subtrack_divergences": {
+    "_note": "Divergences ASSUMÉES, cohérentes avec les choix déjà figés du projet.",
+    "window_is_n_days": {
+      "reason": "subtrack expose une fenêtre glissante de N jours ancrée sur « aujourd'hui » (vue de trésorerie court terme, GET /schedule/upcoming?days=N), au lieu du calendrier mensuel de Wallos. Modèle plus adapté à l'acceptance (« une fenêtre de N jours »).",
+      "endpoint": "GET /schedule/upcoming?days=N[&from=YYYY-MM-DD]",
+      "window": "[from, from + N jours] bornes incluses ; from = aujourd'hui par défaut"
+    },
+    "anchored_clamped_occurrences": {
+      "reason": "Les dates d'occurrence suivent l'ancrage+clamp de subtrack (ADR 0022 / SUB-012/013), PAS le débordement de fin de mois de PHP (strtotime). Ex. mensuel ancré au 31 janv -> 28 févr (clamp), jamais 3 mars.",
+      "adr": "0022"
+    },
+    "respects_end_date": {
+      "reason": "Aucune occurrence postérieure à end_date (REQ-SUB-009) : la borne haute effective est min(fin de fenêtre, end_date).",
+      "requirement": "REQ-SUB-009"
+    },
+    "excludes_inactive": {
+      "reason": "Les abonnements inactifs (REQ-SUB-008) sont exclus, comme l'oracle (inactive=0).",
+      "requirement": "REQ-SUB-008"
+    },
+    "deterministic_order": {
+      "reason": "Résultat trié par date, puis nom, puis id (ordre déterministe, esprit REQ-CAT-005) — l'ordre d'affichage Wallos (grille calendaire) n'est pas reproduit tel quel."
+    }
+  },
+  "_e2e_mode": "@design — pas de rejeu TARGET=legacy (le modèle de fenêtre et les dates d'occurrence divergent délibérément) ; l'oracle Wallos est figé ici pour mémoire, la règle subtrack est vérifiée par les tests core/api/e2e."
+}
