@@ -73,6 +73,18 @@ async fn duplicate_email_is_indistinguishable(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(count, 1, "no second account created");
+
+    // Le second appel (e-mail dupliqué) ne doit semer AUCUNE catégorie orpheline : seul le premier
+    // compte a son jeu par défaut (REQ-CAT-002 semé avant l'insert users, annulé au rollback — F4).
+    let categories: i64 = sqlx::query_scalar("select count(*) from categories")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        categories,
+        wallos_core::DEFAULT_CATEGORY_COUNT as i64,
+        "le doublon ne sème pas de catégories supplémentaires"
+    );
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]

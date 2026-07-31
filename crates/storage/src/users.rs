@@ -85,6 +85,14 @@ impl<'a> UserRepository<'a> {
             .execute(&mut *tx)
             .await?;
 
+        // REQ-CAT-002 — jeu de catégories par défaut semé dans la MÊME transaction (atomicité :
+        // catégories ↔ compte tout-ou-rien). Semé **AVANT** l'insertion `users` — qui, elle, détecte
+        // le doublon d'e-mail — pour que le chemin « e-mail déjà pris » exécute **le même travail** puis
+        // rollback : les deux chemins ont un coût DB identique, sans canal de timing exploitable pour
+        // l'énumération (durcit REQ-AUT-001 critère 2 ; revue 2026-07-31-cat-002 F1).
+        seed_default_categories(&mut tx, household_id, language.unwrap_or(Language::English))
+            .await?;
+
         let inserted = sqlx::query(
             "insert into users (id, household_id, email, password_hash, language) \
              values ($1, $2, $3, $4, $5)",
@@ -99,19 +107,14 @@ impl<'a> UserRepository<'a> {
 
         match inserted {
             Ok(_) => {
-                // REQ-CAT-002 — semé dans la MÊME transaction : catégories ↔ compte tout-ou-rien.
-                seed_default_categories(
-                    &mut tx,
-                    household_id,
-                    language.unwrap_or(Language::English),
-                )
-                .await?;
                 tx.commit().await?;
                 Ok(Some(CreatedAccount {
                     user_id,
                     household_id,
                 }))
             }
+            // Doublon d'e-mail : rollback → foyer ET catégories déjà semées sont annulés (anti-énumération :
+            // rien n'est créé, réponse identique au cas nominal).
             Err(sqlx::Error::Database(db)) if db.is_unique_violation() => {
                 tx.rollback().await?;
                 Ok(None)
@@ -215,8 +218,10 @@ impl<'a> UserRepository<'a> {
 }
 
 /// Sème le jeu de catégories par défaut d'un foyer nouvellement créé (REQ-CAT-002), dans la langue
-/// fournie. Chaque catégorie reçoit un UUID serveur. Exécuté dans la transaction de création de compte
-/// (l'appelant en garantit l'atomicité) : la moindre erreur d'insertion propage et annule tout.
+/// fournie. Chaque catégorie reçoit un UUID serveur. **Une seule requête** (`unnest`) : le coût DB est
+/// constant et faible, ce qui rend le durcissement anti-timing de l'appelant d'autant plus net (F9).
+/// Exécuté dans la transaction de création de compte (l'appelant en garantit l'atomicité) : la moindre
+/// erreur propage et annule tout.
 ///
 /// # Errors
 /// `StorageError::Database` en cas d'échec d'insertion.
@@ -226,13 +231,17 @@ async fn seed_default_categories(
     household_id: Uuid,
     language: Language,
 ) -> Result<(), StorageError> {
-    for name in default_category_names(language) {
-        sqlx::query("insert into categories (id, household_id, name) values ($1, $2, $3)")
-            .bind(Uuid::new_v4())
-            .bind(household_id)
-            .bind(name)
-            .execute(&mut *conn)
-            .await?;
-    }
+    let names = default_category_names(language);
+    let ids: Vec<Uuid> = names.iter().map(|_| Uuid::new_v4()).collect();
+    let names: Vec<&str> = names.to_vec();
+    sqlx::query(
+        "insert into categories (id, household_id, name) \
+         select id, $2, name from unnest($1::uuid[], $3::text[]) as t(id, name)",
+    )
+    .bind(&ids)
+    .bind(household_id)
+    .bind(&names)
+    .execute(&mut *conn)
+    .await?;
     Ok(())
 }

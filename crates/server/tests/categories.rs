@@ -490,11 +490,16 @@ async fn authz_owner_list_categories(pool: PgPool) {
 #[sqlx::test(migrations = "../storage/migrations")]
 #[verifies(REQ-CAT-001)]
 async fn authz_other_list_categories(pool: PgPool) {
-    // Un autre foyer ne voit jamais les catégories d'un autre : sa liste est la sienne (vide ici).
+    // Un autre foyer ne voit jamais les catégories d'un autre : sa liste ne contient QUE son propre
+    // jeu par défaut (REQ-CAT-002), jamais la catégorie « Secret » d'owner (isolation §9).
     let owner = account(&pool, "owner-lc@example.com").await;
     let _ = create_category(&pool, &owner, "Secret").await;
     let other = account(&pool, "other-lc@example.com").await;
     assert!(custom_categories(&pool, &other).await.is_empty());
+    assert_eq!(
+        categories(&pool, &other).await.len(),
+        DEFAULT_CATEGORY_COUNT
+    );
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]

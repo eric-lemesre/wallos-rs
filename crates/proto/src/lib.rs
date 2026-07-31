@@ -96,7 +96,7 @@ pub struct CreateAccountRequest {
     /// le compte n'a pas de langue explicite (repli langue système côté UI) et le jeu de catégories
     /// par défaut (REQ-CAT-002) est semé en anglais. Un code non supporté est refusé (422).
     #[serde(default)]
-    #[schema(example = "fr", nullable = true)]
+    #[schema(example = "fr", nullable = true, pattern = "^(en|fr)$")]
     pub language: Option<String>,
 }
 

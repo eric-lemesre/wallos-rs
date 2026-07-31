@@ -92,10 +92,18 @@ async fn account_creation_without_language_seeds_english_defaults(pool: PgPool) 
         .unwrap()
         .unwrap();
 
-    let names = category_names(&pool, created.household_id).await;
+    // Le jeu correspond EXACTEMENT au jeu anglais attendu (pas seulement « Music présent, pas de FR ») :
+    // détecte un nom manquant ou altéré (comparaison en ensembles, collation-agnostique).
+    let names: std::collections::BTreeSet<String> = category_names(&pool, created.household_id)
+        .await
+        .into_iter()
+        .collect();
+    let expected: std::collections::BTreeSet<String> = default_category_names(Language::English)
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect();
     assert_eq!(names.len(), DEFAULT_CATEGORY_COUNT);
-    assert!(names.iter().any(|n| n == "Music"), "noms anglais attendus");
-    assert!(!names.iter().any(|n| n == "Musique"));
+    assert_eq!(names, expected, "jeu anglais complet attendu");
 
     // Langue non renseignée → colonne NULL (repli langue système côté UI).
     let lang: Option<String> = sqlx::query_scalar("select language from users where id = $1")
