@@ -1105,3 +1105,165 @@ async fn default_and_unknown_sort_order_by_folded_name(pool: PgPool) {
     // Valeur inconnue : repli tolérant sur le tri par nom (jamais 422).
     assert_eq!(names(&list(&pool, &web, "?sort=bogus").await), expected);
 }
+
+// --- Compléments de revue kimi SUB-007 (F4/F5) ---
+
+/// Ids clients d'ordre connu, pour vérifier le départage stable par identifiant.
+const DUP_ID_LOW: &str = "11111111-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+const DUP_ID_HIGH: &str = "22222222-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+
+/// Amorce un taux de change (donnée de référence globale) directement en base.
+async fn seed_rate(pool: &PgPool, base: &str, quote: &str, rate: &str) {
+    sqlx::query(
+        "insert into exchange_rates (base_currency, quote_currency, rate, as_of, source, fetched_at) \
+         values ($1, $2, $3::numeric, '2026-01-01'::date, 'test', now())",
+    )
+    .bind(base)
+    .bind(quote)
+    .bind(rate)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+fn sub_currency(name: &str, amount: &str, currency: &str) -> Value {
+    json!({
+        "name": name,
+        "amount": amount,
+        "currency": currency,
+        "cycle": { "unit": "month", "interval": 1 },
+        "first_payment": "2030-01-15",
+        "active": true
+    })
+}
+
+/// Renvoie les identifiants des abonnements dans l'ordre d'affichage.
+fn ids(body: &Value) -> Vec<String> {
+    body["subscriptions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["id"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-007)]
+async fn sort_by_amount_converts_to_reference_and_places_uncomputable_last(pool: PgPool) {
+    // Devise de référence = EUR. Taux USD->EUR = 0,40 : un abonnement à 100 USD (montant BRUT le plus
+    // élevé) ne vaut que 40 EUR une fois normalisé, donc passe DERRIÈRE 50 EUR — preuve que le tri
+    // s'appuie sur le montant CONVERTI, pas brut (revue kimi F4).
+    seed_rate(&pool, "USD", "EUR", "0.40").await;
+    let web = account(&pool, "sub007-convert@example.com").await;
+    for body in [
+        sub_currency("Euro", "50.00", "EUR"),
+        sub_currency("Dollar", "100.00", "USD"),
+        // JPY sans taux vers EUR : coût non calculable -> placé en fin, jamais assimilé à zéro.
+        sub_currency("Yen", "9999.00", "JPY"),
+    ] {
+        assert_eq!(
+            create(&pool, &web, body).await.status(),
+            StatusCode::CREATED
+        );
+    }
+    assert_eq!(
+        names(&list(&pool, &web, "?sort=amount").await),
+        vec!["Euro", "Dollar", "Yen"]
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-007)]
+async fn sort_by_next_due_places_subscriptions_without_due_last(pool: PgPool) {
+    let web = account(&pool, "sub007-nextdue-none@example.com").await;
+    // Actif à échéance future + abonnement TERMINÉ (date de fin dépassée -> aucune prochaine échéance).
+    assert_eq!(
+        create(
+            &pool,
+            &web,
+            json!({
+                "name": "Future", "amount": "1.00", "currency": "EUR",
+                "cycle": { "unit": "month", "interval": 1 }, "first_payment": "2035-06-01"
+            })
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+    assert_eq!(
+        create(&pool, &web, sub_body_ending("Ended", "1.00", "2021-01-01"))
+            .await
+            .status(),
+        StatusCode::CREATED
+    );
+    // Croissant, sans échéance en dernier.
+    assert_eq!(
+        names(&list(&pool, &web, "?sort=next_due").await),
+        vec!["Future", "Ended"]
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-007)]
+async fn sort_breaks_name_ties_by_id(pool: PgPool) {
+    let web = account(&pool, "sub007-tiebreak@example.com").await;
+    // Deux abonnements de nom identique, ids clients d'ordre connu : le départage est l'id croissant.
+    let mut high = sub_body("Dup", "1.00", None, true);
+    high["id"] = json!(DUP_ID_HIGH);
+    let mut low = sub_body("Dup", "1.00", None, true);
+    low["id"] = json!(DUP_ID_LOW);
+    // Créés dans l'ordre inverse de l'id pour prouver que le tri, pas l'insertion, fixe l'ordre.
+    assert_eq!(
+        create(&pool, &web, high).await.status(),
+        StatusCode::CREATED
+    );
+    assert_eq!(create(&pool, &web, low).await.status(), StatusCode::CREATED);
+    assert_eq!(
+        ids(&list(&pool, &web, "?sort=name").await),
+        vec![DUP_ID_LOW, DUP_ID_HIGH]
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-007)]
+async fn search_in_notes_is_partial_and_diacritic_insensitive(pool: PgPool) {
+    let web = account(&pool, "sub007-notes@example.com").await;
+    let monthly = || json!({ "unit": "month", "interval": 1 });
+    for body in [
+        sub_full(
+            "Netflix",
+            "9.99",
+            monthly(),
+            "2030-01-15",
+            "Divertissement en famille",
+        ),
+        // Notes SANS accent : une requête ACCENTUÉE doit quand même correspondre (symétrie).
+        sub_full(
+            "Spotify",
+            "5.99",
+            monthly(),
+            "2030-01-15",
+            "Musique et podcasts education",
+        ),
+    ] {
+        assert_eq!(
+            create(&pool, &web, body).await.status(),
+            StatusCode::CREATED
+        );
+    }
+    // Correspondance PARTIELLE dans les notes (« divert » ⊂ « Divertissement »).
+    assert_eq!(
+        names(&list(&pool, &web, "?search=divert").await),
+        vec!["Netflix"]
+    );
+    // Requête accentuée « éducation » trouve des notes non accentuées « education ».
+    assert_eq!(
+        names(&list(&pool, &web, "?search=éducation").await),
+        vec!["Spotify"]
+    );
+    // Une correspondance sur les notes ne ramène pas l'autre abonnement.
+    assert_eq!(
+        names(&list(&pool, &web, "?search=musique").await),
+        vec!["Spotify"]
+    );
+}
