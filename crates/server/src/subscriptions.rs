@@ -9,6 +9,7 @@ use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use chrono::{NaiveDate, Utc};
+use rust_decimal::Decimal;
 use uuid::Uuid;
 use wallos_core::actor::Actor;
 use wallos_core::billing::{BillingCycle, BillingUnit};
@@ -303,6 +304,100 @@ fn filter_id(raw: Option<String>, field: &'static str) -> Result<Option<Uuid>, F
         .transpose()
 }
 
+/// Critère de tri de la liste (REQ-SUB-007). Défaut **tolérant** : une valeur absente ou inconnue
+/// retombe sur `Name` (jamais une 422 — le tri est un confort d'affichage, non une contrainte).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SortCriterion {
+    /// Par nom, ordre alphabétique replié (casse+diacritiques ignorées), croissant.
+    Name,
+    /// Par **coût mensuel normalisé** (REQ-STA-001) **converti en devise de référence**, décroissant.
+    Amount,
+    /// Par prochaine échéance, croissant (les abonnements sans échéance à venir en fin de liste).
+    NextDue,
+}
+
+impl SortCriterion {
+    /// Interprète le paramètre `sort` ; toute valeur non reconnue (ou absente) donne `Name`.
+    #[requirement(REQ-SUB-007)]
+    fn parse(raw: Option<&str>) -> Self {
+        match raw {
+            Some("amount") => Self::Amount,
+            Some("next_due") => Self::NextDue,
+            _ => Self::Name,
+        }
+    }
+}
+
+/// Clé de tri pré-calculée pour un abonnement, portée avec son DTO afin de trier **une seule fois**
+/// (le coût normalisé et l'échéance ne sont pas recalculés à chaque comparaison).
+struct Sortable {
+    /// Nom replié (casse+diacritiques ignorées) — clé primaire du tri par nom et départage stable.
+    folded_name: String,
+    /// Coût mensuel converti en devise de référence (`None` si devise/cycle illisible ou taux manquant).
+    amount_ref: Option<Decimal>,
+    /// Prochaine échéance (`None` si aucune : terminé ou hors plage).
+    next_due: Option<NaiveDate>,
+    /// Identifiant (chaîne UUID) — départage final déterministe.
+    id: String,
+    /// DTO projeté, restitué après tri.
+    dto: SubscriptionDto,
+}
+
+/// Coût mensuel normalisé (REQ-STA-001) d'une ligne, **converti en devise de référence** (REQ-CUR-003).
+///
+/// `None` si la devise, le cycle ou le montant sont illisibles, ou si aucun taux n'est connu pour la
+/// paire — l'abonnement est alors trié en fin de liste, jamais assimilé à un coût nul (revue STA-001 F2).
+#[requirement(REQ-SUB-007)]
+fn monthly_in_reference(
+    row: &SubscriptionRow,
+    target: CurrencyCode,
+    table: &RateTable,
+) -> Option<Decimal> {
+    let currency = CurrencyCode::new(&row.currency).ok()?;
+    let price = Money::new(row.amount, currency).ok()?;
+    let cycle = row_cycle(row)?;
+    let monthly = wallos_core::stats::monthly_cost_rounded(price, cycle);
+    wallos_core::convert(&monthly, target, table).map(|m| m.amount())
+}
+
+/// Compare deux `Option` en plaçant `None` **en dernier** (ascendant sur les `Some`).
+#[requirement(REQ-SUB-007)]
+fn none_last<T: Ord>(a: &Option<T>, b: &Option<T>) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    match (a, b) {
+        (Some(x), Some(y)) => x.cmp(y),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
+}
+
+/// Trie les abonnements selon le critère, avec départage **stable et déterministe** : nom replié puis
+/// identifiant. Le tri par montant est décroissant (les plus coûteux d'abord) ; nom et échéance sont
+/// croissants (REQ-SUB-007).
+#[requirement(REQ-SUB-007)]
+fn sort_subscriptions(items: &mut [Sortable], criterion: SortCriterion) {
+    items.sort_by(|a, b| {
+        let tiebreak = a
+            .folded_name
+            .cmp(&b.folded_name)
+            .then_with(|| a.id.cmp(&b.id));
+        use std::cmp::Ordering;
+        let primary = match criterion {
+            SortCriterion::Name => Ordering::Equal,
+            // Décroissant sur les `Some` (plus coûteux d'abord), `None` toujours en dernier.
+            SortCriterion::Amount => match (&a.amount_ref, &b.amount_ref) {
+                (Some(x), Some(y)) => y.cmp(x),
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => Ordering::Equal,
+            },
+            SortCriterion::NextDue => none_last(&a.next_due, &b.next_due),
+        };
+        primary.then(tiebreak)
+    });
+}
+
 /// Liste les abonnements du foyer, filtrés (conjonctifs), avec le total agrégé du sous-ensemble actif.
 #[utoipa::path(
     get,
@@ -367,13 +462,30 @@ pub async fn list_subscriptions(
         );
     };
 
+    // Recherche plein-texte (REQ-SUB-007) : filtrage **insensible casse+diacritiques** sur le nom
+    // **ET** les notes, appliqué avant l'agrégat et le tri — le total reflète ainsi exactement la vue
+    // affichée. Une requête vide/absente n'exclut rien.
+    let search = q.search.unwrap_or_default();
+    let rows: Vec<SubscriptionRow> = if search.trim().is_empty() {
+        rows
+    } else {
+        rows.into_iter()
+            .filter(|r| {
+                wallos_core::matches_search(&r.name, &search)
+                    || wallos_core::matches_search(r.notes.as_deref().unwrap_or(""), &search)
+            })
+            .collect()
+    };
+
     // Total = somme convertie des abonnements **actifs et non terminés** du sous-ensemble filtré
     // (REQ-SUB-008/009). Horloge serveur pour décider « terminé » et la prochaine échéance.
     let today = Utc::now().date_naive();
     let amounts = active_amounts(&rows, today);
-    // Pas de montant actif à agréger (ex. filtre `active=false`) : total nul sans charger les taux
-    // (revue SUB-006 #8 — évite un aller-retour base inutile).
-    let table = if amounts.is_empty() {
+    let criterion = SortCriterion::parse(q.sort.as_deref());
+    // Taux nécessaires si un montant actif doit être agrégé **ou** si le tri par montant normalisé est
+    // demandé (il convertit chaque coût mensuel en devise de référence). Sinon, on évite l'aller-retour
+    // base (revue SUB-006 #8).
+    let table = if amounts.is_empty() && criterion != SortCriterion::Amount {
         RateTable::new(Vec::new())
     } else {
         match load_rate_table(&ExchangeRateRepository::new(db.pool())).await {
@@ -388,8 +500,31 @@ pub async fn list_subscriptions(
     };
     let agg = aggregate_converted(&amounts, target, &table);
 
-    let subscriptions: Vec<SubscriptionDto> =
-        rows.into_iter().map(|r| row_to_dto(r, today)).collect();
+    // Projection + clés de tri en une passe, puis tri déterministe (REQ-SUB-007).
+    let mut items: Vec<Sortable> = rows
+        .into_iter()
+        .map(|r| {
+            let amount_ref = if criterion == SortCriterion::Amount {
+                monthly_in_reference(&r, target, &table)
+            } else {
+                None
+            };
+            let dto = row_to_dto(r, today);
+            let next_due = dto
+                .next_payment
+                .as_deref()
+                .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok());
+            Sortable {
+                folded_name: wallos_core::fold_for_search(&dto.name),
+                amount_ref,
+                next_due,
+                id: dto.id.clone(),
+                dto,
+            }
+        })
+        .collect();
+    sort_subscriptions(&mut items, criterion);
+    let subscriptions: Vec<SubscriptionDto> = items.into_iter().map(|s| s.dto).collect();
     Json(SubscriptionListResponse {
         subscriptions,
         total: ConvertedTotalResponse {

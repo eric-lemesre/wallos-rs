@@ -10,8 +10,10 @@ type SubscriptionDto = components["schemas"]["SubscriptionDto"];
 type CreateSubscriptionRequest = components["schemas"]["CreateSubscriptionRequest"];
 
 type StateFilter = "all" | "active" | "inactive";
+type SortBy = "name" | "amount" | "next_due";
 
 const UNITS = ["day", "week", "month", "year"] as const;
+const SORTS = ["name", "amount", "next_due"] as const;
 
 /**
  * Vue par défaut de l'application (REQ-SUB-006) et **modification** en place (REQ-SUB-004) : liste des
@@ -29,6 +31,8 @@ export function SubscriptionsList() {
   const [category, setCategory] = useState("");
   const [payer, setPayer] = useState("");
   const [state, setState] = useState<StateFilter>("all");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<SortBy>("name");
   const [data, setData] = useState<SubscriptionListResponse | null>(null);
   const [failed, setFailed] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
@@ -38,8 +42,15 @@ export function SubscriptionsList() {
 
   // Chargement paramétré (jamais dans les deps d'un effet réactif : on ne recharge qu'au montage et
   // sur « Appliquer », pas à chaque frappe de filtre). Filtres conjonctifs : catégorie ET payeur ET état.
-  const load = useCallback(async (cat: string, payerId: string, st: StateFilter) => {
-    const query: { category?: string; payer?: string; active?: boolean } = {};
+  const load = useCallback(
+    async (cat: string, payerId: string, st: StateFilter, searchTerm: string, sortBy: SortBy) => {
+    const query: {
+      category?: string;
+      payer?: string;
+      active?: boolean;
+      search?: string;
+      sort?: string;
+    } = {};
     if (cat.trim() !== "") {
       query.category = cat.trim();
     }
@@ -49,21 +60,32 @@ export function SubscriptionsList() {
     if (st !== "all") {
       query.active = st === "active";
     }
+    // Recherche insensible casse+diacritiques sur nom ET notes ; tri (nom/montant/échéance) — REQ-SUB-007.
+    if (searchTerm.trim() !== "") {
+      query.search = searchTerm.trim();
+    }
+    if (sortBy !== "name") {
+      query.sort = sortBy;
+    }
     const { data: body, response } = await api.GET("/subscriptions", {
       params: { query },
     });
     if (response.ok && body) {
       setData(body);
       setFailed(false);
-      // Un filtre est actif dès qu'un critère (catégorie, payeur ou état ≠ « tous ») est appliqué.
-      setFiltered(cat.trim() !== "" || payerId.trim() !== "" || st !== "all");
+      // Un filtre est actif dès qu'un critère (catégorie, payeur, état ≠ « tous » ou recherche) s'applique.
+      setFiltered(
+        cat.trim() !== "" || payerId.trim() !== "" || st !== "all" || searchTerm.trim() !== "",
+      );
     } else {
       setFailed(true);
     }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
-    void load("", "", "all");
+    void load("", "", "all", "", "name");
   }, [load]);
 
   const save = useCallback(
@@ -101,10 +123,10 @@ export function SubscriptionsList() {
         return false;
       }
       setSaveFailed(false);
-      await load(category, payer, state);
+      await load(category, payer, state, search, sort);
       return true;
     },
-    [load, category, payer, state],
+    [load, category, payer, state, search, sort],
   );
 
   const subscriptions = data?.subscriptions ?? [];
@@ -114,6 +136,25 @@ export function SubscriptionsList() {
       <h2>{t("subscriptions.title")}</h2>
 
       <div>
+        <input
+          data-testid="subscriptions-search"
+          aria-label={t("subscriptions.search")}
+          placeholder={t("subscriptions.searchPlaceholder")}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select
+          data-testid="subscriptions-sort"
+          aria-label={t("subscriptions.sort")}
+          value={sort}
+          onChange={(e) => setSort(e.target.value as SortBy)}
+        >
+          {SORTS.map((s) => (
+            <option key={s} value={s}>
+              {t(`subscriptions.sortBy.${s}`)}
+            </option>
+          ))}
+        </select>
         <input
           data-testid="subscriptions-filter-category"
           aria-label={t("subscriptions.filterCategory")}
@@ -139,7 +180,7 @@ export function SubscriptionsList() {
         <button
           type="button"
           data-testid="subscriptions-apply"
-          onClick={() => void load(category, payer, state)}
+          onClick={() => void load(category, payer, state, search, sort)}
         >
           {t("subscriptions.apply")}
         </button>

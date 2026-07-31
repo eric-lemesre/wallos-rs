@@ -10,6 +10,7 @@ repository.workspace = true
 chrono = { workspace = true }
 chrono-tz = { workspace = true }
 rust_decimal = { workspace = true }
+unicode-normalization = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }

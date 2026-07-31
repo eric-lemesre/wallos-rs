@@ -128,7 +128,15 @@
     "editActive": "Active",
     "saveError": "Could not save the change",
     "ended": "Ended",
-    "totalFiltered": "(filtered set)"
+    "totalFiltered": "(filtered set)",
+    "search": "Search",
+    "searchPlaceholder": "Search name or notes",
+    "sort": "Sort by",
+    "sortBy": {
+      "name": "Name",
+      "amount": "Amount",
+      "next_due": "Next payment"
+    }
   },
   "paymentMethods": {
     "title": "Payment methods",

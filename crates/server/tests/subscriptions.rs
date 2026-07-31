@@ -946,3 +946,162 @@ async fn idempotency_key_reused_with_different_body_is_conflict(pool: PgPool) {
         1
     );
 }
+
+// --- Recherche et tri (REQ-SUB-007) ---
+
+/// Abonnement avec notes, cycle et première échéance personnalisés (pour les tests SUB-007).
+fn sub_full(name: &str, amount: &str, cycle: Value, first_payment: &str, notes: &str) -> Value {
+    json!({
+        "name": name,
+        "amount": amount,
+        "currency": "EUR",
+        "cycle": cycle,
+        "first_payment": first_payment,
+        "notes": notes,
+        "active": true
+    })
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-007)]
+async fn search_matches_name_and_notes_ignoring_case_and_accents(pool: PgPool) {
+    let web = account(&pool, "sub007-search@example.com").await;
+    let monthly = || json!({ "unit": "month", "interval": 1 });
+    for body in [
+        sub_full("Netflix", "9.99", monthly(), "2030-01-15", "Divertissement"),
+        sub_full(
+            "Spotify",
+            "5.99",
+            monthly(),
+            "2030-01-15",
+            "Musique Éducative",
+        ),
+        sub_full("Café Malongo", "3.50", monthly(), "2030-01-15", ""),
+    ] {
+        assert_eq!(
+            create(&pool, &web, body).await.status(),
+            StatusCode::CREATED
+        );
+    }
+
+    // Sur le nom, sans accent dans la requête : « cafe » trouve « Café Malongo ».
+    assert_eq!(
+        names(&list(&pool, &web, "?search=cafe").await),
+        vec!["Café Malongo"]
+    );
+    // Casse ignorée.
+    assert_eq!(
+        names(&list(&pool, &web, "?search=NETFLIX").await),
+        vec!["Netflix"]
+    );
+    // Sur les notes, diacritiques ignorés : « educative » trouve « Musique Éducative ».
+    assert_eq!(
+        names(&list(&pool, &web, "?search=educative").await),
+        vec!["Spotify"]
+    );
+    // Aucune correspondance → liste vide (mais 200).
+    assert!(
+        list(&pool, &web, "?search=inexistant").await["subscriptions"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    // Requête vide → aucun filtrage (les 3 abonnements).
+    assert_eq!(
+        list(&pool, &web, "?search=").await["subscriptions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-007)]
+async fn total_reflects_the_search_subset(pool: PgPool) {
+    let web = account(&pool, "sub007-search-total@example.com").await;
+    let monthly = || json!({ "unit": "month", "interval": 1 });
+    for body in [
+        sub_full("Netflix", "10.00", monthly(), "2030-01-15", ""),
+        sub_full("Spotify", "5.00", monthly(), "2030-01-15", ""),
+    ] {
+        assert_eq!(
+            create(&pool, &web, body).await.status(),
+            StatusCode::CREATED
+        );
+    }
+    // Le total suit la vue recherchée : seul Netflix compte.
+    let netflix = list(&pool, &web, "?search=netflix").await;
+    assert_eq!(names(&netflix), vec!["Netflix"]);
+    assert_eq!(netflix["total"]["total"], "10.00");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-007)]
+async fn sort_by_amount_normalizes_cycle_and_is_descending(pool: PgPool) {
+    let web = account(&pool, "sub007-amount@example.com").await;
+    let monthly = || json!({ "unit": "month", "interval": 1 });
+    let yearly = || json!({ "unit": "year", "interval": 1 });
+    // Alpha 30/mois ; Beta 10/mois ; Gamma 120/an (=10/mois) → normalisation du cycle.
+    for body in [
+        sub_full("Alpha", "30.00", monthly(), "2030-01-15", ""),
+        sub_full("Beta", "10.00", monthly(), "2030-01-15", ""),
+        sub_full("Gamma", "120.00", yearly(), "2030-01-15", ""),
+    ] {
+        assert_eq!(
+            create(&pool, &web, body).await.status(),
+            StatusCode::CREATED
+        );
+    }
+    // Décroissant : Alpha (30) d'abord, puis Beta et Gamma ex æquo à 10 → départage par nom.
+    assert_eq!(
+        names(&list(&pool, &web, "?sort=amount").await),
+        vec!["Alpha", "Beta", "Gamma"]
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-007)]
+async fn sort_by_next_due_is_ascending(pool: PgPool) {
+    let web = account(&pool, "sub007-nextdue@example.com").await;
+    let monthly = || json!({ "unit": "month", "interval": 1 });
+    // Échéances futures distinctes : la prochaine échéance = la première échéance.
+    for body in [
+        sub_full("Later", "1.00", monthly(), "2035-12-01", ""),
+        sub_full("Sooner", "1.00", monthly(), "2035-02-01", ""),
+        sub_full("Mid", "1.00", monthly(), "2035-06-01", ""),
+    ] {
+        assert_eq!(
+            create(&pool, &web, body).await.status(),
+            StatusCode::CREATED
+        );
+    }
+    assert_eq!(
+        names(&list(&pool, &web, "?sort=next_due").await),
+        vec!["Sooner", "Mid", "Later"]
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-007)]
+async fn default_and_unknown_sort_order_by_folded_name(pool: PgPool) {
+    let web = account(&pool, "sub007-name@example.com").await;
+    let monthly = || json!({ "unit": "month", "interval": 1 });
+    // Casse et accent mêlés : le tri par nom est replié (Éclair → « eclair », après cherry).
+    for body in [
+        sub_full("banana", "1.00", monthly(), "2030-01-15", ""),
+        sub_full("Apple", "1.00", monthly(), "2030-01-15", ""),
+        sub_full("Éclair", "1.00", monthly(), "2030-01-15", ""),
+        sub_full("cherry", "1.00", monthly(), "2030-01-15", ""),
+    ] {
+        assert_eq!(
+            create(&pool, &web, body).await.status(),
+            StatusCode::CREATED
+        );
+    }
+    let expected = vec!["Apple", "banana", "cherry", "Éclair"];
+    // Défaut : tri par nom.
+    assert_eq!(names(&list(&pool, &web, "").await), expected);
+    // Valeur inconnue : repli tolérant sur le tri par nom (jamais 422).
+    assert_eq!(names(&list(&pool, &web, "?sort=bogus").await), expected);
+}

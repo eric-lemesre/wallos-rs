@@ -3519,6 +3519,7 @@ dependencies = [
  "rust_decimal",
  "serde",
  "thiserror",
+ "unicode-normalization",
  "uuid",
  "wallos-req-macros",
 ]

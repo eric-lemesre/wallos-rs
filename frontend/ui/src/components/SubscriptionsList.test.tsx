@@ -82,6 +82,43 @@ describe("SubscriptionsList", () => {
     );
   });
 
+  it("transmet la recherche et le tri dans la query (REQ-SUB-007)", async () => {
+    const get = vi
+      .spyOn(api, "GET")
+      .mockResolvedValue(response([sub("1", "Netflix", "9.99")], "9.99"));
+    const user = userEvent.setup();
+    renderList();
+
+    await screen.findByTestId("subscription-name");
+    await user.type(screen.getByTestId("subscriptions-search"), "netflix");
+    await user.selectOptions(screen.getByTestId("subscriptions-sort"), "amount");
+    await user.click(screen.getByTestId("subscriptions-apply"));
+
+    await waitFor(() =>
+      expect(get).toHaveBeenLastCalledWith("/subscriptions", {
+        params: { query: { search: "netflix", sort: "amount" } },
+      }),
+    );
+  });
+
+  it("le tri par nom (défaut) reste implicite dans la query (REQ-SUB-007)", async () => {
+    const get = vi
+      .spyOn(api, "GET")
+      .mockResolvedValue(response([sub("1", "Netflix", "9.99")], "9.99"));
+    const user = userEvent.setup();
+    renderList();
+
+    await screen.findByTestId("subscription-name");
+    await user.click(screen.getByTestId("subscriptions-apply"));
+
+    // Défaut « name » : aucun paramètre `sort` superflu (query vide).
+    await waitFor(() =>
+      expect(get).toHaveBeenLastCalledWith("/subscriptions", {
+        params: { query: {} },
+      }),
+    );
+  });
+
   it("indique explicitement quand le total porte sur un ensemble filtré (REQ-STA-007)", async () => {
     vi.spyOn(api, "GET").mockResolvedValue(response([sub("1", "Netflix", "9.99")], "9.99"));
     const user = userEvent.setup();

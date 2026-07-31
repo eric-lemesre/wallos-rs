@@ -652,7 +652,7 @@ requirements:
 - id: REQ-SUB-007
   title: Recherche et tri
   domain: subscriptions
-  status: draft
+  status: verified
   criticality: medium
   layer:
   - api
