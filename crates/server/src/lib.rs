@@ -13,10 +13,11 @@ use wallos_proto::{
     AggregateRequest, CategoryDto, ChangePasswordRequest, ConvertedTotalResponse,
     CostEvolutionResponse, CreateAccountRequest, CreateCategoryRequest, CreateDeviceSessionRequest,
     CreatePaymentMethodRequest, CreateSessionRequest, CreateSubscriptionRequest, CurrencyDto,
-    CurrentUser, DeviceSummary, DeviceToken, HealthResponse, LanguageResponse, MoneyInput,
-    MonthlyCostPointDto, NextDueRequest, NextDueResponse, PaymentMethodDto, Problem,
-    ReferenceCurrencyDto, RenameCategoryRequest, RenamePaymentMethodRequest, SetLanguageRequest,
-    SubscriptionDto, SubscriptionListResponse, problem,
+    CurrentUser, DataBundle, DeviceSummary, DeviceToken, HealthResponse, ImportCounts,
+    ImportReport, LanguageResponse, MoneyInput, MonthlyCostPointDto, NextDueRequest,
+    NextDueResponse, PaymentMethodDto, Problem, ReferenceCurrencyDto, RejectedRow,
+    RenameCategoryRequest, RenamePaymentMethodRequest, SetLanguageRequest, SubscriptionDto,
+    SubscriptionListResponse, problem,
 };
 use wallos_storage::Db;
 
@@ -24,6 +25,7 @@ pub mod accounts;
 pub mod auth;
 pub mod categories;
 pub mod currencies;
+pub mod data;
 pub mod exchange;
 pub mod idempotency;
 pub mod payment_methods;
@@ -60,6 +62,8 @@ pub mod subscriptions;
         schedule::compute_next_due,
         schedule::get_upcoming_payments,
         statistics::get_cost_evolution,
+        data::export_data,
+        data::import_data,
         subscriptions::create_subscription,
         subscriptions::list_subscriptions,
         subscriptions::update_subscription,
@@ -101,7 +105,11 @@ pub mod subscriptions;
         RenamePaymentMethodRequest,
         ReferenceCurrencyDto,
         LanguageResponse,
-        SetLanguageRequest
+        SetLanguageRequest,
+        DataBundle,
+        ImportReport,
+        ImportCounts,
+        RejectedRow
     ))
 )]
 pub struct ApiDoc;
@@ -181,6 +189,8 @@ pub fn app_with_db(db: Db) -> Router {
         .routes(routes!(schedule::compute_next_due))
         .routes(routes!(schedule::get_upcoming_payments))
         .routes(routes!(statistics::get_cost_evolution))
+        .routes(routes!(data::export_data))
+        .routes(routes!(data::import_data))
         .routes(routes!(
             subscriptions::create_subscription,
             subscriptions::list_subscriptions

@@ -8,6 +8,7 @@ import { CategoriesList } from "../../../ui/src/components/CategoriesList";
 import { NextDueCard } from "../../../ui/src/components/NextDueCard";
 import { UpcomingPaymentsCard } from "../../../ui/src/components/UpcomingPaymentsCard";
 import { CostEvolutionCard } from "../../../ui/src/components/CostEvolutionCard";
+import { ImportExportCard } from "../../../ui/src/components/ImportExportCard";
 import { SubscriptionForm } from "../../../ui/src/components/SubscriptionForm";
 import { SubscriptionsList } from "../../../ui/src/components/SubscriptionsList";
 import { PaymentMethodsList } from "../../../ui/src/components/PaymentMethodsList";
@@ -42,6 +43,7 @@ if (root) {
           <CostEvolutionCard />
           <SubscriptionForm />
           <SubscriptionsList />
+          <ImportExportCard />
         </main>
       </I18nextProvider>
     </StrictMode>,

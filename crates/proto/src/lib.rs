@@ -829,6 +829,68 @@ impl CreateSubscriptionRequest {
     }
 }
 
+/// Version du format d'enveloppe d'export/import (REQ-SUB-016). Un import d'une autre version est
+/// rejeté (`422`) : le format fait foi, les évolutions seront versionnées explicitement.
+pub const DATA_BUNDLE_VERSION: u32 = 1;
+
+/// Enveloppe complète des données d'un foyer (REQ-SUB-016), pour l'export **et** l'import.
+///
+/// Réutilise les requêtes de création (`id` préservé, REQ-SYN-001) : un export réimporté dans un
+/// compte vierge reconstruit l'état **à l'identique** (mêmes identifiants, donc mêmes liaisons
+/// catégorie/moyen de paiement ; les échéances, dérivées, sont recalculées à la lecture). Les devises
+/// ne sont **pas** des entités : elles proviennent d'un référentiel figé (REQ-CUR-002) et sont
+/// seulement **validées** à l'import (une devise inconnue rejette la ligne). La devise de référence du
+/// foyer est portée par `reference_currency`.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct DataBundle {
+    /// Version du format (doit valoir [`DATA_BUNDLE_VERSION`]).
+    pub version: u32,
+    /// Devise de référence du foyer (code ISO 4217), le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference_currency: Option<String>,
+    /// Catégories du foyer.
+    #[serde(default)]
+    pub categories: Vec<CreateCategoryRequest>,
+    /// Moyens de paiement du foyer.
+    #[serde(default)]
+    pub payment_methods: Vec<CreatePaymentMethodRequest>,
+    /// Abonnements du foyer.
+    #[serde(default)]
+    pub subscriptions: Vec<CreateSubscriptionRequest>,
+}
+
+/// Décompte des entités effectivement créées par un import (REQ-SUB-016).
+#[derive(Debug, Clone, Default, Deserialize, Serialize, ToSchema)]
+pub struct ImportCounts {
+    /// Catégories créées.
+    pub categories: u32,
+    /// Moyens de paiement créés.
+    pub payment_methods: u32,
+    /// Abonnements créés.
+    pub subscriptions: u32,
+}
+
+/// Une ligne rejetée à l'import, avec sa raison (REQ-SUB-016, critère #2).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct RejectedRow {
+    /// Nature de la ligne : `category`, `payment_method`, `subscription` ou `reference_currency`.
+    pub kind: String,
+    /// Référence permettant de localiser la ligne (nom ou identifiant fourni).
+    pub reference: String,
+    /// Raison du rejet (champ fautif + message, ou règle d'unicité violée).
+    pub reason: String,
+}
+
+/// Rapport d'import (REQ-SUB-016) : ce qui a été créé et les lignes **rejetées** (jamais un échec
+/// global silencieux — chaque ligne invalide est listée avec sa raison).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct ImportReport {
+    /// Décompte des entités créées.
+    pub imported: ImportCounts,
+    /// Lignes rejetées, dans l'ordre de traitement.
+    pub rejected: Vec<RejectedRow>,
+}
+
 /// Erreur de validation **par champ** (REQ-SUB-002, critère #2) : identifie le champ fautif.
 #[derive(Debug, Clone)]
 pub struct FieldError {
