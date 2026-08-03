@@ -3,9 +3,11 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
+import type { ParseKeys } from "i18next";
 
 import { api, type CreateAccountRequest } from "../api/client";
 import { MIN_PASSWORD_LENGTH, isCompromised } from "../auth/passwordPolicy";
+import { tKey } from "../i18n/keys";
 
 /**
  * Schéma de validation du formulaire d'inscription. Les messages sont des **clés i18n**,
@@ -13,11 +15,11 @@ import { MIN_PASSWORD_LENGTH, isCompromised } from "../auth/passwordPolicy";
  * refus des mots de passe compromis) est identique à la validation serveur (REQ-AUT-003).
  */
 const signupSchema = z.object({
-  email: z.string().email("signup.validation.emailInvalid"),
+  email: z.string().email(tKey("signup.validation.emailInvalid")),
   password: z
     .string()
-    .min(MIN_PASSWORD_LENGTH, "signup.validation.passwordTooShort")
-    .refine((pw) => !isCompromised(pw), "signup.validation.passwordCompromised"),
+    .min(MIN_PASSWORD_LENGTH, tKey("signup.validation.passwordTooShort"))
+    .refine((pw) => !isCompromised(pw), tKey("signup.validation.passwordCompromised")),
 });
 
 type SignupValues = z.infer<typeof signupSchema>;
@@ -59,7 +61,7 @@ export function SignupForm() {
       />
       {errors.email?.message && (
         <p data-testid="signup-email-error" role="alert">
-          {t(errors.email.message)}
+          {t(errors.email.message as ParseKeys)}
         </p>
       )}
 
@@ -73,7 +75,7 @@ export function SignupForm() {
       />
       {errors.password?.message && (
         <p data-testid="signup-password-error" role="alert">
-          {t(errors.password.message)}
+          {t(errors.password.message as ParseKeys)}
         </p>
       )}
 
