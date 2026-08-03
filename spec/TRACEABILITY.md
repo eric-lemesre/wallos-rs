@@ -2,7 +2,7 @@
 
 # Matrice de traçabilité des exigences
 
-Total : **73** exigences — 44 verified · 1 implemented · 28 draft.
+Total : **73** exigences — 45 verified · 1 implemented · 27 draft.
 
 Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et [`spec/requirements/`](requirements/). Régénérer avec `cargo xtask trace --write`.
 
@@ -47,7 +47,7 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 | ID | Titre | Criticité | Statut |
 |----|-------|-----------|--------|
 | `REQ-I18N-001` | Choix et persistance de la langue | medium | ✅ verified |
-| `REQ-I18N-002` | Absence de chaîne littérale dans le code | medium | ⚪ draft |
+| `REQ-I18N-002` | Absence de chaîne littérale dans le code | medium | ✅ verified |
 | `REQ-I18N-003` | Formats de date et de nombre localisés | medium | ⚪ draft |
 | `REQ-I18N-004` | Repli sur la langue de référence | low | ⚪ draft |
 
