@@ -179,7 +179,7 @@ depends_on: [REQ-AUT-001]
 id: REQ-I18N-002
 title: Absence de chaîne littérale dans le code
 domain: i18n
-status: draft
+status: verified
 criticality: medium
 layer: [ui]
 e2e: n-a
