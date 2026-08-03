@@ -252,9 +252,7 @@ mod trace {
             println!("  {status}: {count}");
         }
 
-        if write
-            && let Err(e) = write_artifacts(root, reqs, &ordered)
-        {
+        if write && let Err(e) = write_artifacts(root, reqs, &ordered) {
             eprintln!("TRC-08: cannot write traceability artifacts: {e}");
             exit = 1;
         }
@@ -307,12 +305,17 @@ mod trace {
         let mut by_domain: std::collections::BTreeMap<String, Vec<&yaml_rust2::Yaml>> =
             std::collections::BTreeMap::new();
         for req in reqs {
-            let domain = req["domain"].as_str().unwrap_or("(sans domaine)").to_string();
+            let domain = req["domain"]
+                .as_str()
+                .unwrap_or("(sans domaine)")
+                .to_string();
             by_domain.entry(domain).or_default().push(req);
         }
 
         let mut md = String::new();
-        md.push_str("<!-- GÉNÉRÉ par `cargo xtask trace --write` — NE PAS ÉDITER À LA MAIN. -->\n\n");
+        md.push_str(
+            "<!-- GÉNÉRÉ par `cargo xtask trace --write` — NE PAS ÉDITER À LA MAIN. -->\n\n",
+        );
         md.push_str("# Matrice de traçabilité des exigences\n\n");
         md.push_str(&format!("Total : **{total}** exigences — "));
         md.push_str(&message);
