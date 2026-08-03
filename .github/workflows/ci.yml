@@ -38,6 +38,10 @@ jobs:
 
       - name: traceability
         run: cargo xtask trace
+      - name: traceability artifacts drift
+        run: |
+          cargo xtask trace --write
+          git diff --exit-code -- spec/trace-badge.json spec/TRACEABILITY.md
       - name: lint-money
         run: cargo xtask lint-money
       - name: lint-clock
