@@ -3,10 +3,12 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
+import type { ParseKeys } from "i18next";
 
 import { api } from "../api/client";
 import type { components } from "../api/client";
 import { MIN_PASSWORD_LENGTH, isCompromised } from "../auth/passwordPolicy";
+import { tKey } from "../i18n/keys";
 
 /**
  * Schéma du changement de mot de passe. Messages = clés i18n (REQ-I18N-002). La politique du
@@ -14,11 +16,11 @@ import { MIN_PASSWORD_LENGTH, isCompromised } from "../auth/passwordPolicy";
  * (REQ-AUT-003) ; le serveur reste l'autorité.
  */
 const changePasswordSchema = z.object({
-  current_password: z.string().min(1, "changePassword.validation.currentRequired"),
+  current_password: z.string().min(1, tKey("changePassword.validation.currentRequired")),
   new_password: z
     .string()
-    .min(MIN_PASSWORD_LENGTH, "changePassword.validation.newTooShort")
-    .refine((pw) => !isCompromised(pw), "changePassword.validation.newCompromised"),
+    .min(MIN_PASSWORD_LENGTH, tKey("changePassword.validation.newTooShort"))
+    .refine((pw) => !isCompromised(pw), tKey("changePassword.validation.newCompromised")),
 });
 
 type ChangePasswordValues = z.infer<typeof changePasswordSchema>;
@@ -70,7 +72,7 @@ export function ChangePasswordForm() {
       />
       {errors.current_password?.message && (
         <p data-testid="change-password-current-error" role="alert">
-          {t(errors.current_password.message)}
+          {t(errors.current_password.message as ParseKeys)}
         </p>
       )}
 
@@ -83,7 +85,7 @@ export function ChangePasswordForm() {
       />
       {errors.new_password?.message && (
         <p data-testid="change-password-new-error" role="alert">
-          {t(errors.new_password.message)}
+          {t(errors.new_password.message as ParseKeys)}
         </p>
       )}
 

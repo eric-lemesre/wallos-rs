@@ -3,16 +3,18 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
+import type { ParseKeys } from "i18next";
 
 import { api } from "../api/client";
+import { tKey } from "../i18n/keys";
 
 /**
  * Schéma du formulaire de connexion. Messages en clés i18n (REQ-I18N-002). Aucune règle de
  * politique ici : la connexion ne juge pas la force du mot de passe (REQ-AUT-002).
  */
 const loginSchema = z.object({
-  email: z.string().email("login.validation.emailInvalid"),
-  password: z.string().min(1, "login.validation.passwordRequired"),
+  email: z.string().email(tKey("login.validation.emailInvalid")),
+  password: z.string().min(1, tKey("login.validation.passwordRequired")),
 });
 
 type LoginValues = z.infer<typeof loginSchema>;
@@ -64,7 +66,7 @@ export function LoginForm() {
       />
       {errors.email?.message && (
         <p data-testid="login-email-error" role="alert">
-          {t(errors.email.message)}
+          {t(errors.email.message as ParseKeys)}
         </p>
       )}
 

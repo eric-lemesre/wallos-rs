@@ -9,6 +9,7 @@
 //! - `cargo xtask authz-coverage` : 3 tests d'autorisation par operation_id
 //! - `cargo xtask lint-money` : interdiction des flottants monétaires
 //! - `cargo xtask lint-clock` : interdiction des accès à l'horloge dans `core` (REQ-STA-008)
+//! - `cargo xtask lint-i18n` : interdiction des chaînes d'affichage littérales dans `frontend/ui` (REQ-I18N-002)
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -45,6 +46,8 @@ enum Command {
     LintMoney,
     /// Interdit les accès directs à l'horloge système dans `core`.
     LintClock,
+    /// Interdit les chaînes d'affichage littérales dans `frontend/ui` (REQ-I18N-002).
+    LintI18n,
 }
 
 fn workspace_root() -> PathBuf {
@@ -66,6 +69,7 @@ fn main() {
         Command::AuthzCoverage => authz_coverage::run(&root),
         Command::LintMoney => lint_money::run(&root),
         Command::LintClock => lint_clock::run(&root),
+        Command::LintI18n => lint_i18n::run(&root),
     };
     std::process::exit(code);
 }
@@ -696,6 +700,135 @@ mod lint_clock {
                 eprintln!("  {v}");
             }
             1
+        }
+    }
+}
+
+/// Porte REQ-I18N-002 (critère 1) : aucune chaîne d'affichage littérale dans `frontend/ui`.
+///
+/// Complément de la vérification statique des clés (critère 2, assurée par le typage i18next capté par
+/// `tsc`). On scanne les composants `.tsx` (hors `*.test.tsx`) à la recherche de deux motifs à haute
+/// valeur de signal, calibrés pour **zéro faux positif** sur du code conforme :
+/// - un **nœud texte JSX** : du texte alphabétique entre `>` et une balise fermante `</` — ce qui
+///   exclut les génériques TypeScript (`Promise<void>`) et les expressions `{t("…")}` ;
+/// - un **attribut d'affichage** littéral (`title`/`placeholder`/`alt`/`aria-label`) valué par une
+///   chaîne entre guillemets contenant des lettres — ce qui exclut la forme `attr={…}`.
+///
+/// Heuristique volontairement conservatrice (analyse ligne à ligne, pas un parseur JSX) : elle attrape
+/// les régressions les plus courantes sans bloquer le code légitime. Voir ADR 0026.
+mod lint_i18n {
+    use regex::Regex;
+    use std::path::Path;
+    use walkdir::WalkDir;
+
+    /// Un littéral d'affichage repéré dans un composant.
+    #[derive(Debug, PartialEq, Eq)]
+    struct Violation {
+        line: usize,
+        kind: &'static str,
+        text: String,
+    }
+
+    /// Analyse un fichier `.tsx` (fonction pure, testable).
+    fn scan(content: &str) -> Vec<Violation> {
+        let text_node = Regex::new(r#">\s*(\p{L}[\p{L} .,'!?:()\-]*?)\s*</"#).expect("valid regex");
+        let attr =
+            Regex::new(r#"\b(?:title|placeholder|alt|aria-label)\s*=\s*"([^"]*\p{L}{2,}[^"]*)""#)
+                .expect("valid regex");
+        let mut out = Vec::new();
+        for (i, line) in content.lines().enumerate() {
+            if let Some(m) = text_node.captures(line) {
+                out.push(Violation {
+                    line: i + 1,
+                    kind: "texte JSX",
+                    text: m[1].trim().to_string(),
+                });
+            }
+            if let Some(m) = attr.captures(line) {
+                out.push(Violation {
+                    line: i + 1,
+                    kind: "attribut",
+                    text: m[1].to_string(),
+                });
+            }
+        }
+        out
+    }
+
+    pub fn run(root: &Path) -> i32 {
+        let ui_src = root.join("frontend/ui/src");
+        let mut violations = Vec::new();
+        for entry in WalkDir::new(&ui_src)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| {
+                let p = e.path();
+                p.extension().and_then(|s| s.to_str()) == Some("tsx")
+                    && !p.to_string_lossy().ends_with(".test.tsx")
+            })
+        {
+            let path = entry.path();
+            let content = std::fs::read_to_string(path).unwrap_or_default();
+            for v in scan(&content) {
+                violations.push(format!(
+                    "{}:{}: [{}] {}",
+                    path.display(),
+                    v.line,
+                    v.kind,
+                    v.text
+                ));
+            }
+        }
+
+        if violations.is_empty() {
+            println!("No literal display strings in frontend/ui (REQ-I18N-002).");
+            0
+        } else {
+            eprintln!(
+                "Literal display strings found in frontend/ui — wrap them in t(...) (REQ-I18N-002):"
+            );
+            for v in violations {
+                eprintln!("  {v}");
+            }
+            1
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::scan;
+
+        #[test]
+        fn flags_jsx_text_literal() {
+            let v = scan("      <h2>Bonjour</h2>");
+            assert_eq!(v.len(), 1);
+            assert_eq!(v[0].text, "Bonjour");
+            assert_eq!(v[0].kind, "texte JSX");
+        }
+
+        #[test]
+        fn flags_display_attribute_literal() {
+            let v = scan(r#"<input placeholder="Rechercher" />"#);
+            assert_eq!(v.len(), 1);
+            assert_eq!(v[0].text, "Rechercher");
+            assert_eq!(v[0].kind, "attribut");
+        }
+
+        #[test]
+        fn ignores_translated_text_and_expressions() {
+            assert!(scan(r#"<h2>{t("evolution.title")}</h2>"#).is_empty());
+        }
+
+        #[test]
+        fn ignores_typescript_generics() {
+            // `Promise<void>` n'est pas un nœud texte JSX : le `<` n'est pas une balise fermante.
+            assert!(scan("  async function load(): Promise<void> {").is_empty());
+        }
+
+        #[test]
+        fn ignores_non_display_attributes() {
+            // data-testid / role / type ne portent pas d'affichage : jamais signalés.
+            assert!(scan(r#"<button type="submit" data-testid="go" role="alert">"#).is_empty());
         }
     }
 }
