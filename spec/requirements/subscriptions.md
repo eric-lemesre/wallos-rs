@@ -358,7 +358,7 @@ depends_on: [REQ-SUB-001]
 id: REQ-SUB-016
 title: Import et export des données
 domain: subscriptions
-status: draft
+status: verified
 criticality: medium
 layer: [core, api, ui]
 e2e: required

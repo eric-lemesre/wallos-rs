@@ -2,7 +2,7 @@
 
 # Matrice de traçabilité des exigences
 
-Total : **73** exigences — 45 verified · 1 implemented · 27 draft.
+Total : **73** exigences — 46 verified · 1 implemented · 26 draft.
 
 Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et [`spec/requirements/`](requirements/). Régénérer avec `cargo xtask trace --write`.
 
@@ -113,7 +113,7 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 | `REQ-SUB-013` | Calcul de la prochaine échéance pour les cycles jour, semaine et année | high | ✅ verified |
 | `REQ-SUB-014` | Rattrapage des échéances passées | high | ⚪ draft |
 | `REQ-SUB-015` | Logo d'abonnement | low | ✅ verified |
-| `REQ-SUB-016` | Import et export des données | medium | ⚪ draft |
+| `REQ-SUB-016` | Import et export des données | medium | ✅ verified |
 | `REQ-SUB-017` | Rattachement à un payeur | medium | ⚪ draft |
 
 ## sync
