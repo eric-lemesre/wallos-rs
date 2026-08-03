@@ -27,6 +27,9 @@ enum Command {
         /// Inclure la couverture E2E.
         #[arg(long)]
         e2e: bool,
+        /// Régénère les artefacts dérivés (badge shields.io + matrice Markdown).
+        #[arg(long)]
+        write: bool,
     },
     /// Génère ou vérifie l'OpenAPI.
     Openapi {
@@ -57,7 +60,7 @@ fn main() {
     let root = workspace_root();
 
     let code = match cli.command {
-        Command::Trace { e2e } => trace::run(&root, e2e),
+        Command::Trace { e2e, write } => trace::run(&root, e2e, write),
         Command::Openapi { check } => openapi::run(&root, check),
         Command::ApiCoverage => api_coverage::run(&root),
         Command::AuthzCoverage => authz_coverage::run(&root),
@@ -73,7 +76,7 @@ mod trace {
 
     use yaml_rust2::YamlLoader;
 
-    pub fn run(root: &Path, _e2e: bool) -> i32 {
+    pub fn run(root: &Path, _e2e: bool, write: bool) -> i32 {
         let lock_path = root.join("spec/requirements.lock.yaml");
         let lock_content = match std::fs::read_to_string(&lock_path) {
             Ok(c) => c,
@@ -225,16 +228,121 @@ mod trace {
             let status = req["status"].as_str().unwrap_or("draft");
             *by_status.entry(status).or_insert(0) += 1;
         }
+        // Ordre déterministe pour l'affichage ET les artefacts dérivés (le badge et la matrice
+        // doivent être stables entre deux générations, sinon la porte de drift déclenche à tort).
+        const STATUS_ORDER: [&str; 4] = ["verified", "implemented", "accepted", "draft"];
+        let mut ordered: Vec<(&str, usize)> = Vec::new();
+        for s in STATUS_ORDER {
+            if let Some(&c) = by_status.get(s) {
+                ordered.push((s, c));
+            }
+        }
+        // Statuts hors nomenclature connue (robustesse) : ajoutés à la fin, triés.
+        let mut extra: Vec<(&str, usize)> = by_status
+            .iter()
+            .filter(|(s, _)| !STATUS_ORDER.contains(*s))
+            .map(|(s, c)| (*s, *c))
+            .collect();
+        extra.sort();
+        ordered.extend(extra);
+
         println!("=== Traceability summary ===");
         println!("Total requirements: {}", reqs.len());
-        for (status, count) in by_status {
+        for (status, count) in &ordered {
             println!("  {status}: {count}");
+        }
+
+        if write
+            && let Err(e) = write_artifacts(root, reqs, &ordered)
+        {
+            eprintln!("TRC-08: cannot write traceability artifacts: {e}");
+            exit = 1;
         }
 
         if exit == 0 {
             println!("Traceability OK.");
         }
         exit
+    }
+
+    /// Régénère les deux artefacts dérivés du lock de traçabilité :
+    /// - `spec/trace-badge.json` : badge shields.io au schéma « endpoint » (rendu automatique) ;
+    /// - `spec/TRACEABILITY.md` : matrice lisible, groupée par domaine.
+    ///
+    /// Tout est dérivé de `spec/requirements.lock.yaml`, déjà validé comme synchrone avec les sources
+    /// par `run`. Aucun flottant (couleur calculée en pourcentage entier).
+    fn write_artifacts(
+        root: &Path,
+        reqs: &[yaml_rust2::Yaml],
+        ordered: &[(&str, usize)],
+    ) -> std::io::Result<()> {
+        let total: usize = ordered.iter().map(|(_, c)| c).sum();
+        let verified = ordered
+            .iter()
+            .find(|(s, _)| *s == "verified")
+            .map_or(0, |(_, c)| *c);
+
+        // --- Badge shields.io (schéma « endpoint ») ---
+        let message = ordered
+            .iter()
+            .map(|(s, c)| format!("{c} {s}"))
+            .collect::<Vec<_>>()
+            .join(" · ");
+        // `checked_div` couvre le cas `total == 0` (aucune exigence) sans branche explicite.
+        let pct = (verified * 100).checked_div(total).unwrap_or(0);
+        let color = match pct {
+            100 => "brightgreen",
+            75..=99 => "green",
+            50..=74 => "yellowgreen",
+            25..=49 => "yellow",
+            _ => "orange",
+        };
+        // `{message:?}` produit une chaîne JSON échappée (guillemets/backslash) sans travail manuel.
+        let badge = format!(
+            "{{\n  \"schemaVersion\": 1,\n  \"label\": \"exigences\",\n  \"message\": {message:?},\n  \"color\": \"{color}\"\n}}\n"
+        );
+        std::fs::write(root.join("spec/trace-badge.json"), badge)?;
+
+        // --- Matrice Markdown groupée par domaine ---
+        let mut by_domain: std::collections::BTreeMap<String, Vec<&yaml_rust2::Yaml>> =
+            std::collections::BTreeMap::new();
+        for req in reqs {
+            let domain = req["domain"].as_str().unwrap_or("(sans domaine)").to_string();
+            by_domain.entry(domain).or_default().push(req);
+        }
+
+        let mut md = String::new();
+        md.push_str("<!-- GÉNÉRÉ par `cargo xtask trace --write` — NE PAS ÉDITER À LA MAIN. -->\n\n");
+        md.push_str("# Matrice de traçabilité des exigences\n\n");
+        md.push_str(&format!("Total : **{total}** exigences — "));
+        md.push_str(&message);
+        md.push_str(".\n\n");
+        md.push_str(
+            "Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et \
+             [`spec/requirements/`](requirements/). Régénérer avec `cargo xtask trace --write`.\n\n",
+        );
+        for (domain, items) in &by_domain {
+            md.push_str(&format!("## {domain}\n\n"));
+            md.push_str("| ID | Titre | Criticité | Statut |\n");
+            md.push_str("|----|-------|-----------|--------|\n");
+            for req in items {
+                let id = req["id"].as_str().unwrap_or("?");
+                let title = req["title"].as_str().unwrap_or("").replace('|', "\\|");
+                let crit = req["criticality"].as_str().unwrap_or("-");
+                let status = req["status"].as_str().unwrap_or("draft");
+                let rendered = match status {
+                    "verified" => "✅ verified",
+                    "implemented" => "🟡 implemented",
+                    "accepted" => "🔵 accepted",
+                    "draft" => "⚪ draft",
+                    other => other,
+                };
+                md.push_str(&format!("| `{id}` | {title} | {crit} | {rendered} |\n"));
+            }
+            md.push('\n');
+        }
+        std::fs::write(root.join("spec/TRACEABILITY.md"), md)?;
+        Ok(())
     }
 
     fn has_annotation(root: &Path, id: &str, kind: &str) -> bool {
