@@ -175,5 +175,17 @@
     "reload": "Reload",
     "error": "Could not load the cost evolution",
     "incomplete": "Partial series: some subscriptions could not be converted"
+  },
+  "importExport": {
+    "title": "Import & export",
+    "export": "Export data",
+    "exportError": "Could not export your data",
+    "importLabel": "Paste an export to import",
+    "import": "Import data",
+    "importError": "Could not import the data",
+    "invalidJson": "The text is not valid JSON",
+    "created": "Created: {{categories}} categories, {{payment_methods}} payment methods, {{subscriptions}} subscriptions",
+    "rejectedCount": "{{count}} rejected row",
+    "rejectedCount_other": "{{count}} rejected rows"
   }
 }

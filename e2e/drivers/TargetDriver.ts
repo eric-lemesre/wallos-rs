@@ -531,4 +531,40 @@ export class TargetDriver implements AppDriver, Harness {
       .waitFor({ state: "visible", timeout: 5000 });
     return (await this.page.getByTestId("exchange-total").textContent()) ?? "";
   }
+
+  // --- Import / export des données (REQ-SUB-016) ---
+
+  async exportData(): Promise<void> {
+    await this.page.getByTestId("export-button").click();
+  }
+
+  async exportedBundle(): Promise<string> {
+    const output = this.page.getByTestId("export-output");
+    try {
+      await output.waitFor({ state: "visible", timeout: 5000 });
+      return await output.inputValue();
+    } catch {
+      return "";
+    }
+  }
+
+  async importData(bundle: string): Promise<void> {
+    await this.page.getByTestId("import-input").fill(bundle);
+    await this.page.getByTestId("import-button").click();
+  }
+
+  async importRejectedCount(): Promise<number> {
+    return this.page.getByTestId("import-rejected").count();
+  }
+
+  async importCreatedShown(): Promise<boolean> {
+    try {
+      await this.page
+        .getByTestId("import-created")
+        .waitFor({ state: "visible", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }

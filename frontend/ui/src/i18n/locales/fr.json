@@ -175,5 +175,17 @@
     "reload": "Recharger",
     "error": "Impossible de charger l'évolution du coût",
     "incomplete": "Série partielle : certains abonnements n'ont pas pu être convertis"
+  },
+  "importExport": {
+    "title": "Import et export",
+    "export": "Exporter les données",
+    "exportError": "Impossible d'exporter vos données",
+    "importLabel": "Coller un export à importer",
+    "import": "Importer les données",
+    "importError": "Impossible d'importer les données",
+    "invalidJson": "Le texte n'est pas un JSON valide",
+    "created": "Créées : {{categories}} catégories, {{payment_methods}} moyens de paiement, {{subscriptions}} abonnements",
+    "rejectedCount": "{{count}} ligne rejetée",
+    "rejectedCount_other": "{{count}} lignes rejetées"
   }
 }

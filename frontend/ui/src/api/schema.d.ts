@@ -156,6 +156,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Exporte toutes les données du foyer appelant dans une enveloppe réimportable (REQ-SUB-016). */
+        get: operations["exportData"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -167,6 +184,28 @@ export interface paths {
         get: operations["getHealth"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Importe une enveloppe dans le foyer appelant et renvoie un rapport (REQ-SUB-016).
+         * @description Ordre de traitement : devise de référence, puis catégories et moyens de paiement (référencés par
+         *     les abonnements), puis abonnements. Chaque ligne invalide est **rejetée avec sa raison** ; les
+         *     lignes valides sont créées.
+         */
+        post: operations["importData"];
         delete?: never;
         options?: never;
         head?: never;
@@ -718,6 +757,31 @@ export interface components {
             email: string;
         };
         /**
+         * @description Enveloppe complète des données d'un foyer (REQ-SUB-016), pour l'export **et** l'import.
+         *
+         *     Réutilise les requêtes de création (`id` préservé, REQ-SYN-001) : un export réimporté dans un
+         *     compte vierge reconstruit l'état **à l'identique** (mêmes identifiants, donc mêmes liaisons
+         *     catégorie/moyen de paiement ; les échéances, dérivées, sont recalculées à la lecture). Les devises
+         *     ne sont **pas** des entités : elles proviennent d'un référentiel figé (REQ-CUR-002) et sont
+         *     seulement **validées** à l'import (une devise inconnue rejette la ligne). La devise de référence du
+         *     foyer est portée par `reference_currency`.
+         */
+        DataBundle: {
+            /** @description Catégories du foyer. */
+            categories?: components["schemas"]["CreateCategoryRequest"][];
+            /** @description Moyens de paiement du foyer. */
+            payment_methods?: components["schemas"]["CreatePaymentMethodRequest"][];
+            /** @description Devise de référence du foyer (code ISO 4217), le cas échéant. */
+            reference_currency?: string | null;
+            /** @description Abonnements du foyer. */
+            subscriptions?: components["schemas"]["CreateSubscriptionRequest"][];
+            /**
+             * Format: int32
+             * @description Version du format (doit valoir [`DATA_BUNDLE_VERSION`]).
+             */
+            version: number;
+        };
+        /**
          * @description Résumé d'un appareil appairé, pour la liste de gestion (REQ-AUT-006).
          *
          *     `id` (UUID) et `last_seen_at` (RFC 3339) sont sérialisés en chaînes pour rester indépendants des
@@ -753,6 +817,34 @@ export interface components {
             status: string;
             /** @description Version semver. */
             version: string;
+        };
+        /** @description Décompte des entités effectivement créées par un import (REQ-SUB-016). */
+        ImportCounts: {
+            /**
+             * Format: int32
+             * @description Catégories créées.
+             */
+            categories: number;
+            /**
+             * Format: int32
+             * @description Moyens de paiement créés.
+             */
+            payment_methods: number;
+            /**
+             * Format: int32
+             * @description Abonnements créés.
+             */
+            subscriptions: number;
+        };
+        /**
+         * @description Rapport d'import (REQ-SUB-016) : ce qui a été créé et les lignes **rejetées** (jamais un échec
+         *     global silencieux — chaque ligne invalide est listée avec sa raison).
+         */
+        ImportReport: {
+            /** @description Décompte des entités créées. */
+            imported: components["schemas"]["ImportCounts"];
+            /** @description Lignes rejetées, dans l'ordre de traitement. */
+            rejected: components["schemas"]["RejectedRow"][];
         };
         /**
          * @description Langue de l'utilisateur (REQ-I18N-001), en **réponse** de lecture.
@@ -876,6 +968,15 @@ export interface components {
              * @example EUR
              */
             currency: string;
+        };
+        /** @description Une ligne rejetée à l'import, avec sa raison (REQ-SUB-016, critère #2). */
+        RejectedRow: {
+            /** @description Nature de la ligne : `category`, `payment_method`, `subscription` ou `reference_currency`. */
+            kind: string;
+            /** @description Raison du rejet (champ fautif + message, ou règle d'unicité violée). */
+            reason: string;
+            /** @description Référence permettant de localiser la ligne (nom ou identifiant fourni). */
+            reference: string;
         };
         /** @description Requête de renommage d'une catégorie (REQ-CAT-001). */
         RenameCategoryRequest: {
@@ -1434,6 +1535,44 @@ export interface operations {
             };
         };
     };
+    exportData: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Enveloppe complète des données du foyer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataBundle"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     getHealth: {
         parameters: {
             query?: never;
@@ -1450,6 +1589,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    importData: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DataBundle"];
+            };
+        };
+        responses: {
+            /** @description Rapport d'import (créées + rejetées) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportReport"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version de format non prise en charge */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
         };
