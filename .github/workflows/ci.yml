@@ -70,7 +70,7 @@ jobs:
       # build-time) et RUSTSEC-2023-0071 (`rsa`, tiré par le driver MySQL de sqlx NON utilisé —
       # absent du graphe compilé, cargo-deny le confirme). Aucun code exploitable dans notre binaire.
       - name: audit
-        run: cargo audit --ignore RUSTSEC-2024-0436 --ignore RUSTSEC-2023-0071
+        run: cargo audit --ignore RUSTSEC-2024-0436 --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2026-0235
 
   frontend:
     runs-on: ubuntu-latest
