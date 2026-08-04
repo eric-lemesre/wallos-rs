@@ -10,6 +10,11 @@ ignore = [
     # build-time (aucune surface runtime), tirée uniquement par `utoipa-axum` (dernière version).
     # Décision tracée : docs/adr/0020-ignore-rustsec-2024-0436-paste.md.
     "RUSTSEC-2024-0436",
+    # `rkyv 0.7` (RUSTSEC-2026-0235) — lecture hors-bornes à la désérialisation d'archives rkyv.
+    # Dépendance **optionnelle et non compilée** de `rust_decimal` (`cargo tree -i rkyv` ne remonte
+    # rien) : nous n'utilisons jamais rkyv. Aucune surface exploitable. Fix = rkyv 0.8 (majeure,
+    # incompatible avec rust_decimal 1.37). Décision tracée : docs/adr/0029-ignore-rustsec-2026-0235-rkyv.md.
+    "RUSTSEC-2026-0235",
 ]
 
 [licenses]
