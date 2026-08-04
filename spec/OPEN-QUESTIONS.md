@@ -32,6 +32,10 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
 - **Décision** : C. Le foyer est l'unité de propriété et d'isolation (`household_id` non nullable) ;
   ses membres ont lecture + écriture. Un payeur est un membre du foyer. Voir
   `docs/adr/0012-household-shared-ownership.md`. Tension avec l'oracle legacy signalée (OQ-007).
+- **Addendum (2026-08-04, OQ-010)** : pour REQ-SUB-017, un **payeur est une étiquette nominative** (table
+  `payers`, sans compte ni login) — le multi-membre avec accès (option C originale) n'est **pas** un
+  préalable et reste hors périmètre tant qu'aucune exigence ne l'impose. Le foyer reste l'unité
+  d'isolation (mono-utilisateur en pratique). Un ADR SUB-017 formalisera ce modèle payeur.
 - **Statut** : resolved
 
 ---
@@ -170,7 +174,13 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   deux se feront quand l'oracle legacy sera câblé. Nécessite aussi de clarifier si le **multi-membre du
   foyer** (OQ-002 décision C) est réellement à construire pour SUB-017 ou si un payeur reste une
   étiquette nominative sur le foyer.
-- **Statut** : open
+- **Décision** : A (responsable, 2026-08-04). **Dépendance inversée** : SUB-017 `depends_on: [SUB-001]`,
+  STA-004 `depends_on: [STA-001, CAT-001, SUB-017]` — ordre : SUB-017 puis STA-004, livrés ensemble. Le
+  **payeur est une étiquette nominative** (table `payers` : id, household_id, name ; pas de compte/login)
+  — révise OQ-002 vers l'option A pour ce périmètre (voir addendum OQ-002). L'**oracle legacy est câblé**
+  pour ces deux exigences (1er du projet) : LegacyDriver + conteneur Wallos 5.4.2 en CI, capture de la
+  répartition et du comportement de suppression de payeur.
+- **Statut** : resolved
 
 ---
 
