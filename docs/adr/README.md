@@ -45,6 +45,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0027 | SUB-016 import/export (fusion catégories, devises validées) | 🔴 |
 | 0028 | AUT-005 re-cadré en jeton d'API porteur (natif retiré) | 🟡 |
 | 0029 | Ignore RUSTSEC-2026-0235 (`rkyv` non compilé) | ⚪ |
+| 0030 | SUB-017 payeur (étiquette légère, refus si référencé) | 🔴 |
 
 ## À relire en priorité aujourd'hui (🔴)
 

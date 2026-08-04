@@ -12,6 +12,7 @@ import { ImportExportCard } from "../../../ui/src/components/ImportExportCard";
 import { SubscriptionForm } from "../../../ui/src/components/SubscriptionForm";
 import { SubscriptionsList } from "../../../ui/src/components/SubscriptionsList";
 import { PaymentMethodsList } from "../../../ui/src/components/PaymentMethodsList";
+import { PayersList } from "../../../ui/src/components/PayersList";
 import { CurrenciesList } from "../../../ui/src/components/CurrenciesList";
 import { ReferenceCurrencySetting } from "../../../ui/src/components/ReferenceCurrencySetting";
 import { LanguageSetting } from "../../../ui/src/components/LanguageSetting";
@@ -38,6 +39,7 @@ if (root) {
           <ReferenceCurrencySetting />
           <CategoriesList />
           <PaymentMethodsList />
+          <PayersList />
           <NextDueCard />
           <UpcomingPaymentsCard />
           <CostEvolutionCard />

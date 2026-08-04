@@ -381,7 +381,7 @@ depends_on: [REQ-SUB-001, REQ-CAT-001]
 id: REQ-SUB-017
 title: Rattachement à un payeur
 domain: subscriptions
-status: draft
+status: verified
 criticality: medium
 layer: [core, api, ui]
 e2e: required
