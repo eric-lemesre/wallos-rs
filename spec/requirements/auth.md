@@ -101,23 +101,24 @@ depends_on: [REQ-AUT-002]
 ```yaml
 ---
 id: REQ-AUT-005
-title: Jeton d'appareil pour les modalités desktop et mobile
+title: Jeton d'appareil (API porteur, révocable)
 domain: auth
-status: implemented
+status: verified
 criticality: high
 layer: [api, ui]
 e2e: required
 oracle: design
 rationale: >
-  Les coquilles natives ne peuvent pas s'appuyer sur un cookie de navigateur ; chaque appareil
-  doit être révocable indépendamment.
+  Un client d'API (hors navigateur) ne peut pas s'appuyer sur un cookie de session ; chaque appareil
+  obtient un jeton porteur propre, révocable indépendamment. (Re-cadré : les coquilles natives sont
+  hors périmètre, OQ-009/OQ-011 ; le stockage `secureStore` natif est retiré. Voir ADR 0028.)
 acceptance:
-  - given: une authentification depuis une coquille native
+  - given: une authentification via l'API de session d'appareil (createDeviceSession)
     when: elle réussit
-    then: un jeton propre à l'appareil est émis, associé à un libellé et à une date de dernière activité
+    then: un jeton porteur propre à l'appareil est émis, associé à un libellé et à une date de dernière activité
   - given: un jeton d'appareil
-    when: il est stocké côté client
-    then: il passe exclusivement par PlatformAdapter.secureStore, jamais par localStorage
+    when: il est présenté en en-tête `Authorization: Bearer`
+    then: il authentifie la requête sans cookie et reste révocable indépendamment (REQ-AUT-006)
 depends_on: [REQ-AUT-002]
 ---
 ```

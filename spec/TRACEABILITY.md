@@ -2,7 +2,7 @@
 
 # Matrice de traçabilité des exigences
 
-Total : **73** exigences — 46 verified · 1 implemented · 26 draft.
+Total : **73** exigences — 47 verified · 26 draft.
 
 Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et [`spec/requirements/`](requirements/). Régénérer avec `cargo xtask trace --write`.
 
@@ -14,7 +14,7 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 | `REQ-AUT-002` | Authentification par e-mail et mot de passe | high | ✅ verified |
 | `REQ-AUT-003` | Politique de mot de passe | medium | ✅ verified |
 | `REQ-AUT-004` | Session web par jeton opaque en cookie | high | ✅ verified |
-| `REQ-AUT-005` | Jeton d'appareil pour les modalités desktop et mobile | high | 🟡 implemented |
+| `REQ-AUT-005` | Jeton d'appareil (API porteur, révocable) | high | ✅ verified |
 | `REQ-AUT-006` | Liste et révocation des appareils | high | ✅ verified |
 | `REQ-AUT-007` | Changement de mot de passe | high | ✅ verified |
 | `REQ-AUT-008` | Limitation du taux de tentatives d'authentification | high | ✅ verified |
