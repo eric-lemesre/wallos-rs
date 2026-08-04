@@ -127,3 +127,62 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   `spec/requirements/*.md` + le lock ; jamais de basculement silencieux. Voir
   `docs/adr/0016-legacy-non-reproducible-reclassify-to-design.md`.
 - **Statut** : resolved
+
+---
+
+## OQ-009 — Périmètre des coquilles natives (desktop / mobile)
+- **Bloque** : le critère « stocké via `PlatformAdapter.secureStore` » de REQ-AUT-005, la partie
+  desktop de REQ-AUT-006/007, la partie « capacités Tauri » de REQ-SEC-006, le niveau e2e L2.
+- **Contexte** : OQ-006 et OQ-008 avaient **reporté** le natif ; la question restait « quand ». Décision
+  stratégique du responsable (2026-08-04) : la cible est la **parité** avec l'application d'origine, et
+  **Wallos n'a ni desktop ni mobile natifs**. Le natif sort donc du périmètre de parité — il n'est pas
+  reporté, il est **hors périmètre** jusqu'à une éventuelle divergence fonctionnelle ultérieure.
+- **Décision** : **pas de coquille native** (ni desktop ni mobile) pour la parité. La modalité mobile
+  reste la PWA responsive (confirme OQ-006). **Supersède** le volet « reporté » d'OQ-008 : le stockage
+  natif `secureStore` et l'e2e L2 desktop sont **retirés**, non différés.
+- **Conséquences à traiter** (suivi ci-dessous, ne pas exécuter sans arbitrage) :
+  1. **REQ-AUT-005** : son critère #2 (`secureStore`, jamais `localStorage`) devient sans objet →
+     re-cadrer l'exigence en « jeton d'API porteur (Bearer), révocable » (capacité web/API, déjà
+     `implemented` et testée au niveau API), ou la `deprecated` si sans usage. Voir OQ-011.
+  2. **REQ-SEC-006** : ne conserver que le volet **CSP web** ; retirer le critère « capacités Tauri ».
+  3. **Périmètre mort** : crate `crates/desktop` (Tauri), règle R7 (`@tauri-apps` hors `shells/`),
+     `frontend/shells/{desktop,mobile}`, `frontend/platform` → à `deprecated`/supprimer par un ADR de
+     nettoyage. `crates/client` (SDK Rust) perd son consommateur desktop : à réévaluer.
+- **Statut** : resolved (décision) — conséquences 1–3 **à ordonnancer**
+
+---
+
+## OQ-010 — Dépendance circulaire REQ-STA-004 ↔ REQ-SUB-017 (axe payeur)
+- **Bloque** : REQ-STA-004, REQ-SUB-017 (toutes deux `oracle: legacy`, en attente de l'oracle Wallos).
+- **Contexte** : REQ-STA-004 (« répartition par catégorie **et par payeur** ») a besoin de l'entité
+  **payeur** de REQ-SUB-017 pour son second axe ; or REQ-SUB-017 **déclare** `depends_on: [SUB-001,
+  STA-004]` et son acceptation (« les statistiques par payeur reflètent le rattachement ») s'appuie sur
+  STA-004. La dépendance déclarée est **à l'envers** : le producteur (SUB-017, entité payeur) est marqué
+  dépendant du consommateur (STA-004, agrégat). Livrer STA-004 « axe catégorie seul » laisserait son
+  critère payeur non satisfait → non `verified` (même impasse qu'AUT-005). Rappel : OQ-002 a tranché
+  qu'un payeur est un **membre du foyer** (foyer partagé, lecture+écriture) — le modèle payeur existe
+  conceptuellement mais le multi-membre n'est pas encore construit.
+- **Options** : A) **inverser la dépendance** dans le lock (SUB-017 → fournit l'entité et le
+  rattachement ; STA-004 → en dépend et livre les deux axes), ordre SUB-017 puis STA-004 —
+  B) fusionner les deux exigences en une seule livraison — C) livrer STA-004 axe catégorie et créer une
+  exigence distincte pour l'axe payeur.
+- **Recommandation agent** : A. C'est la correction la plus fidèle à la réalité des dépendances ; les
+  deux se feront quand l'oracle legacy sera câblé. Nécessite aussi de clarifier si le **multi-membre du
+  foyer** (OQ-002 décision C) est réellement à construire pour SUB-017 ou si un payeur reste une
+  étiquette nominative sur le foyer.
+- **Statut** : open
+
+---
+
+## OQ-011 — Devenir de REQ-AUT-005 sans coquille native
+- **Bloque** : promotion de REQ-AUT-005 (`implemented` → `verified`).
+- **Contexte** : conséquence directe d'OQ-009. Le back-end des jetons d'appareil (Bearer, révocable) est
+  livré et testé au niveau API (ADR 0019) ; seul le critère #2 (stockage natif `secureStore`) et le
+  scénario e2e `@REQ-AUT-005` manquaient — or le natif est désormais hors périmètre.
+- **Options** : A) **re-cadrer** REQ-AUT-005 en « jeton d'API porteur, révocable » (retirer le critère
+  natif, ajouter un e2e web couvrant l'émission/révocation via API) → devient `verified` —
+  B) `deprecated` si les jetons Bearer n'ont pas d'usage en parité (à confirmer vs API Wallos) —
+  C) le laisser `implemented` indéfiniment.
+- **Recommandation agent** : A si l'API Wallos expose une notion de clé/jeton (parité), sinon B. Éviter
+  C (dette de statut permanente). ADR obligatoire (met à jour l'exigence + le lock).
+- **Statut** : open
