@@ -437,6 +437,70 @@ export class TargetDriver implements AppDriver, Harness {
     }
   }
 
+  // --- Payeurs (REQ-SUB-017) ---
+
+  async createPayer(name: string): Promise<void> {
+    await this.page.getByTestId("payer-new-name").fill(name);
+    await this.page.getByTestId("payer-create").click();
+  }
+
+  async payerVisible(name: string): Promise<boolean> {
+    try {
+      await this.page
+        .getByTestId("payer-name")
+        .filter({ hasText: name })
+        .first()
+        .waitFor({ state: "visible", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Rattache un abonnement à un payeur (par nom) via l'API, comme le ferait le formulaire. */
+  async attachSubscriptionToPayer(subName: string, payerName: string): Promise<void> {
+    await this.page.evaluate(
+      async ([subName, payerName]) => {
+        const payers = (await (await fetch("/api/v1/payers")).json()) as {
+          id: string;
+          name: string;
+        }[];
+        const payer = payers.find((p) => p.name === payerName);
+        await fetch("/api/v1/subscriptions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: subName,
+            amount: "9.99",
+            currency: "EUR",
+            cycle: { unit: "month", interval: 1 },
+            first_payment: "2030-01-15",
+            payer: payer?.id,
+          }),
+        });
+      },
+      [subName, payerName] as const,
+    );
+  }
+
+  /** Clique « Supprimer » sur la ligne du payeur identifié par son nom (REQ-SUB-017). */
+  async deletePayer(name: string): Promise<void> {
+    const row = this.page.getByTestId("payer-row").filter({ hasText: name });
+    await row.getByTestId(/^payer-delete-/).click();
+  }
+
+  /** Vrai si le refus de suppression (payeur référencé, 409) est affiché (REQ-SUB-017). */
+  async payerDeleteRefused(): Promise<boolean> {
+    try {
+      await this.page
+        .getByTestId("payer-delete-error")
+        .waitFor({ state: "visible", timeout: 5000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   // --- Langue (REQ-I18N-001) ---
 
   async setLanguage(code: string): Promise<void> {

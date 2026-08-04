@@ -12,12 +12,12 @@ use wallos_core::requirement;
 use wallos_proto::{
     AggregateRequest, CategoryDto, ChangePasswordRequest, ConvertedTotalResponse,
     CostEvolutionResponse, CreateAccountRequest, CreateCategoryRequest, CreateDeviceSessionRequest,
-    CreatePaymentMethodRequest, CreateSessionRequest, CreateSubscriptionRequest, CurrencyDto,
-    CurrentUser, DataBundle, DeviceSummary, DeviceToken, HealthResponse, ImportCounts,
-    ImportReport, LanguageResponse, MoneyInput, MonthlyCostPointDto, NextDueRequest,
-    NextDueResponse, PaymentMethodDto, Problem, ReferenceCurrencyDto, RejectedRow,
-    RenameCategoryRequest, RenamePaymentMethodRequest, SetLanguageRequest, SubscriptionDto,
-    SubscriptionListResponse, problem,
+    CreatePayerRequest, CreatePaymentMethodRequest, CreateSessionRequest,
+    CreateSubscriptionRequest, CurrencyDto, CurrentUser, DataBundle, DeviceSummary, DeviceToken,
+    HealthResponse, ImportCounts, ImportReport, LanguageResponse, MoneyInput, MonthlyCostPointDto,
+    NextDueRequest, NextDueResponse, PayerDto, PaymentMethodDto, Problem, ReferenceCurrencyDto,
+    RejectedRow, RenameCategoryRequest, RenamePayerRequest, RenamePaymentMethodRequest,
+    SetLanguageRequest, SubscriptionDto, SubscriptionListResponse, problem,
 };
 use wallos_storage::Db;
 
@@ -28,6 +28,7 @@ pub mod currencies;
 pub mod data;
 pub mod exchange;
 pub mod idempotency;
+pub mod payers;
 pub mod payment_methods;
 pub mod schedule;
 pub mod settings;
@@ -71,6 +72,10 @@ pub mod subscriptions;
         payment_methods::list_payment_methods,
         payment_methods::rename_payment_method,
         payment_methods::delete_payment_method,
+        payers::create_payer,
+        payers::list_payers,
+        payers::rename_payer,
+        payers::delete_payer,
         settings::get_reference_currency,
         settings::set_reference_currency,
         settings::get_language,
@@ -103,6 +108,9 @@ pub mod subscriptions;
         PaymentMethodDto,
         CreatePaymentMethodRequest,
         RenamePaymentMethodRequest,
+        PayerDto,
+        CreatePayerRequest,
+        RenamePayerRequest,
         ReferenceCurrencyDto,
         LanguageResponse,
         SetLanguageRequest,
@@ -204,6 +212,8 @@ pub fn app_with_db(db: Db) -> Router {
             payment_methods::rename_payment_method,
             payment_methods::delete_payment_method
         ))
+        .routes(routes!(payers::create_payer, payers::list_payers))
+        .routes(routes!(payers::rename_payer, payers::delete_payer))
         .routes(routes!(
             settings::get_reference_currency,
             settings::set_reference_currency

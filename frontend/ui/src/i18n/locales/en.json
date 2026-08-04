@@ -146,6 +146,15 @@
     "delete": "Delete",
     "loadError": "Could not load payment methods"
   },
+  "payers": {
+    "title": "Payers",
+    "name": "Name",
+    "create": "Add",
+    "rename": "Rename",
+    "delete": "Delete",
+    "loadError": "Could not load payers",
+    "inUse": "This payer is used by a subscription and cannot be deleted"
+  },
   "referenceCurrency": {
     "title": "Reference currency",
     "current": "Current currency",

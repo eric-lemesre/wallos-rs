@@ -252,6 +252,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/payers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Liste les payeurs du foyer de l'appelant. */
+        get: operations["listPayers"];
+        put?: never;
+        /**
+         * Crée un payeur dans le foyer de l'appelant. **Idempotent** via l'en-tête `Idempotency-Key`
+         *     (REQ-SYN-006).
+         */
+        post: operations["createPayer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Renomme un payeur du foyer de l'appelant. */
+        put: operations["renamePayer"];
+        post?: never;
+        /**
+         * Supprime un payeur du foyer de l'appelant.
+         * @description Refuse la suppression d'un payeur **référencé** par un abonnement (`409`, comportement capturé sur
+         *     l'application d'origine — jamais de réaffectation ni de cascade).
+         */
+        delete: operations["deletePayer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/payment-methods": {
         parameters: {
             query?: never;
@@ -650,6 +693,19 @@ export interface components {
              */
             platform: string;
         };
+        /** @description Requête de création d'un payeur (REQ-SUB-017). */
+        CreatePayerRequest: {
+            /**
+             * @description Identifiant (UUID) **généré côté client** (offline-first, REQ-SYN-001), le cas échéant. Absent
+             *     ⇒ le serveur en génère un. Présent ⇒ il est **conservé tel quel**.
+             */
+            id?: string | null;
+            /**
+             * @description Nom (non vide, ≤ 100 caractères ; les espaces de bord sont normalisés).
+             * @example Alex
+             */
+            name: string;
+        };
         /** @description Requête de création d'un moyen de paiement (REQ-SUB-011). */
         CreatePaymentMethodRequest: {
             /**
@@ -921,6 +977,16 @@ export interface components {
              */
             next_payment: string;
         };
+        /** @description Un payeur exposé à l'interface (REQ-SUB-017). Étiquette nominative du foyer (pas de compte). */
+        PayerDto: {
+            /** @description Identifiant stable (UUID). */
+            id: string;
+            /**
+             * @description Nom du payeur.
+             * @example Alex
+             */
+            name: string;
+        };
         /** @description Un moyen de paiement exposé à l'interface (REQ-SUB-011). */
         PaymentMethodDto: {
             /** @description Identifiant stable (UUID). */
@@ -983,6 +1049,14 @@ export interface components {
             /**
              * @description Nouveau nom de la catégorie (non vide, ≤ 100 caractères ; espaces de bord normalisés).
              * @example Musique
+             */
+            name: string;
+        };
+        /** @description Requête de renommage d'un payeur (REQ-SUB-017). */
+        RenamePayerRequest: {
+            /**
+             * @description Nouveau nom (non vide, ≤ 100 caractères ; espaces de bord normalisés).
+             * @example Sam
              */
             name: string;
         };
@@ -1722,6 +1796,191 @@ export interface operations {
             };
             /** @description Trop de tentatives ; réessayer après l'en-tête Retry-After */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listPayers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payeurs du foyer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayerDto"][];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createPayer: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Clé d'idempotence (REQ-SYN-006) */
+                "Idempotency-Key"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePayerRequest"];
+            };
+        };
+        responses: {
+            /** @description Payeur créé */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayerDto"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Conflit : identifiant déjà utilisé, ou clé d'idempotence réutilisée avec un corps différent */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Identifiant ou nom invalide */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    renamePayer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant (UUID) du payeur */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenamePayerRequest"];
+            };
+        };
+        responses: {
+            /** @description Payeur renommé */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayerDto"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Payeur inconnu ou hors du foyer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Nom invalide */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deletePayer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant (UUID) du payeur */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payeur supprimé */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Payeur inconnu ou hors du foyer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Payeur référencé par un abonnement : suppression refusée */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -146,6 +146,15 @@
     "delete": "Supprimer",
     "loadError": "Impossible de charger les moyens de paiement"
   },
+  "payers": {
+    "title": "Payeurs",
+    "name": "Nom",
+    "create": "Ajouter",
+    "rename": "Renommer",
+    "delete": "Supprimer",
+    "loadError": "Impossible de charger les payeurs",
+    "inUse": "Ce payeur est utilisé par un abonnement et ne peut pas être supprimé"
+  },
   "referenceCurrency": {
     "title": "Devise de référence",
     "current": "Devise actuelle",
