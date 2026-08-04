@@ -185,7 +185,9 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   C) le laisser `implemented` indéfiniment.
 - **Recommandation agent** : A si l'API Wallos expose une notion de clé/jeton (parité), sinon B. Éviter
   C (dette de statut permanente). ADR obligatoire (met à jour l'exigence + le lock).
-- **Statut** : open
+- **Décision** : A (responsable, 2026-08-04). REQ-AUT-005 re-cadré en « jeton d'API porteur, révocable »
+  (critère `secureStore` natif retiré), promu `verified`. Voir `docs/adr/0028-aut-005-rescope-api-bearer-token.md`.
+- **Statut** : resolved
 
 ---
 

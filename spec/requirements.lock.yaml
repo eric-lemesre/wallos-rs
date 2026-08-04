@@ -51,9 +51,9 @@ requirements:
   depends_on:
   - REQ-AUT-002
 - id: REQ-AUT-005
-  title: Jeton d'appareil pour les modalités desktop et mobile
+  title: Jeton d'appareil (API porteur, révocable)
   domain: auth
-  status: implemented
+  status: verified
   criticality: high
   layer:
   - api
