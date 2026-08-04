@@ -395,6 +395,6 @@ acceptance:
   - given: un payeur supprimé alors qu'il est référencé
     when: la suppression est demandée
     then: elle est refusée ou les abonnements sont réaffectés selon le comportement capturé sur l'application d'origine
-depends_on: [REQ-SUB-001, REQ-STA-004]
+depends_on: [REQ-SUB-001]
 ---
 ```

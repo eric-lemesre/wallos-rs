@@ -90,7 +90,7 @@ acceptance:
   - given: des abonnements sans catégorie ou sans payeur
     when: la répartition est calculée
     then: ils sont regroupés dans une entrée explicite, jamais omis
-depends_on: [REQ-STA-001, REQ-CAT-001]
+depends_on: [REQ-STA-001, REQ-CAT-001, REQ-SUB-017]
 ---
 ```
 
