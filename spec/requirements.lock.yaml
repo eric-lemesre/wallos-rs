@@ -524,6 +524,7 @@ requirements:
   depends_on:
   - REQ-STA-001
   - REQ-CAT-001
+  - REQ-SUB-017
 - id: REQ-STA-005
   title: Échéancier des prochains paiements
   domain: statistics
@@ -793,7 +794,6 @@ requirements:
   oracle: legacy
   depends_on:
   - REQ-SUB-001
-  - REQ-STA-004
 - id: REQ-SYN-001
   title: Horodatage de modification et identifiants stables
   domain: sync
