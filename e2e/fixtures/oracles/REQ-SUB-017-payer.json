@@ -1,0 +1,34 @@
+{
+  "_requirement": "REQ-SUB-017",
+  "_source": "Wallos 5.4.2 — table `household`, endpoints/household/household.php (fonctions set/handleDeleteMember), includes/stats_calculations.php ; capturé §8.1 sur l'image épinglée bellamy/wallos@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f.",
+  "_note": "Comportement de référence GELÉ. Correction d'une hypothèse d'ADR 0016 : Wallos 5.4.2 A une notion de payeur — la table `household` (id, name, email par défaut '', user_id) tient des « membres du foyer », et `subscriptions.payer_user_id` (FK household.id) rattache un abonnement à un payeur. Ce sont des étiquettes nominatives (aucun login/compte par membre), d'où la modélisation subtrack retenue (OQ-010 : entité `payers` légère). L'oracle CRITIQUE est le comportement de SUPPRESSION d'un payeur référencé.",
+  "payer_model": {
+    "wallos_table": "household",
+    "columns": ["id", "name", "email (défaut '')", "user_id (défaut 1)"],
+    "subscription_link": "subscriptions.payer_user_id -> household.id",
+    "has_login_per_member": false,
+    "subtrack_model": "table `payers` (id uuid, household_id uuid, name text) ; subscriptions.payer_id -> payers.id (rattachement facultatif). L'e-mail Wallos n'est pas repris (hors périmètre)."
+  },
+  "delete_referenced_payer": {
+    "when": "au moins un abonnement du compte référence le payeur (COUNT(*) FROM subscriptions WHERE payer_user_id = :id > 0)",
+    "wallos_response": { "success": false, "message_key": "household_in_use" },
+    "payer_deleted": false,
+    "subscriptions_reassigned": false,
+    "subscriptions_cascaded": false,
+    "subtrack_http_status": 409
+  },
+  "delete_unreferenced_payer": {
+    "when": "aucun abonnement ne référence le payeur",
+    "wallos_response": { "success": true, "message_key": "member_removed" },
+    "payer_deleted": true,
+    "subtrack_http_status": 204
+  },
+  "primary_member_protected": {
+    "_note": "Wallos protège le membre id=1 (`memberId != 1` requis pour supprimer) : c'est le foyer/utilisateur principal auto-créé. subtrack n'auto-crée aucun payeur par défaut (les payeurs sont entièrement à la main de l'utilisateur) ; cette protection est donc sans objet et hors périmètre SUB-017.",
+    "wallos_member_id": 1,
+    "deletable": false
+  },
+  "repartition_note": {
+    "_note": "La répartition par payeur (et par catégorie) relève de REQ-STA-004 : Wallos somme les coûts par membre (memberCost) et par catégorie (categoryCost) dans includes/stats_calculations.php et n'affiche que les entrées de coût non nul. Oracle détaillé à geler avec STA-004."
+  }
+}

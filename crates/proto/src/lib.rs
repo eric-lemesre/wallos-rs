@@ -393,6 +393,49 @@ pub struct RenamePaymentMethodRequest {
     pub name: String,
 }
 
+/// Un payeur exposé à l'interface (REQ-SUB-017). Étiquette nominative du foyer (pas de compte).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct PayerDto {
+    /// Identifiant stable (UUID).
+    pub id: String,
+    /// Nom du payeur.
+    #[schema(example = "Alex")]
+    pub name: String,
+}
+
+/// Requête de création d'un payeur (REQ-SUB-017).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct CreatePayerRequest {
+    /// Identifiant (UUID) **généré côté client** (offline-first, REQ-SYN-001), le cas échéant. Absent
+    /// ⇒ le serveur en génère un. Présent ⇒ il est **conservé tel quel**.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Nom (non vide, ≤ 100 caractères ; les espaces de bord sont normalisés).
+    #[schema(example = "Alex", max_length = 100)]
+    pub name: String,
+}
+
+impl CreatePayerRequest {
+    /// Résout l'identifiant : l'UUID **fourni par le client** s'il est présent et valide (préservé,
+    /// REQ-SYN-001), sinon un nouvel UUID généré par le serveur.
+    ///
+    /// # Errors
+    /// [`FieldError`] sur le champ `id` si un `id` est fourni mais n'est pas un UUID valide.
+    #[requirement(REQ-SYN-001)]
+    pub fn resolve_id(&self) -> Result<Uuid, FieldError> {
+        resolve_client_id(self.id.as_deref())
+            .map_err(|()| FieldError::new("id", "identifiant UUID invalide"))
+    }
+}
+
+/// Requête de renommage d'un payeur (REQ-SUB-017).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct RenamePayerRequest {
+    /// Nouveau nom (non vide, ≤ 100 caractères ; espaces de bord normalisés).
+    #[schema(example = "Sam", max_length = 100)]
+    pub name: String,
+}
+
 /// Une devise du référentiel supporté exposée à l'interface (REQ-CUR-007).
 ///
 /// `name` est le libellé par défaut (anglais) ; l'UI affiche le nom **localisé** par code (i18n).
