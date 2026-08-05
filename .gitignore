@@ -5,6 +5,8 @@ target
 
 # Node / frontend
 node_modules/
+# Vite production build output (coquilles)
+dist/
 
 # Playwright (e2e) artefacts
 test-results/
