@@ -128,7 +128,7 @@ depends_on: [REQ-NOT-005, REQ-SUB-015]
 id: REQ-SEC-006
 title: En-têtes de sécurité et politique de contenu
 domain: security
-status: draft
+status: verified
 criticality: medium
 layer: [api, ui]
 e2e: optional
