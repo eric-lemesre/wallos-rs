@@ -48,6 +48,8 @@ jobs:
         run: cargo xtask lint-clock
       - name: lint-i18n
         run: cargo xtask lint-i18n
+      - name: lint-i18n-parity
+        run: cargo xtask lint-i18n-parity
 
       - name: tests
         env:
