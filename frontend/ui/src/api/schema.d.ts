@@ -530,6 +530,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sync/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Récupération incrémentale des changements par curseur (REQ-SYN-003).
+         * @description Renvoie une **page** de changements (créations, modifications, suppressions) du foyer, triés par
+         *     `(horodatage, id)` croissant et **strictement postérieurs** au curseur, avec un `next_cursor` et un
+         *     drapeau `has_more`. Le client itère avec `next_cursor` jusqu'à `has_more = false`, puis conserve ce
+         *     dernier curseur comme **watermark**. Pagination **keyset** : stable, ni omission ni duplication
+         *     (critère #2). Si le curseur précède la fenêtre de rétention des pierres tombales (ADR 0013),
+         *     `full_resync_required` invite à repartir d'une synchronisation complète. Isolation §9.
+         */
+        get: operations["getSyncChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sync/tombstones": {
         parameters: {
             query?: never;
@@ -1264,6 +1289,45 @@ export interface components {
             subscriptions: components["schemas"]["SubscriptionDto"][];
             /** @description Total agrégé des abonnements actifs de la liste, dans la devise cible. */
             total: components["schemas"]["ConvertedTotalResponse"];
+        };
+        /** @description Un changement du flux de synchronisation (REQ-SYN-003). */
+        SyncChangeDto: {
+            /**
+             * @description Type d'entité (`category` / `payment_method` / `payer` / `subscription`).
+             * @example subscription
+             */
+            entity_type: string;
+            /** @description Identifiant (UUID) de l'entité. */
+            id: string;
+            /**
+             * @description `upsert` (création/modification) ou `delete` (suppression).
+             * @example upsert
+             */
+            kind: string;
+            /** @description Corps de l'entité pour un `upsert` (objet JSON), `null` pour un `delete`. */
+            payload?: Record<string, never>;
+        };
+        /**
+         * @description Page de delta incrémental (REQ-SYN-003) : changements postérieurs au curseur, triés par
+         *     `(horodatage, id)` croissant, avec un **nouveau curseur** et un drapeau de page suivante.
+         */
+        SyncChangesResponse: {
+            /** @description Changements de la page (créations, modifications, suppressions), ordonnés. */
+            changes: components["schemas"]["SyncChangeDto"][];
+            /**
+             * @description `true` si le curseur fourni **précède la fenêtre de rétention** des pierres tombales (ADR 0013) :
+             *     des suppressions ont pu être purgées, le client doit **repartir d'une synchronisation complète**
+             *     (curseur absent) plutôt que d'appliquer un delta silencieusement incomplet.
+             */
+            full_resync_required: boolean;
+            /** @description `true` s'il reste des changements au-delà de cette page (rappeler avec `next_cursor`). */
+            has_more: boolean;
+            /**
+             * @description Curseur à fournir au prochain appel : position après le dernier changement de la page (ou le
+             *     curseur d'entrée si la page est vide). Une fois `has_more = false`, c'est le **watermark** à
+             *     conserver pour la prochaine synchronisation.
+             */
+            next_cursor: string;
         };
         /** @description Une pierre tombale : la suppression d'une entité répliquée (REQ-SYN-002). */
         TombstoneDto: {
@@ -2924,6 +2988,64 @@ export interface operations {
             };
             /** @description Abonnement inconnu ou hors du foyer */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getSyncChanges: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Curseur de dernière synchronisation (opaque, tel que renvoyé dans `next_cursor`). Absent →
+                 *     synchronisation **complète** depuis l'origine.
+                 */
+                cursor?: string | null;
+                /**
+                 * @description Taille de page souhaitée (bornée côté serveur). Absent → défaut serveur.
+                 * @example 100
+                 */
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page de delta incrémental */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncChangesResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Curseur invalide */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

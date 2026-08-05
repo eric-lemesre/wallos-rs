@@ -56,7 +56,7 @@ depends_on: [REQ-SYN-001]
 id: REQ-SYN-003
 title: Récupération incrémentale par curseur
 domain: sync
-status: draft
+status: verified
 criticality: high
 layer: [api]
 e2e: required

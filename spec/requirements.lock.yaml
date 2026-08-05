@@ -820,7 +820,7 @@ requirements:
 - id: REQ-SYN-003
   title: Récupération incrémentale par curseur
   domain: sync
-  status: draft
+  status: verified
   criticality: high
   layer:
   - api
