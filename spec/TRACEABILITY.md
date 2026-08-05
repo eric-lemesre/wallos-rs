@@ -2,7 +2,7 @@
 
 # Matrice de traçabilité des exigences
 
-Total : **73** exigences — 48 verified · 25 draft.
+Total : **73** exigences — 49 verified · 24 draft.
 
 Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et [`spec/requirements/`](requirements/). Régénérer avec `cargo xtask trace --write`.
 
@@ -88,7 +88,7 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 | `REQ-STA-001` | Normalisation du coût mensuel | high | ✅ verified |
 | `REQ-STA-002` | Coût annuel normalisé | high | ✅ verified |
 | `REQ-STA-003` | Exclusion des abonnements non actifs des agrégats | high | ⚪ draft |
-| `REQ-STA-004` | Répartition par catégorie et par payeur | medium | ⚪ draft |
+| `REQ-STA-004` | Répartition par catégorie et par payeur | medium | ✅ verified |
 | `REQ-STA-005` | Échéancier des prochains paiements | medium | ✅ verified |
 | `REQ-STA-006` | Évolution du coût sur douze mois | low | ✅ verified |
 | `REQ-STA-007` | Cohérence entre les agrégats et les filtres actifs | medium | ✅ verified |

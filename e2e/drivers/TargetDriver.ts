@@ -289,6 +289,29 @@ export class TargetDriver implements AppDriver, Harness {
     return (await point.getByTestId("evolution-total").innerText()) ?? "";
   }
 
+  // --- Répartition par catégorie et par payeur (REQ-STA-004) ---
+
+  async reloadRepartition(): Promise<void> {
+    await this.page.getByTestId("repartition-reload").click();
+  }
+
+  /** Total général affiché par la carte de répartition, ou chaîne vide s'il est absent (instantané). */
+  async repartitionGrandTotal(): Promise<string> {
+    const total = this.page.getByTestId("repartition-grand-total");
+    if ((await total.count()) === 0) {
+      return "";
+    }
+    return (await total.innerText()) ?? "";
+  }
+
+  /** Libellés des entrées d'un axe (`category` | `payer`), dans l'ordre du DOM (instantané). */
+  async repartitionLabels(axis: "category" | "payer"): Promise<string[]> {
+    return this.page
+      .getByTestId(`repartition-entry-${axis}`)
+      .getByTestId("repartition-label")
+      .allInnerTexts();
+  }
+
   // --- Recherche et tri (REQ-SUB-007) ---
 
   async searchSubscriptions(term: string): Promise<void> {

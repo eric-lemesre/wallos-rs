@@ -1,0 +1,46 @@
+{
+  "_requirement": "REQ-STA-004",
+  "_source": "Wallos 5.4.2 — includes/stats_calculations.php (boucle d'agrégation, lignes ~188-208 : memberCost/categoryCost) + stats.php (lignes ~144-170 : construction des points de graphe) ; getPricePerMonth (includes/list_subscriptions.php:64) ; capturé §8.1 sur l'image épinglée bellamy/wallos@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f.",
+  "_note": "Comportement de référence de la RÉPARTITION des coûts par catégorie ET par payeur (deux axes, même mécanique d'agrégation). GELÉ. La conversion multi-devises (getPriceConverted -> devise principale) et la normalisation mensuelle (getPricePerMonth, facteurs déjà gelés dans REQ-STA-001-monthly.json) sont réutilisées telles quelles ; l'oracle STA-004 porte sur l'AGRÉGATION par axe, l'invariant somme=total, et le traitement des entrées sans axe.",
+  "aggregation_rule": {
+    "_source_php": "foreach subscriptions: if (inactive == 0) { $price = getPricePerMonth(..., getPriceConverted(...)); $memberCost[payer_user_id]['cost'] += $price; $categoryCost[category_id]['cost'] += $price; $totalCostPerMonth += $price; }",
+    "only_active": true,
+    "_only_active_note": "Seuls les abonnements ACTIFS (inactive==0) alimentent la répartition ET le total général. Les inactifs (REQ-SUB-008) sont exclus des deux (ils n'alimentent que les « économies »). Un abonnement terminé (REQ-SUB-009) n'est PAS filtré ici par Wallos (pas de notion de date de fin dans ce calcul) — subtrack applique en plus l'exclusion des terminés à la date de référence, cohérente avec tous ses autres agrégats (billable_amounts).",
+    "value_per_subscription": "coût mensuel normalisé (getPricePerMonth) de la ligne, converti dans la devise principale du compte (getPriceConverted), en précision pleine (aucun arrondi lors de l'accumulation)",
+    "one_bucket_per_axis": "chaque abonnement compte dans EXACTEMENT un bucket catégorie et un bucket payeur ; d'où l'invariant : somme(categoryCost) == totalCostPerMonth == somme(memberCost)."
+  },
+  "invariant_sum_equals_total": {
+    "_note": "CRITÈRE D'ACCEPTATION #1 : la somme des parts d'un axe est égale au total général, sans écart d'arrondi. Garanti par construction (accumulation en précision pleine, un abonnement = une part) et vérifié en intégration.",
+    "holds": true
+  },
+  "no_axis_entry": {
+    "_note": "CRITÈRE D'ACCEPTATION #2 : un abonnement sans catégorie / sans payeur n'est jamais omis ; il est regroupé dans une entrée explicite. DIVERGENCE DE MODÈLE : Wallos n'a PAS de NULL — chaque abonnement a toujours un category_id (défaut = catégorie sentinelle nommée « No category », relabellisée via translate('no_category')) et un payer_user_id (défaut = membre du foyer id=1). subtrack rend category_id/payer_id NULLABLES (pas de catégorie ni de payeur par défaut auto-créés hors seed) : une valeur NULL est agrégée dans un bucket explicite « (aucun) » (libellé localisé côté frontend), garantissant l'invariant somme=total. Aspect DESIGN acté en ADR STA-004.",
+    "wallos_behavior": "bucket sentinelle « No category » / membre id=1 (jamais NULL)",
+    "subtrack_behavior": "NULL category_id / payer_id -> bucket explicite « (aucun) », jamais omis"
+  },
+  "display": {
+    "_source_php": "stats.php: if ($category['cost'] != 0) push; usort($dataPoints, fn($a,$b) => $b['y'] <=> $a['y']); $showGraph = count > 1",
+    "zero_cost_entries_omitted": true,
+    "_zero_cost_note": "Wallos omet du GRAPHE toute entrée de coût exactement nul. subtrack ne construit un bucket qu'à partir d'abonnements réellement contributeurs (jamais de bucket vide), et conserve un bucket de coût nul s'il contient au moins un abonnement (prix 0), pour honorer « jamais omis » — divergence mineure documentée en ADR ; l'invariant somme=total est insensible aux entrées nulles.",
+    "sort_order": "coût décroissant (usort $b['y'] <=> $a['y']) ; subtrack applique un départage déterministe stable (par clé) sur coûts égaux",
+    "graph_shown_when": "au moins 2 entrées non nulles (purement présentationnel, hors périmètre du calcul)"
+  },
+  "worked_example": {
+    "_note": "Exemple travaillé gelé pour verrouiller l'invariant et le bucket « (aucun) ». Devise principale EUR (2 décimales). Trois abonnements ACTIFS.",
+    "subscriptions": [
+      { "name": "Netflix", "price": "10.00", "cycle": "month", "frequency": 1, "currency": "EUR", "category": "Streaming", "payer": "Alex", "monthly_normalized": "10" },
+      { "name": "Spotify", "price": "120.00", "cycle": "year", "frequency": 1, "currency": "EUR", "category": "Streaming", "payer": "Alex", "monthly_normalized": "10" },
+      { "name": "Presse", "price": "5.00", "cycle": "month", "frequency": 1, "currency": "EUR", "category": null, "payer": null, "monthly_normalized": "5" }
+    ],
+    "grand_total_monthly": "25",
+    "by_category": [
+      { "label": "Streaming", "total": "20", "count": 2 },
+      { "label": "(aucun)", "total": "5", "count": 1 }
+    ],
+    "by_payer": [
+      { "label": "Alex", "total": "20", "count": 2 },
+      { "label": "(aucun)", "total": "5", "count": 1 }
+    ],
+    "sum_of_parts_equals_total": "20 + 5 = 25 (par axe), sans écart d'arrondi"
+  }
+}

@@ -455,6 +455,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/statistics/repartition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Répartition des coûts mensuels par catégorie **et** par payeur (REQ-STA-004).
+         * @description Deux axes partageant la même mécanique : chaque abonnement **actif** et **non terminé** (à la date du
+         *     jour) contribue son coût mensuel normalisé (REQ-STA-001) converti dans la devise cible (REQ-CUR-003)
+         *     à exactement un bucket de chaque axe (sa catégorie, son payeur). Le domaine pur (`core::repartition`)
+         *     agrège et trie ; la somme des parts d'un axe égale le total général (critère #1). Un abonnement sans
+         *     catégorie / sans payeur alimente un bucket explicite `label = null`, jamais omis (critère #2). Un
+         *     abonnement non convertible est exclu et bascule `complete = false` (jamais assimilé à un coût nul).
+         */
+        get: operations["getRepartition"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/subscriptions": {
         parameters: {
             query?: never;
@@ -1067,6 +1092,56 @@ export interface components {
              * @example PayPal
              */
             name: string;
+        };
+        /**
+         * @description Une part de la répartition sur un axe (REQ-STA-004) : le libellé du bucket et son coût mensuel
+         *     total, dans la devise cible.
+         */
+        RepartitionEntryDto: {
+            /**
+             * @description Nombre d'abonnements contributeurs de ce bucket.
+             * @example 2
+             */
+            count: number;
+            /**
+             * @description Libellé du bucket : nom de la catégorie / du payeur, ou `null` pour l'entrée **« sans »**
+             *     (sans catégorie / sans payeur) — l'interface la rend par un libellé localisé « (aucun) », jamais
+             *     omise (REQ-STA-004, critère #2).
+             * @example Streaming
+             */
+            label?: string | null;
+            /**
+             * @description Coût mensuel total du bucket, dans la devise cible (décimal exact en chaîne, R4).
+             * @example 20.00
+             */
+            total: string;
+        };
+        /**
+         * @description Répartition des coûts mensuels par catégorie **et** par payeur (REQ-STA-004), chaque axe trié du
+         *     bucket le plus lourd au plus léger. La somme des parts d'un axe égale le total général (critère #1) ;
+         *     les abonnements sans catégorie/payeur forment une entrée explicite `label = null` (critère #2).
+         */
+        RepartitionResponse: {
+            /** @description Répartition par catégorie, triée par coût décroissant. */
+            by_category: components["schemas"]["RepartitionEntryDto"][];
+            /** @description Répartition par payeur, triée par coût décroissant. */
+            by_payer: components["schemas"]["RepartitionEntryDto"][];
+            /**
+             * @description `false` si au moins un abonnement actif a été **exclu** (donnée illisible ou taux de conversion
+             *     manquant, REQ-CUR-003) : la répartition est alors partielle, jamais un total nul silencieux.
+             */
+            complete: boolean;
+            /**
+             * @description Devise cible de la répartition (code ISO 4217).
+             * @example EUR
+             */
+            currency: string;
+            /**
+             * @description Coût mensuel total du foyer (abonnements actifs), dans la devise cible. Égal à la somme des parts
+             *     de chaque axe (décimal exact en chaîne, R4).
+             * @example 25.00
+             */
+            total: string;
         };
         /** @description Requête de choix de langue (REQ-I18N-001) : le code doit être une langue supportée. */
         SetLanguageRequest: {
@@ -2494,6 +2569,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CostEvolutionResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Paramètres invalides */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getRepartition: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Devise cible de la répartition (code ISO 4217) ; défaut : devise de référence du foyer
+                 *     (REQ-CUR-001).
+                 * @example EUR
+                 */
+                currency?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Répartition des coûts par catégorie et par payeur */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RepartitionResponse"];
                 };
             };
             /** @description Non authentifié */

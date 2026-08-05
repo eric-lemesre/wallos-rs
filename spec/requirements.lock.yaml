@@ -513,7 +513,7 @@ requirements:
 - id: REQ-STA-004
   title: Répartition par catégorie et par payeur
   domain: statistics
-  status: draft
+  status: verified
   criticality: medium
   layer:
   - core

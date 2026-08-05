@@ -46,6 +46,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0028 | AUT-005 re-cadré en jeton d'API porteur (natif retiré) | 🟡 |
 | 0029 | Ignore RUSTSEC-2026-0235 (`rkyv` non compilé) | ⚪ |
 | 0030 | SUB-017 payeur (étiquette légère, refus si référencé) | 🔴 |
+| 0031 | STA-004 répartition (somme conservée, bucket « (aucun) ») | 🔴 |
 
 ## À relire en priorité aujourd'hui (🔴)
 
@@ -60,6 +61,8 @@ Les décisions d'interprétation prises jusqu'ici, susceptibles de diverger de l
 - **0023** — jeu de catégories par défaut (impacte tout import/export et l'expérience initiale).
 - **0022** — règle de clamp des échéances mensuelles (28/29/30/31).
 - **0012** — foyer partagé, payeurs = membres : structurant pour SUB-017/STA-004 et l'isolation.
+- **0031** — répartition : bucket « (aucun) » explicite (subtrack rend l'axe nullable, là où Wallos a
+  des sentinelles) ; petite divergence d'affichage (entrées de coût nul conservées, pas omises).
 
 > Voir aussi `spec/OPEN-QUESTIONS.md` pour les arbitrages **encore ouverts** (OQ-010 dépendance
 > STA-004↔SUB-017, OQ-011 devenir d'AUT-005).

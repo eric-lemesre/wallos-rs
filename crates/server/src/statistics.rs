@@ -6,22 +6,29 @@
 //! **fenêtrage temporel** au domaine pur (`core::monthly_cost_evolution`). Horloge serveur seulement
 //! pour ancrer « le mois courant » ; le calcul lui-même reste pur (REQ-STA-008).
 
+use std::collections::HashMap;
+
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use chrono::Utc;
+use uuid::Uuid;
 use wallos_core::billing::{BillingCycle, BillingUnit};
 use wallos_core::money::{CurrencyCode, Money};
 use wallos_core::requirement;
 use wallos_core::stats::monthly_cost;
-use wallos_core::{CostSpan, RateTable, convert, monthly_cost_evolution};
+use wallos_core::{
+    CostSpan, RateTable, RepartitionShare, RepartitionSlice, convert, monthly_cost_evolution,
+    repartition,
+};
 use wallos_proto::{
-    CostEvolutionQuery, CostEvolutionResponse, FieldError, MonthlyCostPointDto, problem,
+    CostEvolutionQuery, CostEvolutionResponse, FieldError, MonthlyCostPointDto,
+    RepartitionEntryDto, RepartitionQuery, RepartitionResponse, problem,
 };
 use wallos_storage::{
-    Db, ExchangeRateRepository, SettingsRepository, SubscriptionFilter, SubscriptionRepository,
-    SubscriptionRow,
+    CategoryRepository, Db, ExchangeRateRepository, PayerRepository, SettingsRepository,
+    SubscriptionFilter, SubscriptionRepository, SubscriptionRow,
 };
 
 use crate::auth::AuthActor;
@@ -196,6 +203,158 @@ pub async fn get_cost_evolution(
         to,
         complete,
         points: point_dtos,
+    })
+    .into_response()
+}
+
+/// Formate un total décimal au nombre de décimales de la devise `target` (REQ-CUR-005/007), en
+/// **précision fixe** — un axe cohérent pour l'affichage (p. ex. « 20.00 » pour EUR, « 4200 » pour JPY).
+/// Le total étant toujours ≥ 0, `Money::new` ne peut échouer ; le repli est purement mécanique (R5).
+#[requirement(REQ-STA-004)]
+fn format_total(total: rust_decimal::Decimal, target: CurrencyCode, decimals: u32) -> String {
+    let rounded = Money::new(total, target).map_or(total, |m| m.round_to(decimals).amount());
+    format!("{rounded:.*}", decimals as usize)
+}
+
+/// Projette les parts d'un axe (`RepartitionShare`) en DTO, en résolvant chaque clé en libellé via
+/// `names` (nom de catégorie / de payeur) ; une clé `None` (« sans axe ») reste `label = None`, rendue
+/// « (aucun) » par l'interface — jamais omise (REQ-STA-004, critère #2). L'ordre décroissant produit par
+/// le domaine est préservé.
+#[requirement(REQ-STA-004)]
+fn entries(
+    shares: &[RepartitionShare],
+    names: &HashMap<Uuid, String>,
+    target: CurrencyCode,
+    decimals: u32,
+) -> Vec<RepartitionEntryDto> {
+    shares
+        .iter()
+        .map(|s| RepartitionEntryDto {
+            label: s.key.and_then(|id| names.get(&id).cloned()),
+            total: format_total(s.total, target, decimals),
+            count: s.count,
+        })
+        .collect()
+}
+
+/// Répartition des coûts mensuels par catégorie **et** par payeur (REQ-STA-004).
+///
+/// Deux axes partageant la même mécanique : chaque abonnement **actif** et **non terminé** (à la date du
+/// jour) contribue son coût mensuel normalisé (REQ-STA-001) converti dans la devise cible (REQ-CUR-003)
+/// à exactement un bucket de chaque axe (sa catégorie, son payeur). Le domaine pur (`core::repartition`)
+/// agrège et trie ; la somme des parts d'un axe égale le total général (critère #1). Un abonnement sans
+/// catégorie / sans payeur alimente un bucket explicite `label = null`, jamais omis (critère #2). Un
+/// abonnement non convertible est exclu et bascule `complete = false` (jamais assimilé à un coût nul).
+#[utoipa::path(
+    get,
+    path = "/statistics/repartition",
+    operation_id = "getRepartition",
+    extensions(("x-requirements" = json!(["REQ-STA-004"]))),
+    params(RepartitionQuery),
+    responses(
+        (status = 200, description = "Répartition des coûts par catégorie et par payeur", body = RepartitionResponse, content_type = "application/json"),
+        (status = 401, description = "Non authentifié", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 422, description = "Paramètres invalides", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 500, description = "Erreur interne", body = wallos_proto::Problem, content_type = "application/problem+json")
+    )
+)]
+#[requirement(REQ-STA-004)]
+pub async fn get_repartition(
+    AuthActor(actor): AuthActor,
+    State(db): State<Db>,
+    Query(q): Query<RepartitionQuery>,
+) -> Response {
+    // Devise cible : override explicite, sinon devise de référence du foyer (REQ-CUR-001).
+    let target_code = match q.currency.filter(|s| !s.is_empty()) {
+        Some(explicit) => explicit,
+        None => match SettingsRepository::new(db.pool())
+            .reference_currency(&actor)
+            .await
+        {
+            Ok(code) => code,
+            Err(_) => return internal_error(),
+        },
+    };
+    let Ok(target) = CurrencyCode::new(&target_code) else {
+        return field_error(&FieldError::new("currency", "devise hors référentiel"));
+    };
+
+    // Abonnements **actifs** du foyer (§9) ; les inactifs (REQ-SUB-008) sont exclus de la répartition,
+    // comme sur l'application d'origine (n'alimentent ni les buckets ni le total).
+    let filter = SubscriptionFilter {
+        active: Some(true),
+        ..SubscriptionFilter::default()
+    };
+    let Ok(rows) = SubscriptionRepository::new(db.pool())
+        .list(&actor, &filter)
+        .await
+    else {
+        return internal_error();
+    };
+
+    let table = if rows.is_empty() {
+        RateTable::new(Vec::new())
+    } else {
+        match load_rate_table(&ExchangeRateRepository::new(db.pool())).await {
+            Ok(t) => t,
+            Err(_) => return internal_error(),
+        }
+    };
+
+    // Un abonnement **terminé** (date de fin dépassée aujourd'hui, REQ-SUB-009) est exclu de la
+    // répartition « à ce jour », cohérent avec tous les autres agrégats (`core::billable_amounts`).
+    let today = Utc::now().date_naive();
+    let live: Vec<&SubscriptionRow> = rows
+        .iter()
+        .filter(|row| row.end_date.is_none_or(|end| end >= today))
+        .collect();
+
+    // Une part par axe et par abonnement convertible. Un abonnement non convertible (devise illisible ou
+    // taux manquant) est exclu des DEUX axes et bascule `complete` — jamais compté comme coût nul.
+    let mut by_category_slices: Vec<RepartitionSlice> = Vec::with_capacity(live.len());
+    let mut by_payer_slices: Vec<RepartitionSlice> = Vec::with_capacity(live.len());
+    let mut convertible = 0usize;
+    for row in &live {
+        if let Some(monthly) = monthly_in_target(row, target, &table) {
+            convertible += 1;
+            by_category_slices.push(RepartitionSlice {
+                key: row.category_id,
+                monthly,
+            });
+            by_payer_slices.push(RepartitionSlice {
+                key: row.payer_id,
+                monthly,
+            });
+        }
+    }
+    let complete = convertible == live.len();
+
+    let by_category = repartition(&by_category_slices);
+    let by_payer = repartition(&by_payer_slices);
+
+    // Libellés des buckets : noms de catégories / payeurs du foyer (la clé `None` reste « sans axe »).
+    let category_names: HashMap<Uuid, String> =
+        match CategoryRepository::new(db.pool()).list(&actor).await {
+            Ok(cats) => cats.into_iter().map(|c| (c.id, c.name)).collect(),
+            Err(_) => return internal_error(),
+        };
+    let payer_names: HashMap<Uuid, String> =
+        match PayerRepository::new(db.pool()).list(&actor).await {
+            Ok(payers) => payers.into_iter().map(|p| (p.id, p.name)).collect(),
+            Err(_) => return internal_error(),
+        };
+
+    let decimals = wallos_core::currencies::find(target.as_str()).map_or(2, |c| c.decimals);
+    // Total général = somme des parts (identique sur les deux axes, invariant #1). On le calcule sur
+    // l'axe catégorie en **précision pleine** avant l'unique arrondi d'affichage.
+    let grand_total: rust_decimal::Decimal = by_category.iter().map(|s| s.total).sum();
+
+    Json(RepartitionResponse {
+        currency: target.as_str().to_string(),
+        total: format_total(grand_total, target, decimals),
+        complete,
+        by_category: entries(&by_category, &category_names, target, decimals),
+        by_payer: entries(&by_payer, &payer_names, target, decimals),
     })
     .into_response()
 }
