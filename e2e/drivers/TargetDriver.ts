@@ -524,6 +524,20 @@ export class TargetDriver implements AppDriver, Harness {
     }
   }
 
+  // --- Synchronisation : pierres tombales (REQ-SYN-002) ---
+
+  /**
+   * Récupère les pierres tombales via l'endpoint de synchronisation (API-only, sans UI dédiée), comme
+   * le ferait un client offline-first au réveil. Renvoie les types d'entités supprimées.
+   */
+  async tombstonedEntityTypes(): Promise<string[]> {
+    return this.page.evaluate(async () => {
+      const res = await fetch("/api/v1/sync/tombstones");
+      const body = (await res.json()) as { tombstones: { entity_type: string }[] };
+      return body.tombstones.map((t) => t.entity_type);
+    });
+  }
+
   // --- Langue (REQ-I18N-001) ---
 
   async setLanguage(code: string): Promise<void> {

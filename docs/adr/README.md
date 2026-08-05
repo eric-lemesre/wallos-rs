@@ -49,6 +49,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0031 | STA-004 répartition (somme conservée, bucket « (aucun) ») | 🔴 |
 | 0032 | SEC-006 en-têtes de sécurité + CSP web (natif hors périmètre) | 🟡 |
 | 0033 | I18N-004 repli langue (fallbackLng + porte de parité) | ⚪ |
+| 0034 | SYN-002 pierres tombales (curseur since, purge, resync) | 🟡 |
 
 ## À relire en priorité aujourd'hui (🔴)
 

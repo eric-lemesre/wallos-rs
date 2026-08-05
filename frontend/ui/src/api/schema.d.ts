@@ -523,6 +523,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sync/tombstones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pierres tombales à appliquer par un appareil qui se synchronise (REQ-SYN-002).
+         * @description Curseur `since` **exclusif** (RFC 3339) : renvoie les suppressions postérieures. Le serveur purge les
+         *     pierres tombales expirées (rétention, ADR 0013) puis, si `since` précède la fenêtre de rétention (ou
+         *     est absent → première synchronisation), signale `full_resync_required` : l'appareil se resynchronise
+         *     entièrement plutôt que d'appliquer un delta silencieusement incomplet. Isolation §9.
+         */
+        get: operations["getTombstones"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1234,6 +1257,46 @@ export interface components {
             subscriptions: components["schemas"]["SubscriptionDto"][];
             /** @description Total agrégé des abonnements actifs de la liste, dans la devise cible. */
             total: components["schemas"]["ConvertedTotalResponse"];
+        };
+        /** @description Une pierre tombale : la suppression d'une entité répliquée (REQ-SYN-002). */
+        TombstoneDto: {
+            /**
+             * @description Date de suppression fournie par le serveur (RFC 3339) — sert de curseur `since` suivant.
+             * @example 2026-08-05T12:00:00Z
+             */
+            deleted_at: string;
+            /** @description Identifiant (UUID) de l'entité supprimée (REQ-SYN-001). */
+            entity_id: string;
+            /**
+             * @description Type d'entité supprimée (`category` / `payment_method` / `payer`).
+             * @example payer
+             */
+            entity_type: string;
+        };
+        /**
+         * @description Suppressions à appliquer par un appareil qui se synchronise (REQ-SYN-002), ordonnées par date de
+         *     suppression croissante.
+         */
+        TombstonesResponse: {
+            /**
+             * @description Instant serveur de la réponse (RFC 3339) : le client le fournit comme `since` au prochain appel.
+             * @example 2026-08-05T12:00:00Z
+             */
+            as_of: string;
+            /**
+             * @description `true` si le curseur `since` **précède la fenêtre de rétention** (ADR 0013) : des suppressions
+             *     ont pu être purgées, l'appareil doit **se resynchroniser entièrement** plutôt que d'appliquer un
+             *     delta silencieusement incomplet. Toujours `true` en l'absence de curseur (première synchro).
+             */
+            full_resync_required: boolean;
+            /**
+             * Format: int64
+             * @description Fenêtre de rétention effective côté serveur (jours), informative pour le client.
+             * @example 30
+             */
+            retention_days: number;
+            /** @description Pierres tombales postérieures au curseur (ou toutes, en première synchronisation). */
+            tombstones: components["schemas"]["TombstoneDto"][];
         };
         /**
          * @description Une occurrence de paiement attendue dans la fenêtre (REQ-STA-005). Un même abonnement peut
@@ -2815,6 +2878,61 @@ export interface operations {
             };
             /** @description Validation par champ */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getTombstones: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Curseur : ne renvoie que les suppressions **strictement postérieures** à cet instant (RFC 3339,
+                 *     tel que renvoyé dans `as_of` d'un appel précédent). Absent → première synchronisation (toutes les
+                 *     pierres tombales conservées, `full_resync_required = true`).
+                 * @example 2026-08-01T00:00:00Z
+                 */
+                since?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Suppressions à appliquer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TombstonesResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Curseur invalide */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -112,11 +112,25 @@ impl<'a> PaymentMethodRepository<'a> {
     /// `StorageError::Database` en cas d'échec de requête.
     #[requirement(REQ-SUB-011)]
     pub async fn delete(&self, actor: &Actor, id: Uuid) -> Result<bool, StorageError> {
+        let mut tx = self.pool.begin().await?;
         let result = sqlx::query("delete from payment_methods where id = $1 and household_id = $2")
             .bind(id)
             .bind(actor.household_id())
-            .execute(self.pool)
+            .execute(&mut *tx)
             .await?;
-        Ok(result.rows_affected() > 0)
+        if result.rows_affected() == 0 {
+            tx.rollback().await?;
+            return Ok(false);
+        }
+        // Pierre tombale dans la MÊME transaction (REQ-SYN-002) : jamais de suppression sans trace.
+        crate::tombstones::record(
+            &mut *tx,
+            actor.household_id(),
+            crate::tombstones::ENTITY_PAYMENT_METHOD,
+            id,
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(true)
     }
 }

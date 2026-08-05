@@ -18,7 +18,7 @@ use wallos_proto::{
     NextDueRequest, NextDueResponse, PayerDto, PaymentMethodDto, Problem, ReferenceCurrencyDto,
     RejectedRow, RenameCategoryRequest, RenamePayerRequest, RenamePaymentMethodRequest,
     RepartitionEntryDto, RepartitionResponse, SetLanguageRequest, SubscriptionDto,
-    SubscriptionListResponse, problem,
+    SubscriptionListResponse, TombstoneDto, TombstonesResponse, problem,
 };
 use wallos_storage::Db;
 
@@ -36,6 +36,7 @@ pub mod security;
 pub mod settings;
 pub mod statistics;
 pub mod subscriptions;
+pub mod sync;
 
 /// API wallos-rs v1.
 #[derive(OpenApi)]
@@ -82,7 +83,8 @@ pub mod subscriptions;
         settings::get_reference_currency,
         settings::set_reference_currency,
         settings::get_language,
-        settings::set_language
+        settings::set_language,
+        sync::get_tombstones
     ),
     components(schemas(
         HealthResponse,
@@ -122,7 +124,9 @@ pub mod subscriptions;
         DataBundle,
         ImportReport,
         ImportCounts,
-        RejectedRow
+        RejectedRow,
+        TombstoneDto,
+        TombstonesResponse
     ))
 )]
 pub struct ApiDoc;
@@ -228,6 +232,7 @@ pub fn app_with_db(db: Db) -> Router {
             settings::set_reference_currency
         ))
         .routes(routes!(settings::get_language, settings::set_language))
+        .routes(routes!(sync::get_tombstones))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))

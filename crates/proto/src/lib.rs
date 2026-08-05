@@ -341,6 +341,48 @@ pub struct RepartitionResponse {
     pub by_payer: Vec<RepartitionEntryDto>,
 }
 
+/// Paramètres de la récupération des pierres tombales (REQ-SYN-002).
+#[derive(Debug, Clone, Deserialize, Serialize, IntoParams)]
+pub struct TombstonesQuery {
+    /// Curseur : ne renvoie que les suppressions **strictement postérieures** à cet instant (RFC 3339,
+    /// tel que renvoyé dans `as_of` d'un appel précédent). Absent → première synchronisation (toutes les
+    /// pierres tombales conservées, `full_resync_required = true`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[param(example = "2026-08-01T00:00:00Z")]
+    pub since: Option<String>,
+}
+
+/// Une pierre tombale : la suppression d'une entité répliquée (REQ-SYN-002).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct TombstoneDto {
+    /// Type d'entité supprimée (`category` / `payment_method` / `payer`).
+    #[schema(example = "payer")]
+    pub entity_type: String,
+    /// Identifiant (UUID) de l'entité supprimée (REQ-SYN-001).
+    pub entity_id: String,
+    /// Date de suppression fournie par le serveur (RFC 3339) — sert de curseur `since` suivant.
+    #[schema(example = "2026-08-05T12:00:00Z")]
+    pub deleted_at: String,
+}
+
+/// Suppressions à appliquer par un appareil qui se synchronise (REQ-SYN-002), ordonnées par date de
+/// suppression croissante.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct TombstonesResponse {
+    /// Pierres tombales postérieures au curseur (ou toutes, en première synchronisation).
+    pub tombstones: Vec<TombstoneDto>,
+    /// `true` si le curseur `since` **précède la fenêtre de rétention** (ADR 0013) : des suppressions
+    /// ont pu être purgées, l'appareil doit **se resynchroniser entièrement** plutôt que d'appliquer un
+    /// delta silencieusement incomplet. Toujours `true` en l'absence de curseur (première synchro).
+    pub full_resync_required: bool,
+    /// Fenêtre de rétention effective côté serveur (jours), informative pour le client.
+    #[schema(example = 30)]
+    pub retention_days: i64,
+    /// Instant serveur de la réponse (RFC 3339) : le client le fournit comme `since` au prochain appel.
+    #[schema(example = "2026-08-05T12:00:00Z")]
+    pub as_of: String,
+}
+
 /// Une catégorie d'abonnements exposée à l'interface (REQ-CAT-001).
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct CategoryDto {
