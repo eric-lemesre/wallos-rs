@@ -17,7 +17,8 @@ use wallos_proto::{
     HealthResponse, ImportCounts, ImportReport, LanguageResponse, MoneyInput, MonthlyCostPointDto,
     NextDueRequest, NextDueResponse, PayerDto, PaymentMethodDto, Problem, ReferenceCurrencyDto,
     RejectedRow, RenameCategoryRequest, RenamePayerRequest, RenamePaymentMethodRequest,
-    SetLanguageRequest, SubscriptionDto, SubscriptionListResponse, problem,
+    RepartitionEntryDto, RepartitionResponse, SetLanguageRequest, SubscriptionDto,
+    SubscriptionListResponse, problem,
 };
 use wallos_storage::Db;
 
@@ -63,6 +64,7 @@ pub mod subscriptions;
         schedule::compute_next_due,
         schedule::get_upcoming_payments,
         statistics::get_cost_evolution,
+        statistics::get_repartition,
         data::export_data,
         data::import_data,
         subscriptions::create_subscription,
@@ -102,6 +104,8 @@ pub mod subscriptions;
         NextDueResponse,
         CostEvolutionResponse,
         MonthlyCostPointDto,
+        RepartitionResponse,
+        RepartitionEntryDto,
         CreateSubscriptionRequest,
         SubscriptionDto,
         SubscriptionListResponse,
@@ -197,6 +201,7 @@ pub fn app_with_db(db: Db) -> Router {
         .routes(routes!(schedule::compute_next_due))
         .routes(routes!(schedule::get_upcoming_payments))
         .routes(routes!(statistics::get_cost_evolution))
+        .routes(routes!(statistics::get_repartition))
         .routes(routes!(data::export_data))
         .routes(routes!(data::import_data))
         .routes(routes!(

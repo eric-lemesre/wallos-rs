@@ -196,5 +196,16 @@
     "created": "Créées : {{categories}} catégories, {{payment_methods}} moyens de paiement, {{subscriptions}} abonnements",
     "rejectedCount": "{{count}} ligne rejetée",
     "rejectedCount_other": "{{count}} lignes rejetées"
+  },
+  "repartition": {
+    "title": "Répartition des coûts",
+    "reload": "Recharger",
+    "error": "Impossible de charger la répartition des coûts",
+    "incomplete": "Répartition partielle : certains abonnements n'ont pas pu être convertis",
+    "byCategory": "Par catégorie",
+    "byPayer": "Par payeur",
+    "none": "(aucun)",
+    "total": "Total",
+    "empty": "Aucun abonnement actif"
   }
 }
