@@ -33,7 +33,7 @@ depends_on: []
 id: REQ-SYN-002
 title: Pierres tombales
 domain: sync
-status: draft
+status: verified
 criticality: high
 layer: [core, api]
 e2e: required

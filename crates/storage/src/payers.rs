@@ -144,11 +144,19 @@ impl<'a> PayerRepository<'a> {
             .bind(actor.household_id())
             .execute(&mut *tx)
             .await?;
+        if result.rows_affected() == 0 {
+            tx.rollback().await?;
+            return Ok(DeleteOutcome::NotFound);
+        }
+        // Pierre tombale dans la MÊME transaction (REQ-SYN-002) : jamais de suppression sans trace.
+        crate::tombstones::record(
+            &mut *tx,
+            actor.household_id(),
+            crate::tombstones::ENTITY_PAYER,
+            id,
+        )
+        .await?;
         tx.commit().await?;
-        Ok(if result.rows_affected() > 0 {
-            DeleteOutcome::Deleted
-        } else {
-            DeleteOutcome::NotFound
-        })
+        Ok(DeleteOutcome::Deleted)
     }
 }
