@@ -2,7 +2,7 @@
 
 # Matrice de traçabilité des exigences
 
-Total : **73** exigences — 52 verified · 21 draft.
+Total : **73** exigences — 53 verified · 20 draft.
 
 Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et [`spec/requirements/`](requirements/). Régénérer avec `cargo xtask trace --write`.
 
@@ -102,7 +102,7 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 | `REQ-SUB-002` | Création d'un abonnement | high | ✅ verified |
 | `REQ-SUB-003` | Modèle de cycle de facturation | high | ✅ verified |
 | `REQ-SUB-004` | Modification d'un abonnement | high | ✅ verified |
-| `REQ-SUB-005` | Suppression d'un abonnement | high | ⚪ draft |
+| `REQ-SUB-005` | Suppression d'un abonnement | high | ✅ verified |
 | `REQ-SUB-006` | Liste des abonnements et filtres | high | ✅ verified |
 | `REQ-SUB-007` | Recherche et tri | medium | ✅ verified |
 | `REQ-SUB-008` | Abonnement désactivé | medium | ✅ verified |

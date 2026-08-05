@@ -517,7 +517,14 @@ export interface paths {
          */
         put: operations["updateSubscription"];
         post?: never;
-        delete?: never;
+        /**
+         * Supprime un abonnement du foyer de l'appelant (REQ-SUB-005).
+         * @description **Suppression traçable** (REQ-SYN-002) : une pierre tombale horodatée est créée dans la même
+         *     transaction, si bien qu'un autre appareil applique la suppression au lieu de réintroduire
+         *     l'abonnement. L'abonnement disparaît de **toutes** les vues (liste, agrégats). Isolation §9 : un
+         *     abonnement inconnu ou d'un autre foyer se comporte comme inexistant (`404`, jamais `403`).
+         */
+        delete: operations["deleteSubscription"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2878,6 +2885,45 @@ export interface operations {
             };
             /** @description Validation par champ */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant (UUID) de l'abonnement */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Abonnement supprimé (pierre tombale créée) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Abonnement inconnu ou hors du foyer */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

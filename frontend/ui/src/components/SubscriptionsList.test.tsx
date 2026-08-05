@@ -176,6 +176,40 @@ describe("SubscriptionsList", () => {
     );
   });
 
+  it("supprime un abonnement (DELETE, REQ-SUB-005)", async () => {
+    vi.spyOn(api, "GET").mockResolvedValue(response([sub("1", "Netflix", "9.99")], "9.99"));
+    const del = vi.spyOn(api, "DELETE").mockResolvedValue({
+      data: undefined,
+      response: new Response(null, { status: 204 }),
+    } as never);
+    const user = userEvent.setup();
+    renderList();
+
+    await screen.findByTestId("subscription-name");
+    await user.click(screen.getByTestId("subscription-delete-1"));
+
+    await waitFor(() =>
+      expect(del).toHaveBeenCalledWith("/subscriptions/{id}", {
+        params: { path: { id: "1" } },
+      }),
+    );
+  });
+
+  it("signale un échec de suppression (DELETE en erreur)", async () => {
+    vi.spyOn(api, "GET").mockResolvedValue(response([sub("1", "Netflix", "9.99")], "9.99"));
+    vi.spyOn(api, "DELETE").mockResolvedValue({
+      data: undefined,
+      response: new Response(null, { status: 500 }),
+    } as never);
+    const user = userEvent.setup();
+    renderList();
+
+    await screen.findByTestId("subscription-name");
+    await user.click(screen.getByTestId("subscription-delete-1"));
+    // Réutilise l'indicateur d'échec d'écriture (jamais un retrait silencieux).
+    expect(await screen.findByTestId("subscriptions-save-error")).toBeInTheDocument();
+  });
+
   it("désactive un abonnement (PUT active=false, REQ-SUB-008)", async () => {
     vi.spyOn(api, "GET").mockResolvedValue(response([sub("1", "Netflix", "9.99")], "9.99"));
     const put = vi.spyOn(api, "PUT").mockResolvedValue({

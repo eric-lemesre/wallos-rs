@@ -21,6 +21,8 @@ pub const ENTITY_CATEGORY: &str = "category";
 pub const ENTITY_PAYMENT_METHOD: &str = "payment_method";
 /// Type d'entité « payeur ».
 pub const ENTITY_PAYER: &str = "payer";
+/// Type d'entité « abonnement ».
+pub const ENTITY_SUBSCRIPTION: &str = "subscription";
 
 /// Pierre tombale exposée à la synchronisation.
 #[derive(Debug, Clone, sqlx::FromRow)]
