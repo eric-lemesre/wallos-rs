@@ -15,9 +15,14 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, SecondsFormat, Utc};
 use wallos_core::requirement;
-use wallos_core::{DEFAULT_TOMBSTONE_RETENTION_DAYS, requires_full_resync, retention_cutoff};
-use wallos_proto::{TombstoneDto, TombstonesQuery, TombstonesResponse, problem};
-use wallos_storage::{Db, TombstoneRepository};
+use wallos_core::{
+    DEFAULT_TOMBSTONE_RETENTION_DAYS, SyncCursor, requires_full_resync, retention_cutoff,
+};
+use wallos_proto::{
+    SyncChangeDto, SyncChangesQuery, SyncChangesResponse, TombstoneDto, TombstonesQuery,
+    TombstonesResponse, problem,
+};
+use wallos_storage::{Db, SyncChangesRepository, TombstoneRepository};
 
 use crate::auth::AuthActor;
 use crate::problem_response;
@@ -32,6 +37,11 @@ static RETENTION_DAYS: LazyLock<i64> = LazyLock::new(|| {
         .filter(|d| *d > 0)
         .unwrap_or(DEFAULT_TOMBSTONE_RETENTION_DAYS)
 });
+
+/// Taille de page par défaut du delta incrémental (REQ-SYN-003).
+const DEFAULT_SYNC_LIMIT: u32 = 100;
+/// Taille de page maximale (garde-fou).
+const MAX_SYNC_LIMIT: u32 = 500;
 
 /// `422` identifiant le paramètre fautif.
 #[requirement(REQ-SYN-002)]
@@ -123,6 +133,96 @@ pub async fn get_tombstones(
         full_resync_required,
         retention_days: retention,
         as_of: now.to_rfc3339_opts(SecondsFormat::Micros, true),
+    })
+    .into_response()
+}
+
+/// Récupération incrémentale des changements par curseur (REQ-SYN-003).
+///
+/// Renvoie une **page** de changements (créations, modifications, suppressions) du foyer, triés par
+/// `(horodatage, id)` croissant et **strictement postérieurs** au curseur, avec un `next_cursor` et un
+/// drapeau `has_more`. Le client itère avec `next_cursor` jusqu'à `has_more = false`, puis conserve ce
+/// dernier curseur comme **watermark**. Pagination **keyset** : stable, ni omission ni duplication
+/// (critère #2). Si le curseur précède la fenêtre de rétention des pierres tombales (ADR 0013),
+/// `full_resync_required` invite à repartir d'une synchronisation complète. Isolation §9.
+#[utoipa::path(
+    get,
+    path = "/sync/changes",
+    operation_id = "getSyncChanges",
+    extensions(("x-requirements" = json!(["REQ-SYN-003"]))),
+    params(SyncChangesQuery),
+    responses(
+        (status = 200, description = "Page de delta incrémental", body = SyncChangesResponse, content_type = "application/json"),
+        (status = 401, description = "Non authentifié", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 422, description = "Curseur invalide", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 500, description = "Erreur interne", body = wallos_proto::Problem, content_type = "application/problem+json")
+    )
+)]
+#[requirement(REQ-SYN-003)]
+pub async fn get_sync_changes(
+    AuthActor(actor): AuthActor,
+    State(db): State<Db>,
+    Query(q): Query<SyncChangesQuery>,
+) -> Response {
+    // Curseur : absent → première synchronisation (origine) ; présent mais illisible → 422.
+    let cursor = match q.cursor.as_deref().filter(|s| !s.is_empty()) {
+        None => SyncCursor::beginning(),
+        Some(raw) => match SyncCursor::parse(raw) {
+            Some(c) => c,
+            None => return field_error("cursor", "curseur invalide"),
+        },
+    };
+    // Taille de page bornée : 1..=MAX, défaut DEFAULT.
+    let limit = q
+        .limit
+        .unwrap_or(DEFAULT_SYNC_LIMIT)
+        .clamp(1, MAX_SYNC_LIMIT);
+
+    // On demande une ligne de plus que la page pour détecter s'il reste des changements ensuite.
+    let fetch = i64::from(limit) + 1;
+    let mut rows = match SyncChangesRepository::new(db.pool())
+        .changes(&actor, cursor, fetch)
+        .await
+    {
+        Ok(rows) => rows,
+        Err(_) => return internal_error(),
+    };
+
+    let has_more = rows.len() as i64 > i64::from(limit);
+    rows.truncate(limit as usize);
+
+    // Nouveau curseur : position après le dernier changement de la page (ou le curseur d'entrée si vide).
+    let next_cursor = rows
+        .last()
+        .map_or(cursor, |r| SyncCursor {
+            timestamp: r.ts,
+            id: r.id,
+        })
+        .encode();
+
+    // Curseur périmé (antérieur à la rétention) → resynchronisation complète conseillée (ADR 0013).
+    let now = Utc::now();
+    let full_resync_required = requires_full_resync(cursor.timestamp, now, *RETENTION_DAYS);
+
+    // Le corps d'un upsert est une chaîne JSON déjà sérialisée (privée de household_id) : on la reparse
+    // en valeur pour la transmettre telle quelle ; un corps illisible n'interrompt pas le delta (null).
+    let changes = rows
+        .into_iter()
+        .map(|r| SyncChangeDto {
+            kind: r.kind,
+            entity_type: r.entity_type,
+            id: r.id.to_string(),
+            payload: r
+                .payload
+                .and_then(|p| serde_json::from_str::<serde_json::Value>(&p).ok()),
+        })
+        .collect();
+
+    Json(SyncChangesResponse {
+        changes,
+        next_cursor,
+        has_more,
+        full_resync_required,
     })
     .into_response()
 }
