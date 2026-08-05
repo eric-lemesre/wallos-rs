@@ -227,7 +227,7 @@ depends_on: [REQ-I18N-001, REQ-CUR-006]
 id: REQ-I18N-004
 title: Repli sur la langue de référence
 domain: i18n
-status: draft
+status: verified
 criticality: low
 layer: [ui]
 e2e: optional
