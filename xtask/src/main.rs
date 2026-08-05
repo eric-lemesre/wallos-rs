@@ -10,6 +10,7 @@
 //! - `cargo xtask lint-money` : interdiction des flottants monétaires
 //! - `cargo xtask lint-clock` : interdiction des accès à l'horloge dans `core` (REQ-STA-008)
 //! - `cargo xtask lint-i18n` : interdiction des chaînes d'affichage littérales dans `frontend/ui` (REQ-I18N-002)
+//! - `cargo xtask lint-i18n-parity` : clés de la langue de référence manquantes ailleurs (REQ-I18N-004)
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -48,6 +49,8 @@ enum Command {
     LintClock,
     /// Interdit les chaînes d'affichage littérales dans `frontend/ui` (REQ-I18N-002).
     LintI18n,
+    /// Signale les clés de la langue de référence absentes des autres catalogues (REQ-I18N-004).
+    LintI18nParity,
 }
 
 fn workspace_root() -> PathBuf {
@@ -70,6 +73,7 @@ fn main() {
         Command::LintMoney => lint_money::run(&root),
         Command::LintClock => lint_clock::run(&root),
         Command::LintI18n => lint_i18n::run(&root),
+        Command::LintI18nParity => lint_i18n_parity::run(&root),
     };
     std::process::exit(code);
 }
@@ -829,6 +833,160 @@ mod lint_i18n {
         fn ignores_non_display_attributes() {
             // data-testid / role / type ne portent pas d'affichage : jamais signalés.
             assert!(scan(r#"<button type="submit" data-testid="go" role="alert">"#).is_empty());
+        }
+    }
+}
+
+/// Porte REQ-I18N-004 : signale **en construction** toute clé de la langue de **référence** (`en`)
+/// absente d'un autre catalogue de `frontend/ui/src/i18n/locales`.
+///
+/// Le repli d'exécution (`fallbackLng: "en"`) garantit qu'une clé manquante affiche la valeur de
+/// référence plutôt qu'une clé brute (interface non trouée) ; cette porte en est le **complément
+/// statique** : elle rend visible, et bloque, toute traduction incomplète avant livraison. La langue de
+/// référence est `en` (cf. `frontend/ui/src/i18n/index.ts`) ; son propre catalogue est par construction
+/// complet. Les clés **supplémentaires** d'une locale (absentes de la référence) ne sont pas des trous
+/// d'affichage et ne sont donc pas signalées ici.
+mod lint_i18n_parity {
+    use std::path::Path;
+
+    use serde_json::Value;
+    use walkdir::WalkDir;
+
+    /// Langue de référence : son catalogue définit l'ensemble des clés attendues.
+    const REFERENCE: &str = "en";
+
+    /// Aplatit un objet JSON en clés pointées (`"a.b.c"`), ne retenant que les **feuilles** (valeurs
+    /// chaîne). Fonction pure, testable.
+    fn flatten(value: &Value, prefix: &str, out: &mut Vec<String>) {
+        match value {
+            Value::Object(map) => {
+                for (k, v) in map {
+                    let key = if prefix.is_empty() {
+                        k.clone()
+                    } else {
+                        format!("{prefix}.{k}")
+                    };
+                    flatten(v, &key, out);
+                }
+            }
+            // Feuille (chaîne, nombre, booléen, null) : une clé traduisible.
+            _ => out.push(prefix.to_string()),
+        }
+    }
+
+    /// Clés présentes dans `reference` mais **absentes** de `other` (celles qui tomberaient sur le
+    /// repli). Résultat trié pour un rapport déterministe. Fonction pure, testable.
+    fn missing_keys(reference: &Value, other: &Value) -> Vec<String> {
+        let mut ref_keys = Vec::new();
+        flatten(reference, "", &mut ref_keys);
+        let mut other_keys = Vec::new();
+        flatten(other, "", &mut other_keys);
+        let present: std::collections::HashSet<&String> = other_keys.iter().collect();
+        let mut missing: Vec<String> = ref_keys
+            .into_iter()
+            .filter(|k| !present.contains(k))
+            .collect();
+        missing.sort();
+        missing.dedup();
+        missing
+    }
+
+    fn load(path: &Path) -> Result<Value, String> {
+        let content =
+            std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        serde_json::from_str(&content).map_err(|e| format!("{}: {e}", path.display()))
+    }
+
+    pub fn run(root: &Path) -> i32 {
+        let locales_dir = root.join("frontend/ui/src/i18n/locales");
+        let reference_path = locales_dir.join(format!("{REFERENCE}.json"));
+        let reference = match load(&reference_path) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("REQ-I18N-004: catalogue de référence illisible: {e}");
+                return 1;
+            }
+        };
+
+        let mut violations = Vec::new();
+        for entry in WalkDir::new(&locales_dir)
+            .into_iter()
+            .filter_map(Result::ok)
+            .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("json"))
+        {
+            let path = entry.path();
+            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            if stem == REFERENCE {
+                continue;
+            }
+            let other = match load(path) {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("REQ-I18N-004: catalogue illisible: {e}");
+                    return 1;
+                }
+            };
+            for key in missing_keys(&reference, &other) {
+                violations.push(format!(
+                    "{stem}: clé manquante « {key} » (repli sur {REFERENCE})"
+                ));
+            }
+        }
+
+        if violations.is_empty() {
+            println!(
+                "i18n catalogs are complete against the reference ({REFERENCE}) (REQ-I18N-004)."
+            );
+            0
+        } else {
+            eprintln!(
+                "Missing translation keys — complete the catalogs or they will fall back (REQ-I18N-004):"
+            );
+            for v in violations {
+                eprintln!("  {v}");
+            }
+            1
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{flatten, missing_keys};
+        use serde_json::json;
+
+        #[test]
+        fn flatten_yields_dotted_leaf_keys() {
+            let mut out = Vec::new();
+            flatten(
+                &json!({ "a": { "b": "x", "c": "y" }, "d": "z" }),
+                "",
+                &mut out,
+            );
+            out.sort();
+            assert_eq!(out, vec!["a.b", "a.c", "d"]);
+        }
+
+        #[test]
+        fn missing_keys_reports_reference_keys_absent_from_other() {
+            let reference = json!({ "greet": "Hi", "bye": "Bye", "nested": { "k": "v" } });
+            let other = json!({ "greet": "Salut", "nested": {} });
+            // « bye » et « nested.k » manquent dans l'autre catalogue.
+            assert_eq!(missing_keys(&reference, &other), vec!["bye", "nested.k"]);
+        }
+
+        #[test]
+        fn complete_catalog_has_no_missing_keys() {
+            let reference = json!({ "a": "1", "b": { "c": "2" } });
+            let other = json!({ "a": "un", "b": { "c": "deux" } });
+            assert!(missing_keys(&reference, &other).is_empty());
+        }
+
+        #[test]
+        fn extra_keys_in_other_are_not_reported() {
+            // Une clé supplémentaire côté locale n'est pas un trou d'affichage : jamais signalée.
+            let reference = json!({ "a": "1" });
+            let other = json!({ "a": "un", "extra": "de trop" });
+            assert!(missing_keys(&reference, &other).is_empty());
         }
     }
 }
