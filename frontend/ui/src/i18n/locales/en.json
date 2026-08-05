@@ -136,7 +136,8 @@
       "name": "Name",
       "amount": "Amount",
       "next_due": "Next payment"
-    }
+    },
+    "delete": "Delete"
   },
   "paymentMethods": {
     "title": "Payment methods",

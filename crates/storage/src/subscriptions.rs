@@ -185,6 +185,38 @@ impl<'a> SubscriptionRepository<'a> {
         Ok(res.rows_affected() > 0)
     }
 
+    /// Supprime un abonnement **du foyer de l'appelant** (REQ-SUB-005). Renvoie `true` si une ligne a
+    /// été supprimée, `false` sinon (inconnu ou autre foyer → 404, jamais 403, §9).
+    ///
+    /// **Suppression traçable** : une pierre tombale est écrite **dans la même transaction** (REQ-SYN-002)
+    /// pour qu'un appareil hors ligne applique la suppression au lieu de réintroduire l'abonnement. Aucune
+    /// cascade (un abonnement n'est référencé par aucune autre entité).
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-SUB-005)]
+    pub async fn delete(&self, actor: &Actor, id: Uuid) -> Result<bool, StorageError> {
+        let mut tx = self.pool.begin().await?;
+        let result = sqlx::query("delete from subscriptions where id = $1 and household_id = $2")
+            .bind(id)
+            .bind(actor.household_id())
+            .execute(&mut *tx)
+            .await?;
+        if result.rows_affected() == 0 {
+            tx.rollback().await?;
+            return Ok(false);
+        }
+        crate::tombstones::record(
+            &mut *tx,
+            actor.household_id(),
+            crate::tombstones::ENTITY_SUBSCRIPTION,
+            id,
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(true)
+    }
+
     /// Liste les abonnements **du foyer de l'appelant**, filtrés de façon **conjonctive** (REQ-SUB-006).
     ///
     /// Chaque filtre est un garde `paramètre IS NULL OR colonne = paramètre` : `None` n'exclut rien,

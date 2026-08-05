@@ -136,7 +136,8 @@
       "name": "Nom",
       "amount": "Montant",
       "next_due": "Prochaine échéance"
-    }
+    },
+    "delete": "Supprimer"
   },
   "paymentMethods": {
     "title": "Moyens de paiement",

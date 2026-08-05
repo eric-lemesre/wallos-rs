@@ -101,7 +101,7 @@ depends_on: [REQ-SUB-002, REQ-SUB-012]
 id: REQ-SUB-005
 title: Suppression d'un abonnement
 domain: subscriptions
-status: draft
+status: verified
 criticality: high
 layer: [core, api, ui]
 e2e: required

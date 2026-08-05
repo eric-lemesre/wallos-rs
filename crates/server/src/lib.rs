@@ -72,6 +72,7 @@ pub mod sync;
         subscriptions::create_subscription,
         subscriptions::list_subscriptions,
         subscriptions::update_subscription,
+        subscriptions::delete_subscription,
         payment_methods::create_payment_method,
         payment_methods::list_payment_methods,
         payment_methods::rename_payment_method,
@@ -216,7 +217,10 @@ pub fn app_with_db(db: Db) -> Router {
             subscriptions::create_subscription,
             subscriptions::list_subscriptions
         ))
-        .routes(routes!(subscriptions::update_subscription))
+        .routes(routes!(
+            subscriptions::update_subscription,
+            subscriptions::delete_subscription
+        ))
         .routes(routes!(
             payment_methods::create_payment_method,
             payment_methods::list_payment_methods

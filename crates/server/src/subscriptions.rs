@@ -213,6 +213,43 @@ pub async fn update_subscription(
     }
 }
 
+/// Supprime un abonnement du foyer de l'appelant (REQ-SUB-005).
+///
+/// **Suppression traçable** (REQ-SYN-002) : une pierre tombale horodatée est créée dans la même
+/// transaction, si bien qu'un autre appareil applique la suppression au lieu de réintroduire
+/// l'abonnement. L'abonnement disparaît de **toutes** les vues (liste, agrégats). Isolation §9 : un
+/// abonnement inconnu ou d'un autre foyer se comporte comme inexistant (`404`, jamais `403`).
+#[utoipa::path(
+    delete,
+    path = "/subscriptions/{id}",
+    operation_id = "deleteSubscription",
+    params(("id" = String, Path, description = "Identifiant (UUID) de l'abonnement")),
+    extensions(("x-requirements" = json!(["REQ-SUB-005"]))),
+    responses(
+        (status = 204, description = "Abonnement supprimé (pierre tombale créée)"),
+        (status = 401, description = "Non authentifié", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Abonnement inconnu ou hors du foyer", body = wallos_proto::Problem, content_type = "application/problem+json")
+    )
+)]
+#[requirement(REQ-SUB-005)]
+pub async fn delete_subscription(
+    AuthActor(actor): AuthActor,
+    State(db): State<Db>,
+    Path(id): Path<String>,
+) -> Response {
+    let Ok(uuid) = Uuid::parse_str(&id) else {
+        return subscription_not_found();
+    };
+    match SubscriptionRepository::new(db.pool())
+        .delete(&actor, uuid)
+        .await
+    {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => subscription_not_found(),
+        Err(_) => internal_error(),
+    }
+}
+
 /// Reconstruit le cycle stocké (jamais silencieusement altéré : un intervalle non stockable est écarté).
 #[requirement(REQ-SUB-006)]
 fn row_cycle(row: &SubscriptionRow) -> Option<BillingCycle> {
