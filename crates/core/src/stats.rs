@@ -8,8 +8,11 @@
 //! (normalisation mensuelle, répartitions, échéancier) consommeront. Il reste volontairement
 //! générique et ne préempte aucune sémantique métier `oracle: legacy`.
 
+use std::collections::HashMap;
+
 use chrono::{Datelike, Days, Months, NaiveDate};
 use rust_decimal::Decimal;
+use uuid::Uuid;
 use wallos_req_macros::requirement;
 
 use crate::DomainError;
@@ -184,6 +187,77 @@ pub fn monthly_cost_evolution(
             }
         })
         .collect()
+}
+
+/// Contribution d'un abonnement à une **répartition** sur un axe (REQ-STA-004).
+///
+/// `key` identifie le bucket de l'axe (catégorie **ou** payeur) ; `None` signifie « sans catégorie »
+/// / « sans payeur » — l'abonnement n'est jamais écarté, il alimente un bucket explicite (critère
+/// d'acceptation #2). `monthly` est le coût mensuel **déjà normalisé** (REQ-STA-001) et exprimé dans
+/// la **devise commune** de la répartition — la conversion multi-devises relève de l'appelant (le
+/// domaine reste sans I/O ni table de taux, comme [`CostSpan`]).
+#[derive(Debug, Clone)]
+pub struct RepartitionSlice {
+    /// Clé du bucket d'axe ; `None` = sans catégorie / sans payeur.
+    pub key: Option<Uuid>,
+    /// Coût mensuel normalisé, dans la devise commune de la répartition.
+    pub monthly: Decimal,
+}
+
+/// Part d'un bucket dans une répartition (REQ-STA-004) : sa clé, le total accumulé en **précision
+/// pleine** et le nombre d'abonnements contributeurs. Le libellé (nom de catégorie/payeur, ou
+/// « (aucun) » pour `key == None`) est résolu par l'appelant — le domaine ne connaît que les clés.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepartitionShare {
+    /// Clé du bucket ; `None` = sans catégorie / sans payeur.
+    pub key: Option<Uuid>,
+    /// Somme des coûts mensuels des abonnements du bucket (devise commune, précision pleine).
+    pub total: Decimal,
+    /// Nombre d'abonnements contributeurs de ce bucket.
+    pub count: usize,
+}
+
+/// Répartit des contributions par clé d'axe (REQ-STA-004), du bucket le plus lourd au plus léger.
+///
+/// Chaque `slice` alimente **exactement un** bucket (sa `key`), si bien que la **somme des totaux des
+/// parts est exactement égale à la somme des contributions** — sans écart d'arrondi, l'accumulation
+/// restant en précision décimale pleine (critère d'acceptation #1 ; c'est la mécanique capturée sur
+/// l'application d'origine — `categoryCost`/`memberCost` de `stats_calculations.php`). Les
+/// contributions de clé `None` sont regroupées dans un unique bucket « sans » explicite, **jamais
+/// omis** (critère #2).
+///
+/// Ordre : coût **décroissant** (comme l'application d'origine, `usort $b['y'] <=> $a['y']`), puis
+/// départage **déterministe** stable — nombre de contributeurs décroissant, puis clé (`Some` avant
+/// `None`, `Some` entre eux par octets d'UUID) — pour un rendu reproductible sur totaux égaux.
+///
+/// Fonction **pure** (REQ-STA-008) : aucun accès à l'horloge, résultat fonction des seules entrées.
+#[requirement(REQ-STA-004)]
+#[must_use]
+pub fn repartition(slices: &[RepartitionSlice]) -> Vec<RepartitionShare> {
+    let mut buckets: HashMap<Option<Uuid>, (Decimal, usize)> = HashMap::new();
+    for slice in slices {
+        let entry = buckets.entry(slice.key).or_insert((Decimal::ZERO, 0));
+        entry.0 += slice.monthly;
+        entry.1 += 1;
+    }
+    let mut shares: Vec<RepartitionShare> = buckets
+        .into_iter()
+        .map(|(key, (total, count))| RepartitionShare { key, total, count })
+        .collect();
+    shares.sort_by(|a, b| {
+        // Total décroissant, puis nombre de contributeurs décroissant, puis clé (Some avant None,
+        // Some par octets d'UUID) — ordre total déterministe, indépendant de l'itération du HashMap.
+        b.total
+            .cmp(&a.total)
+            .then_with(|| b.count.cmp(&a.count))
+            .then_with(|| match (a.key, b.key) {
+                (Some(x), Some(y)) => x.as_bytes().cmp(y.as_bytes()),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
+            })
+    });
+    shares
 }
 
 /// Date de référence explicite d'un calcul d'agrégat.
@@ -633,5 +707,112 @@ mod tests {
     fn zero_months_yields_empty_series() {
         let s = [span(ymd(2020, 1, 1), None, "10")];
         assert!(monthly_cost_evolution(&s, ymd(2026, 6, 1), 0).is_empty());
+    }
+
+    // --- Répartition par catégorie / par payeur (REQ-STA-004) ---
+
+    fn slice(key: Option<Uuid>, monthly: &str) -> RepartitionSlice {
+        RepartitionSlice {
+            key,
+            monthly: monthly.parse().unwrap(),
+        }
+    }
+
+    fn share_of(shares: &[RepartitionShare], key: Option<Uuid>) -> &RepartitionShare {
+        shares.iter().find(|s| s.key == key).unwrap()
+    }
+
+    #[test]
+    #[verifies(REQ-STA-004, case = "somme des parts = total général, sans écart d'arrondi")]
+    fn shares_sum_to_the_grand_total() {
+        // Exemple travaillé gelé (REQ-STA-004-repartition.json) : Streaming = 10 + 10, sans axe = 5.
+        let streaming = Uuid::from_u128(1);
+        let slices = [
+            slice(Some(streaming), "10"),
+            slice(Some(streaming), "10"),
+            slice(None, "5"),
+        ];
+        let shares = repartition(&slices);
+        // Deux buckets : Streaming (20, 2 contributeurs) et « (aucun) » (5, 1).
+        assert_eq!(shares.len(), 2);
+        assert_eq!(share_of(&shares, Some(streaming)).total, dec("20"));
+        assert_eq!(share_of(&shares, Some(streaming)).count, 2);
+        assert_eq!(share_of(&shares, None).total, dec("5"));
+        assert_eq!(share_of(&shares, None).count, 1);
+        // Invariant #1 : la somme des parts égale exactement la somme des contributions.
+        let grand_total: Decimal = slices.iter().map(|s| s.monthly).sum();
+        let sum_of_parts: Decimal = shares.iter().map(|s| s.total).sum();
+        assert_eq!(sum_of_parts, grand_total);
+        assert_eq!(sum_of_parts, dec("25"));
+    }
+
+    #[test]
+    #[verifies(REQ-STA-004, case = "abonnements sans axe regroupés dans une entrée explicite, jamais omis")]
+    fn missing_axis_is_grouped_into_an_explicit_bucket() {
+        // Aucun abonnement n'a de clé : tout atterrit dans l'unique bucket « (aucun) », jamais écarté.
+        let slices = [slice(None, "7.30"), slice(None, "2.70")];
+        let shares = repartition(&slices);
+        assert_eq!(shares.len(), 1);
+        assert_eq!(shares[0].key, None);
+        assert_eq!(shares[0].total, dec("10.00"));
+        assert_eq!(shares[0].count, 2);
+    }
+
+    #[test]
+    #[verifies(REQ-STA-004, case = "parts triées par coût décroissant")]
+    fn shares_are_sorted_by_cost_descending() {
+        let a = Uuid::from_u128(10);
+        let b = Uuid::from_u128(20);
+        // b plus lourd que a ; le bucket « (aucun) » le plus léger.
+        let slices = [slice(Some(a), "3"), slice(Some(b), "8"), slice(None, "1")];
+        let shares = repartition(&slices);
+        let totals: Vec<Decimal> = shares.iter().map(|s| s.total).collect();
+        assert_eq!(totals, vec![dec("8"), dec("3"), dec("1")]);
+        assert_eq!(shares[0].key, Some(b));
+        assert_eq!(shares[2].key, None);
+    }
+
+    #[test]
+    #[verifies(REQ-STA-004, case = "totaux égaux : ordre déterministe (Some avant None, puis octets d'UUID)")]
+    fn equal_totals_break_ties_deterministically() {
+        let a = Uuid::from_u128(1);
+        let b = Uuid::from_u128(2);
+        // Trois buckets à total égal : départage Some(a) < Some(b) < None.
+        let slices = [slice(Some(b), "5"), slice(None, "5"), slice(Some(a), "5")];
+        let first = repartition(&slices);
+        let keys: Vec<Option<Uuid>> = first.iter().map(|s| s.key).collect();
+        assert_eq!(keys, vec![Some(a), Some(b), None]);
+        // Déterminisme : un ordre d'entrée différent produit le même résultat.
+        let reordered = [slice(None, "5"), slice(Some(a), "5"), slice(Some(b), "5")];
+        assert_eq!(repartition(&reordered), first);
+    }
+
+    #[test]
+    #[verifies(REQ-STA-004, case = "aucune contribution -> répartition vide")]
+    fn empty_input_yields_empty_repartition() {
+        assert!(repartition(&[]).is_empty());
+    }
+
+    proptest! {
+        #[test]
+        #[verifies(REQ-STA-004, case = "invariant somme=total sur entrées aléatoires")]
+        fn sum_of_shares_always_equals_sum_of_slices(
+            raw in proptest::collection::vec((proptest::option::of(0u128..8), 0i64..1_000_000), 0..64)
+        ) {
+            let slices: Vec<RepartitionSlice> = raw
+                .iter()
+                .map(|(k, cents)| RepartitionSlice {
+                    key: k.map(Uuid::from_u128),
+                    monthly: Decimal::new(*cents, 2),
+                })
+                .collect();
+            let shares = repartition(&slices);
+            let sum_slices: Decimal = slices.iter().map(|s| s.monthly).sum();
+            let sum_shares: Decimal = shares.iter().map(|s| s.total).sum();
+            prop_assert_eq!(sum_slices, sum_shares);
+            let count_slices = slices.len();
+            let count_shares: usize = shares.iter().map(|s| s.count).sum();
+            prop_assert_eq!(count_slices, count_shares);
+        }
     }
 }

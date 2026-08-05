@@ -76,7 +76,7 @@ depends_on: [REQ-SUB-008, REQ-SUB-009, REQ-SUB-010]
 id: REQ-STA-004
 title: Répartition par catégorie et par payeur
 domain: statistics
-status: draft
+status: verified
 criticality: medium
 layer: [core, api, ui]
 e2e: required

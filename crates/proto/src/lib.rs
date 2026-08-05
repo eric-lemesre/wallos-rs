@@ -292,6 +292,55 @@ pub struct CostEvolutionResponse {
     pub points: Vec<MonthlyCostPointDto>,
 }
 
+/// Paramètres de la répartition des coûts (REQ-STA-004).
+#[derive(Debug, Clone, Deserialize, Serialize, IntoParams)]
+pub struct RepartitionQuery {
+    /// Devise cible de la répartition (code ISO 4217) ; défaut : devise de référence du foyer
+    /// (REQ-CUR-001).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[param(example = "EUR")]
+    pub currency: Option<String>,
+}
+
+/// Une part de la répartition sur un axe (REQ-STA-004) : le libellé du bucket et son coût mensuel
+/// total, dans la devise cible.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct RepartitionEntryDto {
+    /// Libellé du bucket : nom de la catégorie / du payeur, ou `null` pour l'entrée **« sans »**
+    /// (sans catégorie / sans payeur) — l'interface la rend par un libellé localisé « (aucun) », jamais
+    /// omise (REQ-STA-004, critère #2).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(example = "Streaming")]
+    pub label: Option<String>,
+    /// Coût mensuel total du bucket, dans la devise cible (décimal exact en chaîne, R4).
+    #[schema(example = "20.00")]
+    pub total: String,
+    /// Nombre d'abonnements contributeurs de ce bucket.
+    #[schema(example = 2)]
+    pub count: usize,
+}
+
+/// Répartition des coûts mensuels par catégorie **et** par payeur (REQ-STA-004), chaque axe trié du
+/// bucket le plus lourd au plus léger. La somme des parts d'un axe égale le total général (critère #1) ;
+/// les abonnements sans catégorie/payeur forment une entrée explicite `label = null` (critère #2).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct RepartitionResponse {
+    /// Devise cible de la répartition (code ISO 4217).
+    #[schema(example = "EUR")]
+    pub currency: String,
+    /// Coût mensuel total du foyer (abonnements actifs), dans la devise cible. Égal à la somme des parts
+    /// de chaque axe (décimal exact en chaîne, R4).
+    #[schema(example = "25.00")]
+    pub total: String,
+    /// `false` si au moins un abonnement actif a été **exclu** (donnée illisible ou taux de conversion
+    /// manquant, REQ-CUR-003) : la répartition est alors partielle, jamais un total nul silencieux.
+    pub complete: bool,
+    /// Répartition par catégorie, triée par coût décroissant.
+    pub by_category: Vec<RepartitionEntryDto>,
+    /// Répartition par payeur, triée par coût décroissant.
+    pub by_payer: Vec<RepartitionEntryDto>,
+}
+
 /// Une catégorie d'abonnements exposée à l'interface (REQ-CAT-001).
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct CategoryDto {

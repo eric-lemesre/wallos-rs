@@ -39,6 +39,9 @@ pub use payer::Payer;
 pub use payment_method::PaymentMethod;
 pub use reference_currency::ReferenceCurrency;
 pub use schedule::{next_due, occurrences_in_range};
-pub use stats::{CostSpan, MonthlyCostPoint, monthly_cost_evolution};
+pub use stats::{
+    CostSpan, MonthlyCostPoint, RepartitionShare, RepartitionSlice, monthly_cost_evolution,
+    repartition,
+};
 pub use subscription::Subscription;
 pub use text::{fold_for_search, matches_search};

@@ -196,5 +196,16 @@
     "created": "Created: {{categories}} categories, {{payment_methods}} payment methods, {{subscriptions}} subscriptions",
     "rejectedCount": "{{count}} rejected row",
     "rejectedCount_other": "{{count}} rejected rows"
+  },
+  "repartition": {
+    "title": "Cost breakdown",
+    "reload": "Reload",
+    "error": "Could not load the cost breakdown",
+    "incomplete": "Partial breakdown: some subscriptions could not be converted",
+    "byCategory": "By category",
+    "byPayer": "By payer",
+    "none": "(none)",
+    "total": "Total",
+    "empty": "No active subscription"
   }
 }
