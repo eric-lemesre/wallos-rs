@@ -47,6 +47,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0029 | Ignore RUSTSEC-2026-0235 (`rkyv` non compilé) | ⚪ |
 | 0030 | SUB-017 payeur (étiquette légère, refus si référencé) | 🔴 |
 | 0031 | STA-004 répartition (somme conservée, bucket « (aucun) ») | 🔴 |
+| 0032 | SEC-006 en-têtes de sécurité + CSP web (natif hors périmètre) | 🟡 |
 
 ## À relire en priorité aujourd'hui (🔴)
 

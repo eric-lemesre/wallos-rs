@@ -32,6 +32,7 @@ pub mod idempotency;
 pub mod payers;
 pub mod payment_methods;
 pub mod schedule;
+pub mod security;
 pub mod settings;
 pub mod statistics;
 pub mod subscriptions;
@@ -172,7 +173,10 @@ pub fn app() -> Router {
     let (router, _api) = OpenApiRouter::new()
         .routes(routes!(api_v1_health))
         .split_for_parts();
-    Router::new().nest("/api/v1", router).fallback(not_found)
+    Router::new()
+        .nest("/api/v1", router)
+        .fallback(not_found)
+        .layer(axum::middleware::map_response(security::security_headers))
 }
 
 /// Construit le routeur complet, avec état (base de données) : santé + création de compte.
@@ -228,4 +232,5 @@ pub fn app_with_db(db: Db) -> Router {
     Router::new()
         .nest("/api/v1", router.with_state(db))
         .fallback(not_found)
+        .layer(axum::middleware::map_response(security::security_headers))
 }
