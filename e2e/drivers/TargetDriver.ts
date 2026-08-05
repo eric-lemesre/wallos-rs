@@ -374,6 +374,14 @@ export class TargetDriver implements AppDriver, Harness {
     return (await row.getByTestId("subscription-amount").textContent()) ?? "";
   }
 
+  // --- Suppression (REQ-SUB-005) ---
+
+  /** Clique « Supprimer » sur la ligne de l'abonnement identifié par son nom. */
+  async deleteSubscription(name: string): Promise<void> {
+    const row = this.page.getByTestId("subscription-row").filter({ hasText: name });
+    await row.getByTestId(/^subscription-delete-/).click();
+  }
+
   // --- Coût mensuel normalisé (REQ-STA-001) ---
 
   async subscriptionMonthlyCost(name: string): Promise<string> {

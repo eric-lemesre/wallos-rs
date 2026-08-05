@@ -19,11 +19,14 @@ const SORTS = ["name", "amount", "next_due"] as const;
  * Vue par défaut de l'application (REQ-SUB-006) et **modification** en place (REQ-SUB-004) : liste des
  * abonnements du foyer, filtrable par catégorie et par état (filtres conjonctifs), avec un total qui
  * reflète le filtre. Chaque ligne est éditable : au changement de cycle/montant, le serveur **recalcule
- * la prochaine échéance** ré-ancrée sur la date de premier paiement. Isolée par le serveur (§9).
- * S'appuie exclusivement sur le client généré ; aucune chaîne d'affichage en dur (REQ-I18N-002).
+ * la prochaine échéance** ré-ancrée sur la date de premier paiement. Chaque ligne est aussi
+ * **supprimable** (REQ-SUB-005) : la suppression est traçable (pierre tombale, REQ-SYN-002) et retire
+ * l'abonnement de la vue. Isolée par le serveur (§9). S'appuie exclusivement sur le client généré ;
+ * aucune chaîne d'affichage en dur (REQ-I18N-002).
  *
  * @implements REQ-SUB-006
  * @implements REQ-SUB-004
+ * @implements REQ-SUB-005
  * @implements REQ-STA-007
  */
 export function SubscriptionsList() {
@@ -129,6 +132,29 @@ export function SubscriptionsList() {
     [load, category, payer, state, search, sort],
   );
 
+  // Suppression traçable (REQ-SUB-005) : DELETE puis rechargement ; l'abonnement disparaît de la vue.
+  // Tout échec (statut HTTP ou exception réseau) est signalé, jamais un rechargement silencieux.
+  const remove = useCallback(
+    async (sub: SubscriptionDto) => {
+      try {
+        const { response } = await api.DELETE("/subscriptions/{id}", {
+          params: { path: { id: sub.id } },
+        });
+        if (!response.ok) {
+          setSaveFailed(true);
+          return false;
+        }
+      } catch {
+        setSaveFailed(true);
+        return false;
+      }
+      setSaveFailed(false);
+      await load(category, payer, state, search, sort);
+      return true;
+    },
+    [load, category, payer, state, search, sort],
+  );
+
   const subscriptions = data?.subscriptions ?? [];
 
   return (
@@ -203,7 +229,7 @@ export function SubscriptionsList() {
       ) : (
         <ul>
           {subscriptions.map((sub) => (
-            <SubscriptionRow key={sub.id} sub={sub} onSave={save} />
+            <SubscriptionRow key={sub.id} sub={sub} onSave={save} onDelete={remove} />
           ))}
         </ul>
       )}
@@ -231,12 +257,14 @@ export function SubscriptionsList() {
 function SubscriptionRow({
   sub,
   onSave,
+  onDelete,
 }: {
   sub: SubscriptionDto;
   onSave: (
     sub: SubscriptionDto,
     patch: { amount: string; unit: string; interval: number; active: boolean },
   ) => Promise<boolean>;
+  onDelete: (sub: SubscriptionDto) => Promise<boolean>;
 }) {
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
@@ -321,13 +349,22 @@ function SubscriptionRow({
           </button>
         </span>
       ) : (
-        <button
-          type="button"
-          data-testid="subscription-edit"
-          onClick={() => setEditing(true)}
-        >
-          {t("subscriptions.edit")}
-        </button>
+        <span>
+          <button
+            type="button"
+            data-testid="subscription-edit"
+            onClick={() => setEditing(true)}
+          >
+            {t("subscriptions.edit")}
+          </button>
+          <button
+            type="button"
+            data-testid={`subscription-delete-${sub.id}`}
+            onClick={() => void onDelete(sub)}
+          >
+            {t("subscriptions.delete")}
+          </button>
+        </span>
       )}
     </li>
   );
