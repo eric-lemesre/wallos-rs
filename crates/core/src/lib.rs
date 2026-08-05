@@ -45,5 +45,7 @@ pub use stats::{
     repartition,
 };
 pub use subscription::Subscription;
-pub use sync::{DEFAULT_TOMBSTONE_RETENTION_DAYS, requires_full_resync, retention_cutoff};
+pub use sync::{
+    DEFAULT_TOMBSTONE_RETENTION_DAYS, SyncCursor, requires_full_resync, retention_cutoff,
+};
 pub use text::{fold_for_search, matches_search};

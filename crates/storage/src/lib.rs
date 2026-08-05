@@ -16,6 +16,7 @@ pub mod payment_methods;
 pub mod sessions;
 pub mod settings;
 pub mod subscriptions;
+pub mod sync_changes;
 pub mod tombstones;
 pub mod users;
 
@@ -32,5 +33,6 @@ pub use payment_methods::{PaymentMethodRepository, PaymentMethodRow};
 pub use sessions::SessionRepository;
 pub use settings::SettingsRepository;
 pub use subscriptions::{SubscriptionFilter, SubscriptionRepository, SubscriptionRow};
+pub use sync_changes::{ChangeRow, SyncChangesRepository};
 pub use tombstones::{TombstoneRepository, TombstoneRow};
 pub use users::{CreatedAccount, Credentials, StoredUser, UserRepository};

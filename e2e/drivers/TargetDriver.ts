@@ -546,6 +546,36 @@ export class TargetDriver implements AppDriver, Harness {
     });
   }
 
+  // --- Récupération incrémentale par curseur (REQ-SYN-003) ---
+
+  /**
+   * Draine **toutes** les pages du delta incrémental depuis l'origine, avec une taille de page donnée,
+   * en suivant `next_cursor` jusqu'à `has_more = false` (comme un client offline-first). Renvoie la
+   * liste `entity_type:id` de tous les changements, pour vérifier la stabilité de la pagination.
+   */
+  async drainSyncChanges(pageSize: number): Promise<string[]> {
+    return this.page.evaluate(async (page) => {
+      const keys: string[] = [];
+      let cursor: string | null = null;
+      // Garde-fou : borne le nombre de pages pour ne jamais boucler indéfiniment en test.
+      for (let i = 0; i < 100; i++) {
+        const q = cursor
+          ? `?limit=${page}&cursor=${encodeURIComponent(cursor)}`
+          : `?limit=${page}`;
+        const res = await fetch(`/api/v1/sync/changes${q}`);
+        const body = (await res.json()) as {
+          changes: { entity_type: string; id: string }[];
+          next_cursor: string;
+          has_more: boolean;
+        };
+        for (const c of body.changes) keys.push(`${c.entity_type}:${c.id}`);
+        if (!body.has_more) break;
+        cursor = body.next_cursor;
+      }
+      return keys;
+    }, pageSize);
+  }
+
   // --- Langue (REQ-I18N-001) ---
 
   async setLanguage(code: string): Promise<void> {

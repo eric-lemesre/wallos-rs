@@ -383,6 +383,54 @@ pub struct TombstonesResponse {
     pub as_of: String,
 }
 
+/// Paramètres de la récupération incrémentale par curseur (REQ-SYN-003).
+#[derive(Debug, Clone, Deserialize, Serialize, IntoParams)]
+pub struct SyncChangesQuery {
+    /// Curseur de dernière synchronisation (opaque, tel que renvoyé dans `next_cursor`). Absent →
+    /// synchronisation **complète** depuis l'origine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    /// Taille de page souhaitée (bornée côté serveur). Absent → défaut serveur.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[param(example = 100)]
+    pub limit: Option<u32>,
+}
+
+/// Un changement du flux de synchronisation (REQ-SYN-003).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct SyncChangeDto {
+    /// `upsert` (création/modification) ou `delete` (suppression).
+    #[schema(example = "upsert")]
+    pub kind: String,
+    /// Type d'entité (`category` / `payment_method` / `payer` / `subscription`).
+    #[schema(example = "subscription")]
+    pub entity_type: String,
+    /// Identifiant (UUID) de l'entité.
+    pub id: String,
+    /// Corps de l'entité pour un `upsert` (objet JSON), `null` pour un `delete`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Object)]
+    pub payload: Option<serde_json::Value>,
+}
+
+/// Page de delta incrémental (REQ-SYN-003) : changements postérieurs au curseur, triés par
+/// `(horodatage, id)` croissant, avec un **nouveau curseur** et un drapeau de page suivante.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct SyncChangesResponse {
+    /// Changements de la page (créations, modifications, suppressions), ordonnés.
+    pub changes: Vec<SyncChangeDto>,
+    /// Curseur à fournir au prochain appel : position après le dernier changement de la page (ou le
+    /// curseur d'entrée si la page est vide). Une fois `has_more = false`, c'est le **watermark** à
+    /// conserver pour la prochaine synchronisation.
+    pub next_cursor: String,
+    /// `true` s'il reste des changements au-delà de cette page (rappeler avec `next_cursor`).
+    pub has_more: bool,
+    /// `true` si le curseur fourni **précède la fenêtre de rétention** des pierres tombales (ADR 0013) :
+    /// des suppressions ont pu être purgées, le client doit **repartir d'une synchronisation complète**
+    /// (curseur absent) plutôt que d'appliquer un delta silencieusement incomplet.
+    pub full_resync_required: bool,
+}
+
 /// Une catégorie d'abonnements exposée à l'interface (REQ-CAT-001).
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct CategoryDto {
