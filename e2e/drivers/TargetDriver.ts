@@ -602,6 +602,13 @@ export class TargetDriver implements AppDriver, Harness {
     );
   }
 
+  // --- Fonctionnement hors ligne (REQ-SYN-007) ---
+
+  /** État affiché par l'indicateur de synchronisation (`synced` / `offline` / `pending`). */
+  async syncStatus(): Promise<string> {
+    return (await this.page.getByTestId("sync-status").getAttribute("data-status")) ?? "";
+  }
+
   // --- Résolution de conflit (REQ-SYN-005) ---
 
   /** Motifs des entrées du journal des conflits, de la plus récente à la plus ancienne. */

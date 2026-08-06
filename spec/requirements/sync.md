@@ -153,7 +153,7 @@ depends_on: [REQ-SYN-001]
 id: REQ-SYN-007
 title: Fonctionnement hors ligne
 domain: sync
-status: draft
+status: verified
 criticality: high
 layer: [ui]
 e2e: required
