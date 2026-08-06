@@ -410,6 +410,16 @@ export class TargetDriver implements AppDriver, Harness {
     await this.page.getByTestId("subscriptions-total").waitFor({ state: "visible", timeout: 5000 });
   }
 
+  /** Réactive un abonnement désactivé (REQ-STA-003 critère #2 : réintégration immédiate). */
+  async reactivateSubscription(name: string): Promise<void> {
+    const row = this.page.getByTestId("subscription-row").filter({ hasText: name });
+    await row.getByTestId("subscription-edit").click();
+    await row.getByTestId("subscription-active").check();
+    await row.getByTestId("subscription-save").click();
+    // Attend que la liste rechargée soit visible (le total reflète alors la réintégration).
+    await this.page.getByTestId("subscriptions-total").waitFor({ state: "visible", timeout: 5000 });
+  }
+
   // --- Calcul d'échéance (REQ-SUB-012) ---
 
   async computeNextDue(anchor: string, unit: string, interval: string, after: string): Promise<void> {

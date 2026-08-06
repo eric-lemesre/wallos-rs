@@ -57,6 +57,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0039 | SYN-008 appairage + synchro initiale reprenable (curseur) | ⚪ |
 | 0040 | NOT-001 rappels (cron + endpoint, déclenchement exact, regroupement) | 🔴 |
 | 0041 | SUB-010 essai gratuit (design — absent de Wallos) | 🔴 |
+| 0042 | STA-003 exclusion transverse (essai exclu par occurrence dans l'échéancier) | 🟡 |
 
 ## À relire en priorité aujourd'hui (🔴)
 

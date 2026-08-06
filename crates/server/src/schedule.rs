@@ -77,8 +77,9 @@ pub async fn compute_next_due(
 ///
 /// Énumère, pour chaque abonnement **actif** du foyer (oracle Wallos `inactive = 0`, REQ-SUB-008),
 /// **toutes** ses occurrences de paiement dans `[from, from + days]` (bornes incluses), en respectant
-/// sa date de fin (REQ-SUB-009). `from` par défaut = date du jour (horloge serveur). Le résultat est
-/// trié par date, puis nom, puis id (ordre déterministe).
+/// sa date de fin (REQ-SUB-009) **et** sa fin d'essai gratuit (REQ-SUB-010 : aucun paiement dû pendant
+/// l'essai — exclusion transverse REQ-STA-003). `from` par défaut = date du jour (horloge serveur). Le
+/// résultat est trié par date, puis nom, puis id (ordre déterministe).
 #[utoipa::path(
     get,
     path = "/schedule/upcoming",
@@ -93,6 +94,7 @@ pub async fn compute_next_due(
     )
 )]
 #[requirement(REQ-STA-005)]
+#[requirement(REQ-STA-003)]
 pub async fn get_upcoming_payments(
     AuthActor(actor): AuthActor,
     State(db): State<Db>,
@@ -115,7 +117,8 @@ pub async fn get_upcoming_payments(
 
     // Abonnements **actifs** du foyer (isolation §9 via `&actor`). Les inactifs (REQ-SUB-008) sont
     // exclus par le filtre ; les abonnements terminés (REQ-SUB-009) ne produisent aucune occurrence
-    // grâce à la borne `end_date` de `occurrences_in_range`.
+    // grâce à la borne haute `end_date`, et les abonnements en essai gratuit (REQ-SUB-010) aucune
+    // occurrence avant `trial_end_date` (borne basse) — exclusion transverse REQ-STA-003.
     let filter = SubscriptionFilter {
         active: Some(true),
         ..SubscriptionFilter::default()
@@ -142,7 +145,14 @@ pub async fn get_upcoming_payments(
         let Ok(cycle) = BillingCycle::from_parts(unit, interval) else {
             continue;
         };
-        for date in occurrences_in_range(row.first_payment, cycle, from, to, row.end_date) {
+        for date in occurrences_in_range(
+            row.first_payment,
+            cycle,
+            from,
+            to,
+            row.end_date,
+            row.trial_end_date,
+        ) {
             payments.push(UpcomingPayment {
                 date: date.to_string(),
                 subscription_id: row.id.to_string(),
