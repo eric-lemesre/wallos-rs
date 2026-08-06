@@ -432,6 +432,141 @@ async fn disabled_channel_sends_nothing(pool: PgPool) {
     assert!(captured.lock().unwrap().is_empty());
 }
 
+// --- Canal e-mail (REQ-NOT-003) ---
+
+/// Crée un canal e-mail avec une configuration SMTP donnée.
+async fn create_email(pool: &PgPool, cookie: &str, config: Value) -> axum::http::Response<Body> {
+    send(
+        pool,
+        "POST",
+        "/api/v1/notifications/channels",
+        Some(cookie),
+        Some(json!({ "kind": "email", "config": config })),
+    )
+    .await
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-003, case = "création d'un canal e-mail valide ; le mot de passe SMTP est redacté en réponse")]
+async fn email_channel_create_redacts_password(pool: PgPool) {
+    let web = account(&pool, "not003-create@example.com").await;
+    let created = create_email(
+        &pool,
+        &web,
+        json!({
+            "host": "smtp.example.com", "port": 587,
+            "username": "alice", "password": "s3cr3t",
+            "from": "wallos@example.com"
+        }),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let dto = body_json(created).await;
+    assert_eq!(dto["kind"], "email");
+    assert_eq!(dto["config"]["host"], "smtp.example.com");
+    assert_eq!(dto["config"]["from"], "wallos@example.com");
+    // Le secret n'est JAMAIS renvoyé (REQ-NOT-003 « sans exposer les identifiants »).
+    assert_eq!(dto["config"]["password"], "<redacted>");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-003, case = "configuration SMTP invalide (champ manquant / expéditeur illisible) -> 422")]
+async fn email_channel_invalid_config_rejected(pool: PgPool) {
+    let web = account(&pool, "not003-bad@example.com").await;
+    // host manquant.
+    assert_eq!(
+        create_email(
+            &pool,
+            &web,
+            json!({ "port": 587, "username": "a", "password": "b", "from": "w@example.com" })
+        )
+        .await
+        .status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    // port hors bornes.
+    assert_eq!(
+        create_email(&pool, &web, json!({ "host": "smtp.example.com", "port": 0, "username": "a", "password": "b", "from": "w@example.com" }))
+            .await
+            .status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    // from illisible.
+    assert_eq!(
+        create_email(&pool, &web, json!({ "host": "smtp.example.com", "port": 587, "username": "a", "password": "b", "from": "pas-une-adresse" }))
+            .await
+            .status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-003, case = "un canal e-mail défaillant n'interrompt pas les autres canaux ni le cron")]
+async fn failing_email_channel_does_not_interrupt_other_channels(pool: PgPool) {
+    let web = account(&pool, "not003-resilient@example.com").await;
+    assert_eq!(
+        send(
+            &pool,
+            "POST",
+            "/api/v1/subscriptions",
+            Some(&web),
+            Some(json!({
+                "name": "Netflix", "amount": "9.99", "currency": "EUR",
+                "cycle": { "unit": "month", "interval": 1 }, "first_payment": "2026-08-07",
+                "active": true
+            })),
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+
+    // Un webhook vers un récepteur local + un canal e-mail vers un SMTP injoignable (port 1, refusé).
+    let (receiver_url, captured) = spawn_receiver().await;
+    let wh = body_json(create_webhook(&pool, &web, "https://hooks.example.com/x").await).await;
+    let wh_id = Uuid::parse_str(wh["id"].as_str().unwrap()).unwrap();
+    sqlx::query("update notification_channels set config = $2 where id = $1")
+        .bind(wh_id)
+        .bind(json!({ "url": receiver_url }))
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        create_email(
+            &pool,
+            &web,
+            json!({
+                "host": "127.0.0.1", "port": 1, "username": "a", "password": "b",
+                "from": "wallos@example.com", "starttls": false
+            }),
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+
+    let cron = app_with_db_and_cron(
+        Db::from_pool(pool.clone()),
+        CronToken(Some(CRON_SECRET.to_string())),
+    );
+    let resp = cron
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/internal/run-reminders?as_of=2026-08-06")
+                .header("x-cron-token", CRON_SECRET)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    // Le cron réussit malgré l'échec du canal e-mail (best-effort)...
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(body_json(resp).await["emitted"], 1);
+    // ...et le webhook a bien reçu sa charge utile (l'échec e-mail ne l'a pas interrompu).
+    assert_eq!(captured.lock().unwrap().len(), 1);
+}
+
 // --- Autorisation §9 : createNotificationChannel ---
 
 #[sqlx::test(migrations = "../storage/migrations")]

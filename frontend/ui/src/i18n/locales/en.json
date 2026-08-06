@@ -230,12 +230,20 @@
   },
   "notificationChannels": {
     "title": "Notification channels",
+    "typeLabel": "Channel type",
+    "webhook": "Webhook",
+    "email": "Email",
     "urlLabel": "Webhook URL",
     "urlPlaceholder": "https://hooks.example.com/…",
-    "add": "Add webhook",
+    "host": "SMTP host",
+    "port": "Port",
+    "username": "Username",
+    "password": "Password",
+    "from": "From address",
+    "add": "Add channel",
     "delete": "Remove",
     "empty": "No channel configured",
     "loadError": "Could not load channels",
-    "urlRejected": "This URL was rejected (internal or loopback addresses are not allowed)"
+    "rejected": "Channel rejected (invalid configuration, or an internal/loopback address is not allowed)"
   }
 }

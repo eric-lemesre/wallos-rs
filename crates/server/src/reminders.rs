@@ -21,7 +21,7 @@ use uuid::Uuid;
 use wallos_core::billing::{BillingCycle, BillingUnit};
 use wallos_core::requirement;
 use wallos_core::{DueReminder, ReminderCandidate, due_reminders, next_due};
-use wallos_notifier::{Channel, ReminderItem, ReminderNotification, Webhook};
+use wallos_notifier::{Channel, Email, EmailConfig, ReminderItem, ReminderNotification, Webhook};
 use wallos_proto::{
     ReminderDto, ReminderSettingResponse, RemindersResponse, RunRemindersResponse,
     SetReminderSettingRequest, problem,
@@ -107,17 +107,49 @@ fn due_with_kind(rows: &[&ReminderScanRow], as_of: NaiveDate) -> Vec<(DueReminde
     out
 }
 
-/// Construit un canal d'envoi ([`Channel`]) à partir d'une ligne stockée (REQ-NOT-005). `None` si le
-/// type est inconnu ou la configuration illisible (ne fait jamais échouer le cron).
+/// Construit un canal d'envoi ([`Channel`]) à partir d'une ligne stockée (REQ-NOT-005 webhook,
+/// REQ-NOT-003 e-mail). `contact` = `(email, langue)` du titulaire du foyer, requis pour l'e-mail.
+/// `None` si le type est inconnu, la configuration illisible, ou le contact manquant — ne fait jamais
+/// échouer le cron.
 #[requirement(REQ-NOT-005)]
-fn channel_from_row(row: &NotificationChannelRow) -> Option<Channel> {
+#[requirement(REQ-NOT-003)]
+fn channel_from_row(
+    row: &NotificationChannelRow,
+    contact: Option<&(String, String)>,
+) -> Option<Channel> {
     match row.kind.as_str() {
         "webhook" => {
             let url = row.config.get("url").and_then(|v| v.as_str())?;
             Some(Channel::Webhook(Webhook::new(url)))
         }
+        "email" => {
+            let (recipient, language) = contact?;
+            let config = email_config_from(&row.config)?;
+            Some(Channel::Email(Email::new(
+                config,
+                recipient.clone(),
+                language.clone(),
+            )))
+        }
         _ => None,
     }
+}
+
+/// Reconstruit la configuration SMTP depuis la config jsonb stockée (REQ-NOT-003). `None` si une clé
+/// requise manque ou est mal typée (canal ignoré silencieusement plutôt que d'échouer le cron).
+#[requirement(REQ-NOT-003)]
+fn email_config_from(config: &serde_json::Value) -> Option<EmailConfig> {
+    Some(EmailConfig {
+        host: config.get("host")?.as_str()?.to_string(),
+        port: u16::try_from(config.get("port")?.as_u64()?).ok()?,
+        username: config.get("username")?.as_str()?.to_string(),
+        password: config.get("password")?.as_str()?.to_string(),
+        from: config.get("from")?.as_str()?.to_string(),
+        starttls: config
+            .get("starttls")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(true),
+    })
 }
 
 /// Réglage du délai de rappel du compte (REQ-NOT-001).
@@ -293,10 +325,13 @@ pub async fn run_reminders(
     };
 
     // Canaux **actifs** par foyer (REQ-NOT-005), chargés une fois pour tout le balayage.
-    let channels_by_household = match NotificationChannelRepository::new(db.pool())
-        .list_enabled_by_household()
-        .await
-    {
+    let channel_repo = NotificationChannelRepository::new(db.pool());
+    let channels_by_household = match channel_repo.list_enabled_by_household().await {
+        Ok(map) => map,
+        Err(_) => return internal_error(),
+    };
+    // Contact (e-mail, langue) du titulaire de chaque foyer, pour adresser le canal e-mail (REQ-NOT-003).
+    let contacts = match channel_repo.owner_contacts().await {
         Ok(map) => map,
         Err(_) => return internal_error(),
     };
@@ -351,8 +386,9 @@ pub async fn run_reminders(
         {
             let notification =
                 ReminderNotification::new(as_of.format("%Y-%m-%d").to_string(), fresh);
+            let contact = contacts.get(&household_id);
             for row in channels {
-                let Some(channel) = channel_from_row(row) else {
+                let Some(channel) = channel_from_row(row, contact) else {
                     continue;
                 };
                 // Best-effort : on ne journalise PAS l'erreur brute (elle peut contenir l'URL du canal,

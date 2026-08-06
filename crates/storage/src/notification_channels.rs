@@ -100,6 +100,26 @@ impl<'a> NotificationChannelRepository<'a> {
         Ok(result.rows_affected() > 0)
     }
 
+    /// Contact du **titulaire** de chaque foyer pour le canal e-mail (REQ-NOT-003) : `(email, langue)`
+    /// de l'utilisateur le plus ancien du foyer (langue par défaut `en` si non définie, REQ-I18N-004).
+    /// Sert au cron pour adresser le rappel au bon destinataire dans la bonne langue.
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-NOT-003)]
+    pub async fn owner_contacts(&self) -> Result<BTreeMap<Uuid, (String, String)>, StorageError> {
+        let rows: Vec<(Uuid, String, String)> = sqlx::query_as(
+            "select distinct on (household_id) household_id, email::text, coalesce(language, 'en') \
+             from users order by household_id, created_at asc, id asc",
+        )
+        .fetch_all(self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|(household_id, email, language)| (household_id, (email, language)))
+            .collect())
+    }
+
     /// Balaye **tous les foyers** : canaux **actifs** regroupés par foyer (pour le cron d'émission).
     /// Un canal désactivé est exclu (NOT-004 : aucune requête sortante).
     ///

@@ -262,9 +262,11 @@ export interface paths {
         get: operations["listNotificationChannels"];
         put?: never;
         /**
-         * Crée un canal de notification dans le foyer de l'appelant (REQ-NOT-005).
-         * @description Webhook : `config.url` doit être une URL `http(s)` **publique** ; les adresses internes, de
-         *     bouclage, privées ou `localhost` sont refusées (422) pour prévenir la SSRF (critère #2).
+         * Crée un canal de notification dans le foyer de l'appelant (REQ-NOT-005 webhook, REQ-NOT-003 e-mail).
+         * @description - **webhook** : `config.url` doit être une URL `http(s)` **publique** ; les adresses internes, de
+         *       bouclage, privées ou `localhost` sont refusées (422) pour prévenir la SSRF (NOT-005 critère #2).
+         *     - **email** : `config` doit porter `host`, `port`, `username`, `password`, `from` (adresse valide) ;
+         *       `starttls` optionnel (défaut vrai).
          */
         post: operations["createNotificationChannel"];
         delete?: never;

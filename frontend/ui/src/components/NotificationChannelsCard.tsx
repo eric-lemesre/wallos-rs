@@ -7,19 +7,27 @@ import type { components } from "../api/client";
 type NotificationChannelDto = components["schemas"]["NotificationChannelDto"];
 
 /**
- * Canaux de notification du foyer (REQ-NOT-005) : liste, ajout d'un **webhook** (URL) et suppression.
- * L'URL est validée côté serveur contre la falsification de requête (SSRF) — une adresse interne/bouclage
- * est refusée (422), signalée ici. Isolée par le serveur (§9). Aucune chaîne d'affichage en dur
- * (REQ-I18N-002) ; s'appuie sur le client généré.
+ * Canaux de notification du foyer (REQ-NOT-005 webhook, REQ-NOT-003 e-mail) : liste, ajout et
+ * suppression. Pour un webhook, l'URL est validée côté serveur contre la falsification de requête
+ * (SSRF) ; pour un e-mail, la configuration SMTP est validée (une adresse d'expéditeur illisible est
+ * refusée). Le mot de passe SMTP n'est jamais renvoyé (redacté). Isolée par le serveur (§9). Aucune
+ * chaîne d'affichage en dur (REQ-I18N-002).
  *
  * @implements REQ-NOT-005
+ * @implements REQ-NOT-003
  */
 export function NotificationChannelsCard() {
   const { t } = useTranslation();
   const [channels, setChannels] = useState<NotificationChannelDto[]>([]);
   const [failed, setFailed] = useState(false);
   const [rejected, setRejected] = useState(false);
+  const [kind, setKind] = useState<"webhook" | "email">("webhook");
   const [url, setUrl] = useState("");
+  const [host, setHost] = useState("");
+  const [port, setPort] = useState("587");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [from, setFrom] = useState("");
 
   const refresh = useCallback(async () => {
     const { data, response } = await api.GET("/notifications/channels");
@@ -35,17 +43,25 @@ export function NotificationChannelsCard() {
     void refresh();
   }, [refresh]);
 
-  async function addWebhook() {
+  async function addChannel() {
+    const config =
+      kind === "webhook"
+        ? { url }
+        : { host, port: Number.parseInt(port, 10), username, password, from };
     const { response } = await api.POST("/notifications/channels", {
-      body: { kind: "webhook", config: { url } },
+      body: { kind, config },
     });
     if (!response.ok) {
-      // URL refusée (SSRF) ou invalide : signalé, la liste reste inchangée.
+      // Configuration refusée (URL SSRF, adresse illisible, champ manquant) : signalé, liste inchangée.
       setRejected(true);
       return;
     }
     setRejected(false);
     setUrl("");
+    setHost("");
+    setUsername("");
+    setPassword("");
+    setFrom("");
     await refresh();
   }
 
@@ -54,10 +70,15 @@ export function NotificationChannelsCard() {
     await refresh();
   }
 
-  /** Résout l'URL d'un webhook depuis la config générique (objet ouvert). */
-  function webhookUrl(channel: NotificationChannelDto): string {
-    const config = channel.config as { url?: unknown };
-    return typeof config?.url === "string" ? config.url : "";
+  /** Libellé de la cible d'un canal (URL de webhook, ou expéditeur via hôte SMTP pour un e-mail). */
+  function target(channel: NotificationChannelDto): string {
+    const config = channel.config as { url?: unknown; from?: unknown; host?: unknown };
+    if (channel.kind === "webhook") {
+      return typeof config?.url === "string" ? config.url : "";
+    }
+    const fromAddr = typeof config?.from === "string" ? config.from : "";
+    const hostName = typeof config?.host === "string" ? config.host : "";
+    return `${fromAddr} — ${hostName}`;
   }
 
   return (
@@ -72,22 +93,70 @@ export function NotificationChannelsCard() {
 
       {rejected && (
         <p data-testid="notification-channel-rejected" role="alert">
-          {t("notificationChannels.urlRejected")}
+          {t("notificationChannels.rejected")}
         </p>
       )}
 
       <div>
-        <input
-          data-testid="notification-channel-url"
-          aria-label={t("notificationChannels.urlLabel")}
-          placeholder={t("notificationChannels.urlPlaceholder")}
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-        />
+        <select
+          data-testid="notification-channel-type"
+          aria-label={t("notificationChannels.typeLabel")}
+          value={kind}
+          onChange={(e) => setKind(e.target.value as "webhook" | "email")}
+        >
+          <option value="webhook">{t("notificationChannels.webhook")}</option>
+          <option value="email">{t("notificationChannels.email")}</option>
+        </select>
+
+        {kind === "webhook" ? (
+          <input
+            data-testid="notification-channel-url"
+            aria-label={t("notificationChannels.urlLabel")}
+            placeholder={t("notificationChannels.urlPlaceholder")}
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+          />
+        ) : (
+          <span data-testid="notification-channel-email-fields">
+            <input
+              data-testid="notification-channel-host"
+              aria-label={t("notificationChannels.host")}
+              value={host}
+              onChange={(e) => setHost(e.target.value)}
+            />
+            <input
+              data-testid="notification-channel-port"
+              aria-label={t("notificationChannels.port")}
+              inputMode="numeric"
+              value={port}
+              onChange={(e) => setPort(e.target.value)}
+            />
+            <input
+              data-testid="notification-channel-username"
+              aria-label={t("notificationChannels.username")}
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+            <input
+              data-testid="notification-channel-password"
+              aria-label={t("notificationChannels.password")}
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <input
+              data-testid="notification-channel-from"
+              aria-label={t("notificationChannels.from")}
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+          </span>
+        )}
+
         <button
           type="button"
           data-testid="notification-channel-add"
-          onClick={() => void addWebhook()}
+          onClick={() => void addChannel()}
         >
           {t("notificationChannels.add")}
         </button>
@@ -100,7 +169,7 @@ export function NotificationChannelsCard() {
           {channels.map((channel) => (
             <li key={channel.id} data-testid="notification-channel-row">
               <span data-testid="notification-channel-kind">{channel.kind}</span>
-              <span data-testid="notification-channel-target">{webhookUrl(channel)}</span>
+              <span data-testid="notification-channel-target">{target(channel)}</span>
               <button
                 type="button"
                 data-testid={`notification-channel-delete-${channel.id}`}
