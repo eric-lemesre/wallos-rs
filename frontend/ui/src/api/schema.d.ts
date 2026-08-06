@@ -991,6 +991,11 @@ export interface components {
             payer?: string | null;
             /** @description Moyen de paiement rattaché (UUID), le cas échéant. */
             payment_method?: string | null;
+            /**
+             * @description Fin de période d'essai gratuit (`YYYY-MM-DD`, REQ-SUB-010), le cas échéant. Ne peut précéder le
+             *     premier paiement.
+             */
+            trial_end?: string | null;
             /** @description URL du service, le cas échéant. */
             url?: string | null;
         };
@@ -1263,15 +1268,21 @@ export interface components {
         ReminderDto: {
             /**
              * Format: int32
-             * @description Jours calendaires jusqu'à l'échéance (égal au délai de rappel).
+             * @description Jours calendaires jusqu'à la date (égal au délai de rappel).
              * @example 1
              */
             days_until: number;
             /**
-             * @description Date de l'échéance qui déclenche le rappel (`YYYY-MM-DD`).
+             * @description Date qui déclenche le rappel (échéance de paiement ou fin d'essai) (`YYYY-MM-DD`).
              * @example 2026-08-07
              */
             due_date: string;
+            /**
+             * @description Type de rappel : `payment` (échéance de paiement, REQ-NOT-001) ou `trial_ending` (fin de période
+             *     d'essai gratuit, REQ-SUB-010) — **distinct** du rappel d'échéance.
+             * @example payment
+             */
+            kind: string;
             /**
              * @description Nom de l'abonnement.
              * @example Netflix
@@ -1454,6 +1465,11 @@ export interface components {
             first_payment: string;
             /** @description Identifiant stable (UUID). */
             id: string;
+            /**
+             * @description Vrai si l'abonnement est **en période d'essai** (gratuit, exclu des agrégats) — champ **dérivé**
+             *     (horloge serveur), REQ-SUB-010.
+             */
+            in_trial?: boolean;
             /** @description Logo (référence d'image ou substitut), le cas échéant. */
             logo?: string | null;
             /**
@@ -1475,6 +1491,8 @@ export interface components {
             payer?: string | null;
             /** @description Moyen de paiement rattaché (UUID), le cas échéant. */
             payment_method?: string | null;
+            /** @description Fin de période d'essai gratuit (`YYYY-MM-DD`, REQ-SUB-010), le cas échéant. */
+            trial_end?: string | null;
             /** @description URL du service, le cas échéant. */
             url?: string | null;
             /**

@@ -46,6 +46,8 @@ pub struct SubscriptionRow {
     pub active: bool,
     /// Date de fin (annulation programmée), le cas échéant (REQ-SUB-009).
     pub end_date: Option<NaiveDate>,
+    /// Fin de période d'essai gratuit, le cas échéant (REQ-SUB-010).
+    pub trial_end_date: Option<NaiveDate>,
     /// Horodatage de dernière modification, **fourni par le serveur** (REQ-SYN-001).
     pub updated_at: DateTime<Utc>,
 }
@@ -93,8 +95,9 @@ impl<'a> SubscriptionRepository<'a> {
         let inserted = sqlx::query(
             "insert into subscriptions \
              (id, household_id, name, amount, currency, cycle_unit, cycle_interval, first_payment, \
-              category_id, payment_method_id, payer_id, logo, url, notes, active, end_date) \
-             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)",
+              category_id, payment_method_id, payer_id, logo, url, notes, active, end_date, \
+              trial_end_date) \
+             values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)",
         )
         .bind(sub.id())
         .bind(actor.household_id())
@@ -112,6 +115,7 @@ impl<'a> SubscriptionRepository<'a> {
         .bind(sub.notes())
         .bind(sub.is_active())
         .bind(sub.end_date())
+        .bind(sub.trial_end())
         .execute(self.pool)
         .await;
         match inserted {
@@ -136,7 +140,7 @@ impl<'a> SubscriptionRepository<'a> {
         let row = sqlx::query_as::<_, SubscriptionRow>(
             "select id, name, amount, currency, cycle_unit, cycle_interval, first_payment, \
                     category_id, payment_method_id, payer_id, logo, url, notes, active, end_date, \
-                    updated_at \
+                    trial_end_date, updated_at \
              from subscriptions where id = $1 and household_id = $2",
         )
         .bind(id)
@@ -161,7 +165,7 @@ impl<'a> SubscriptionRepository<'a> {
                 name = $3, amount = $4, currency = $5, cycle_unit = $6, cycle_interval = $7, \
                 first_payment = $8, category_id = $9, payment_method_id = $10, payer_id = $11, \
                 logo = $12, url = $13, notes = $14, active = $15, end_date = $16, \
-                updated_at = now() \
+                trial_end_date = $17, updated_at = now() \
              where id = $1 and household_id = $2",
         )
         .bind(sub.id())
@@ -180,6 +184,7 @@ impl<'a> SubscriptionRepository<'a> {
         .bind(sub.notes())
         .bind(sub.is_active())
         .bind(sub.end_date())
+        .bind(sub.trial_end())
         .execute(self.pool)
         .await?;
         Ok(res.rows_affected() > 0)
@@ -234,7 +239,7 @@ impl<'a> SubscriptionRepository<'a> {
         let rows = sqlx::query_as::<_, SubscriptionRow>(
             "select id, name, amount, currency, cycle_unit, cycle_interval, first_payment, \
                     category_id, payment_method_id, payer_id, logo, url, notes, active, end_date, \
-                    updated_at \
+                    trial_end_date, updated_at \
              from subscriptions \
              where household_id = $1 \
                and ($2::uuid is null or category_id = $2) \

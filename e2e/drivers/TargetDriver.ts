@@ -172,7 +172,7 @@ export class TargetDriver implements AppDriver, Harness {
   // --- Création d'abonnement (REQ-SUB-002) ---
 
   async createSubscription(input: {
-    name: string; amount: string; currency: string; unit: string; interval: string; firstPayment: string; endDate?: string; category?: string;
+    name: string; amount: string; currency: string; unit: string; interval: string; firstPayment: string; endDate?: string; trialEnd?: string; category?: string;
   }): Promise<void> {
     await this.page.getByTestId("sub-name").fill(input.name);
     await this.page.getByTestId("sub-amount").fill(input.amount);
@@ -182,6 +182,9 @@ export class TargetDriver implements AppDriver, Harness {
     await this.page.getByTestId("sub-first-payment").fill(input.firstPayment);
     if (input.endDate !== undefined) {
       await this.page.getByTestId("sub-end-date").fill(input.endDate);
+    }
+    if (input.trialEnd !== undefined) {
+      await this.page.getByTestId("sub-trial-end").fill(input.trialEnd);
     }
     // Rattachement à une catégorie (par nom) : le sélecteur est peuplé depuis GET /categories.
     if (input.category !== undefined) {

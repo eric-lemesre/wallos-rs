@@ -158,7 +158,11 @@ pub async fn get_cost_evolution(
         .iter()
         .filter_map(|row| {
             monthly_in_target(row, target, &table).map(|monthly| CostSpan {
-                start: row.first_payment,
+                // Un abonnement en essai gratuit ne compte qu'à partir de la fin d'essai (REQ-SUB-010) :
+                // la fenêtre de coût démarre au plus tard des deux dates (premier paiement / fin d'essai).
+                start: row
+                    .trial_end_date
+                    .map_or(row.first_payment, |t| row.first_payment.max(t)),
                 end: row.end_date,
                 monthly,
             })
@@ -301,12 +305,14 @@ pub async fn get_repartition(
         }
     };
 
-    // Un abonnement **terminé** (date de fin dépassée aujourd'hui, REQ-SUB-009) est exclu de la
-    // répartition « à ce jour », cohérent avec tous les autres agrégats (`core::billable_amounts`).
+    // Un abonnement **terminé** (date de fin dépassée aujourd'hui, REQ-SUB-009) ou **en essai gratuit**
+    // (essai non terminé, REQ-SUB-010) est exclu de la répartition « à ce jour », cohérent avec tous les
+    // autres agrégats (`core::billable_amounts`).
     let today = Utc::now().date_naive();
     let live: Vec<&SubscriptionRow> = rows
         .iter()
         .filter(|row| row.end_date.is_none_or(|end| end >= today))
+        .filter(|row| row.trial_end_date.is_none_or(|trial| today >= trial))
         .collect();
 
     // Une part par axe et par abonnement convertible. Un abonnement non convertible (devise illisible ou

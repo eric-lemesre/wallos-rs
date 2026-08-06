@@ -533,15 +533,19 @@ pub struct SetReminderSettingRequest {
 /// Un rappel dû (REQ-NOT-001), exposé à l'interface.
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct ReminderDto {
+    /// Type de rappel : `payment` (échéance de paiement, REQ-NOT-001) ou `trial_ending` (fin de période
+    /// d'essai gratuit, REQ-SUB-010) — **distinct** du rappel d'échéance.
+    #[schema(example = "payment")]
+    pub kind: String,
     /// Abonnement concerné (UUID).
     pub subscription_id: String,
     /// Nom de l'abonnement.
     #[schema(example = "Netflix")]
     pub name: String,
-    /// Date de l'échéance qui déclenche le rappel (`YYYY-MM-DD`).
+    /// Date qui déclenche le rappel (échéance de paiement ou fin d'essai) (`YYYY-MM-DD`).
     #[schema(example = "2026-08-07")]
     pub due_date: String,
-    /// Jours calendaires jusqu'à l'échéance (égal au délai de rappel).
+    /// Jours calendaires jusqu'à la date (égal au délai de rappel).
     #[schema(example = 1)]
     pub days_until: u32,
     /// Payeur rattaché, le cas échéant (regroupement par payeur).
@@ -851,6 +855,13 @@ pub struct SubscriptionDto {
     /// REQ-SUB-009. Un abonnement terminé est conservé mais exclu des agrégats.
     #[serde(default)]
     pub ended: bool,
+    /// Fin de période d'essai gratuit (`YYYY-MM-DD`, REQ-SUB-010), le cas échéant.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trial_end: Option<String>,
+    /// Vrai si l'abonnement est **en période d'essai** (gratuit, exclu des agrégats) — champ **dérivé**
+    /// (horloge serveur), REQ-SUB-010.
+    #[serde(default)]
+    pub in_trial: bool,
     /// Coût **mensuel normalisé** (chaîne décimale, REQ-STA-001), dans la devise de l'abonnement.
     /// Champ **dérivé** : facteur de cycle capturé sur l'application d'origine (30 j/mois, 4.35 sem/mois,
     /// 12 mois/an). L'arrondi d'affichage relève de REQ-CUR-005.
@@ -903,6 +914,8 @@ impl SubscriptionDto {
             next_payment: None,
             end_date: sub.end_date().map(|d| d.to_string()),
             ended: false,
+            trial_end: sub.trial_end().map(|d| d.to_string()),
+            in_trial: false,
             // Coûts normalisés et arrondis pour l'affichage : mensuel (REQ-STA-001) et annuel (REQ-STA-002).
             monthly_cost: monthly_cost_rounded(*sub.price(), sub.cycle())
                 .amount()
@@ -921,10 +934,12 @@ impl SubscriptionDto {
         sub: &Subscription,
         next_payment: Option<NaiveDate>,
         ended: bool,
+        in_trial: bool,
     ) -> Self {
         let mut dto = Self::from_core(sub);
         dto.next_payment = next_payment.map(|d| d.to_string());
         dto.ended = ended;
+        dto.in_trial = in_trial;
         dto
     }
 
@@ -979,6 +994,14 @@ impl SubscriptionDto {
                 ));
             }
             sub = sub.with_end_date(end);
+        }
+        if let Some(trial) = self.trial_end {
+            let trial = NaiveDate::parse_from_str(&trial, "%Y-%m-%d").map_err(|_| {
+                DomainError::InvalidDate(format!("invalid trial end date: {trial}"))
+            })?;
+            // Aucune contrainte de position vis-à-vis du premier paiement : un essai précède typiquement
+            // la facturation (REQ-SUB-010), mais le modèle ne l'impose pas.
+            sub = sub.with_trial_end(trial);
         }
         Ok(sub.with_active(self.active))
     }
@@ -1073,6 +1096,10 @@ pub struct CreateSubscriptionRequest {
     /// Date de fin (annulation programmée, `YYYY-MM-DD`, REQ-SUB-009), le cas échéant.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end_date: Option<String>,
+    /// Fin de période d'essai gratuit (`YYYY-MM-DD`, REQ-SUB-010), le cas échéant. Ne peut précéder le
+    /// premier paiement.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trial_end: Option<String>,
 }
 
 impl CreateSubscriptionRequest {
@@ -1149,6 +1176,12 @@ impl CreateSubscriptionRequest {
                 ));
             }
             sub = sub.with_end_date(end);
+        }
+        if let Some(trial) = self.trial_end {
+            let trial = NaiveDate::parse_from_str(&trial, "%Y-%m-%d")
+                .map_err(|_| FieldError::new("trial_end", "date YYYY-MM-DD invalide"))?;
+            // Un essai précède typiquement la facturation (REQ-SUB-010) ; aucune contrainte de position.
+            sub = sub.with_trial_end(trial);
         }
         Ok(sub.with_active(self.active))
     }
@@ -1488,6 +1521,7 @@ mod tests {
             notes: None,
             active: true,
             end_date: None,
+            trial_end: None,
         }
     }
 
