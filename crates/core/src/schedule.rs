@@ -54,32 +54,46 @@ pub fn next_due(anchor: NaiveDate, cycle: BillingCycle, after: NaiveDate) -> Opt
 }
 
 /// Toutes les occurrences de paiement dans la fenêtre **`[from, to]` (bornes incluses)**, pour un
-/// abonnement démarré à `anchor`, de cycle `cycle`, se terminant éventuellement à `end_date`
-/// (REQ-STA-005 — échéancier des prochains paiements).
+/// abonnement démarré à `anchor`, de cycle `cycle`, se terminant éventuellement à `end_date`, avec une
+/// éventuelle fin d'essai gratuit `trial_end` (REQ-STA-005 — échéancier ; REQ-STA-003 — exclusion
+/// transverse des états non actifs).
 ///
 /// - Énumère depuis l'**ancre** (occurrences `k = 0, 1, …`, mêmes ancrage + clamp que [`next_due`],
 ///   ADR 0022) ; une même récurrence peut produire **plusieurs** occurrences dans la fenêtre.
 /// - Ignore les occurrences antérieures à `from` (avant le début de fenêtre / l'ancre).
 /// - **Respecte `end_date`** (REQ-SUB-009) : aucune occurrence strictement postérieure à la date de fin
 ///   n'est incluse (la borne haute effective est `min(to, end_date)`).
+/// - **Respecte `trial_end`** (REQ-SUB-010, essai gratuit) : aucun paiement n'est dû pendant l'essai,
+///   donc aucune occurrence **strictement antérieure** à `trial_end` n'est incluse (la borne basse
+///   effective est `max(from, trial_end)`). Une occurrence tombant exactement sur `trial_end` est due
+///   (l'essai est alors terminé, cohérent avec `Subscription::is_in_trial` : essai ⇔ `date < trial_end`).
 /// - Bornée par [`MAX_STEPS`] : au-delà, l'énumération s'arrête (garde-fou anti-emballement).
 ///
 /// L'appelant est responsable d'exclure les abonnements **inactifs** (oracle Wallos `inactive = 0`,
 /// REQ-SUB-008) : cette fonction pure ne connaît que les dates.
 #[must_use]
 #[requirement(REQ-STA-005)]
+#[requirement(REQ-STA-003)]
 pub fn occurrences_in_range(
     anchor: NaiveDate,
     cycle: BillingCycle,
     from: NaiveDate,
     to: NaiveDate,
     end_date: Option<NaiveDate>,
+    trial_end: Option<NaiveDate>,
 ) -> Vec<NaiveDate> {
     // Borne haute effective : la fin de fenêtre, resserrée par la date de fin d'abonnement si elle est
     // antérieure (REQ-SUB-009). Si `end_date` précède le début de fenêtre, le résultat sera vide.
     let upper = match end_date {
         Some(end) if end < to => end,
         _ => to,
+    };
+    // Borne basse effective : le début de fenêtre, repoussé à la fin d'essai si elle est postérieure
+    // (REQ-SUB-010 : rien n'est facturé pendant l'essai, REQ-STA-003). Si `trial_end` dépasse la borne
+    // haute, le résultat sera vide.
+    let lower = match trial_end {
+        Some(trial) if trial > from => trial,
+        _ => from,
     };
     let mut out = Vec::new();
     for k in 0..MAX_STEPS {
@@ -90,7 +104,7 @@ pub fn occurrences_in_range(
         if occ > upper {
             break;
         }
-        if occ >= from {
+        if occ >= lower {
             out.push(occ);
         }
     }
@@ -299,6 +313,7 @@ mod tests {
                 monthly(1),
                 day(2025, 1, 1),
                 day(2025, 3, 31),
+                None,
                 None
             ),
             vec![day(2025, 1, 15), day(2025, 2, 15), day(2025, 3, 15)]
@@ -310,6 +325,7 @@ mod tests {
                 cycle(BillingUnit::Week, 1),
                 day(2025, 1, 1),
                 day(2025, 1, 31),
+                None,
                 None
             ),
             vec![
@@ -334,6 +350,7 @@ mod tests {
                 day(2025, 1, 1),
                 day(2025, 4, 30),
                 Some(day(2025, 2, 20)),
+                None,
             ),
             vec![day(2025, 1, 15), day(2025, 2, 15)]
         );
@@ -345,6 +362,7 @@ mod tests {
                 day(2025, 3, 1),
                 day(2025, 4, 30),
                 Some(day(2025, 2, 1)),
+                None,
             )
             .is_empty()
         );
@@ -361,6 +379,7 @@ mod tests {
                 monthly(1),
                 day(2025, 2, 1),
                 day(2025, 3, 31),
+                None,
                 None
             ),
             vec![day(2025, 2, 28), day(2025, 3, 31)]
@@ -376,9 +395,92 @@ mod tests {
                 monthly(1),
                 day(2025, 1, 1),
                 day(2025, 5, 31),
+                None,
                 None
             )
             .is_empty()
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-STA-003, case = "essai gratuit : aucune occurrence antérieure à la fin d'essai (borne basse)")]
+    fn trial_end_excludes_occurrences_during_trial() {
+        // Mensuel ancré au 10, essai jusqu'au 2025-03-10 : les échéances des 10 janv/févr tombent
+        // PENDANT l'essai (rien n'est facturé) et sont exclues ; l'occurrence du 10 mars (= fin d'essai,
+        // essai terminé) et celles d'après sont dues.
+        assert_eq!(
+            occurrences_in_range(
+                day(2025, 1, 10),
+                monthly(1),
+                day(2025, 1, 1),
+                day(2025, 4, 30),
+                None,
+                Some(day(2025, 3, 10)),
+            ),
+            vec![day(2025, 3, 10), day(2025, 4, 10)]
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-STA-003, case = "essai gratuit couvrant toute la fenêtre -> échéancier vide")]
+    fn trial_covering_window_yields_no_occurrence() {
+        // Essai jusqu'au 2025-06-01, fenêtre jan→avril : toutes les occurrences sont pendant l'essai.
+        assert!(
+            occurrences_in_range(
+                day(2025, 1, 10),
+                monthly(1),
+                day(2025, 1, 1),
+                day(2025, 4, 30),
+                None,
+                Some(day(2025, 6, 1)),
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-STA-003, case = "essai déjà terminé avant la fenêtre -> aucune restriction")]
+    fn trial_ended_before_window_has_no_effect() {
+        // Essai terminé au 2024-12-01 (avant `from`) : la borne basse reste `from`, toutes les
+        // occurrences de la fenêtre sont dues (identique à `trial_end = None`).
+        let with_past_trial = occurrences_in_range(
+            day(2025, 1, 15),
+            monthly(1),
+            day(2025, 1, 1),
+            day(2025, 3, 31),
+            None,
+            Some(day(2024, 12, 1)),
+        );
+        let without_trial = occurrences_in_range(
+            day(2025, 1, 15),
+            monthly(1),
+            day(2025, 1, 1),
+            day(2025, 3, 31),
+            None,
+            None,
+        );
+        assert_eq!(with_past_trial, without_trial);
+        assert_eq!(
+            with_past_trial,
+            vec![day(2025, 1, 15), day(2025, 2, 15), day(2025, 3, 15)]
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-STA-003, case = "essai + date de fin : les deux bornes se composent")]
+    fn trial_and_end_date_compose() {
+        // Essai jusqu'au 2025-02-10 (borne basse) ET fin d'abonnement au 2025-03-31 (borne haute) :
+        // seules les occurrences dans [10 févr, 31 mars] sont dues (10 févr, 10 mars).
+        assert_eq!(
+            occurrences_in_range(
+                day(2025, 1, 10),
+                monthly(1),
+                day(2025, 1, 1),
+                day(2025, 5, 31),
+                Some(day(2025, 3, 31)),
+                Some(day(2025, 2, 10)),
+            ),
+            vec![day(2025, 2, 10), day(2025, 3, 10)]
         );
     }
 

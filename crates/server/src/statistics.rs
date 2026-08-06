@@ -103,6 +103,7 @@ fn monthly_in_target(
     )
 )]
 #[requirement(REQ-STA-006)]
+#[requirement(REQ-STA-003)]
 pub async fn get_cost_evolution(
     AuthActor(actor): AuthActor,
     State(db): State<Db>,
@@ -263,6 +264,7 @@ fn entries(
     )
 )]
 #[requirement(REQ-STA-004)]
+#[requirement(REQ-STA-003)]
 pub async fn get_repartition(
     AuthActor(actor): AuthActor,
     State(db): State<Db>,

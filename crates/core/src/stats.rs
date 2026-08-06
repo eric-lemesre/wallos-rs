@@ -107,6 +107,7 @@ pub fn yearly_cost_rounded(price: Money, cycle: crate::billing::BillingCycle) ->
 #[requirement(REQ-SUB-008)]
 #[requirement(REQ-SUB-009)]
 #[requirement(REQ-SUB-010)]
+#[requirement(REQ-STA-003)]
 pub fn billable_amounts(subscriptions: &[Subscription], reference: NaiveDate) -> Vec<Money> {
     subscriptions
         .iter()
@@ -578,6 +579,34 @@ mod tests {
         let amounts = billable_amounts(&[ended, ongoing], ref_day());
         assert_eq!(amounts.len(), 1);
         assert_eq!(amounts[0].amount(), "20.00".parse().unwrap());
+    }
+
+    #[test]
+    #[verifies(REQ-STA-003, case = "règle transverse : les trois états sont exclus simultanément, seuls les actifs pèsent")]
+    fn billable_amounts_excludes_every_non_active_state_at_once() {
+        // Un jeu couvrant les trois exclusions + un actif témoin, à la même date de référence.
+        let disabled = subscription("Désactivé", "1.00", false);
+        let ended = subscription("Terminé", "2.00", true)
+            .with_end_date(NaiveDate::from_ymd_opt(2026, 5, 31).unwrap());
+        let in_trial = subscription("Essai", "4.00", true)
+            .with_trial_end(NaiveDate::from_ymd_opt(2026, 7, 1).unwrap());
+        let active = subscription("Actif", "8.00", true);
+        let amounts = billable_amounts(&[disabled, ended, in_trial, active], ref_day());
+        // Seul l'actif (8.00) contribue : les trois autres états sont exclus « selon la règle propre ».
+        assert_eq!(amounts.len(), 1);
+        assert_eq!(amounts[0].amount(), "8.00".parse().unwrap());
+    }
+
+    #[test]
+    #[verifies(REQ-STA-003, case = "critère #2 : un abonnement réactivé est immédiatement réintégré")]
+    fn reactivated_subscription_is_immediately_reincluded() {
+        // Désactivé : exclu. Réactivé (with_active(true)) : réintégré au recalcul suivant, sans étape.
+        let disabled = subscription("Bascule", "12.00", true).with_active(false);
+        assert!(billable_amounts(std::slice::from_ref(&disabled), ref_day()).is_empty());
+        let reactivated = disabled.with_active(true);
+        let amounts = billable_amounts(std::slice::from_ref(&reactivated), ref_day());
+        assert_eq!(amounts.len(), 1);
+        assert_eq!(amounts[0].amount(), "12.00".parse().unwrap());
     }
 
     fn usd() -> CurrencyCode {
