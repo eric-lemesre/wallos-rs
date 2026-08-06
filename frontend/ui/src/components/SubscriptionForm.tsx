@@ -24,6 +24,7 @@ export function SubscriptionForm() {
   const [interval, setInterval] = useState("1");
   const [firstPayment, setFirstPayment] = useState("2030-01-31");
   const [endDate, setEndDate] = useState("");
+  const [trialEnd, setTrialEnd] = useState("");
   const [category, setCategory] = useState("");
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [nextPayment, setNextPayment] = useState<string | null>(null);
@@ -50,6 +51,8 @@ export function SubscriptionForm() {
         first_payment: firstPayment,
         // Date de fin optionnelle (annulation programmée, REQ-SUB-009).
         ...(endDate.trim() !== "" ? { end_date: endDate.trim() } : {}),
+        // Fin de période d'essai gratuit optionnelle (REQ-SUB-010).
+        ...(trialEnd.trim() !== "" ? { trial_end: trialEnd.trim() } : {}),
         // Catégorie optionnelle (REQ-CAT-001) : omise si aucune n'est sélectionnée.
         ...(category !== "" ? { category } : {}),
       },
@@ -105,6 +108,10 @@ export function SubscriptionForm() {
       <label>
         {t("subscription.endDate")}
         <input data-testid="sub-end-date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+      </label>
+      <label>
+        {t("subscription.trialEnd")}
+        <input data-testid="sub-trial-end" value={trialEnd} onChange={(e) => setTrialEnd(e.target.value)} />
       </label>
       <label>
         {t("subscription.category")}

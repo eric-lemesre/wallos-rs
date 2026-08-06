@@ -692,7 +692,7 @@ requirements:
 - id: REQ-SUB-010
   title: Période d'essai gratuit
   domain: subscriptions
-  status: draft
+  status: verified
   criticality: medium
   layer:
   - core

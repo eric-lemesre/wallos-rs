@@ -37,6 +37,7 @@ pub struct Subscription {
     notes: Option<String>,
     active: bool,
     end_date: Option<NaiveDate>,
+    trial_end: Option<NaiveDate>,
 }
 
 impl Subscription {
@@ -73,7 +74,18 @@ impl Subscription {
             notes: None,
             active: true,
             end_date: None,
+            trial_end: None,
         })
+    }
+
+    /// Fixe une **fin de période d'essai gratuit** (REQ-SUB-010) : tant que la date de référence précède
+    /// `trial_end`, l'abonnement est **en essai** — son coût n'est pas compté dans les agrégats. À partir
+    /// de `trial_end` (inclus), l'abonnement compte normalement.
+    #[must_use]
+    #[requirement(REQ-SUB-010)]
+    pub const fn with_trial_end(mut self, trial_end: NaiveDate) -> Self {
+        self.trial_end = Some(trial_end);
+        self
     }
 
     /// Fixe une **date de fin** (annulation programmée, REQ-SUB-009) : aucune échéance n'est produite
@@ -250,6 +262,22 @@ impl Subscription {
     #[requirement(REQ-SUB-009)]
     pub fn has_ended(&self, reference: NaiveDate) -> bool {
         self.end_date.is_some_and(|end| reference > end)
+    }
+
+    /// Fin de période d'essai gratuit, le cas échéant (REQ-SUB-010).
+    #[must_use]
+    #[requirement(REQ-SUB-010)]
+    pub const fn trial_end(&self) -> Option<NaiveDate> {
+        self.trial_end
+    }
+
+    /// Vrai si l'abonnement est **en période d'essai** à la date `reference` (essai **non encore
+    /// terminé** : `reference < trial_end`). Un abonnement en essai est gratuit — son coût n'est pas
+    /// compté dans les agrégats tant que l'essai dure (REQ-SUB-010).
+    #[must_use]
+    #[requirement(REQ-SUB-010)]
+    pub fn is_in_trial(&self, reference: NaiveDate) -> bool {
+        self.trial_end.is_some_and(|end| reference < end)
     }
 
     /// Prochaine échéance après modification (REQ-SUB-004), strictement postérieure à `after`, et
@@ -449,6 +477,26 @@ mod tests {
                 .end_date(),
             None
         );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-010, case = "en essai avant la fin, plus en essai à/au-delà de la fin")]
+    fn in_trial_until_trial_end() {
+        let sub = Subscription::new(Uuid::from_u128(1), "E", money("10", "EUR"), cycle(), day())
+            .unwrap()
+            .with_trial_end(NaiveDate::from_ymd_opt(2026, 7, 1).unwrap());
+        // Avant la fin d'essai : en essai. Le jour de fin (inclus) et après : plus en essai.
+        assert!(sub.is_in_trial(NaiveDate::from_ymd_opt(2026, 6, 30).unwrap()));
+        assert!(!sub.is_in_trial(NaiveDate::from_ymd_opt(2026, 7, 1).unwrap()));
+        assert!(!sub.is_in_trial(NaiveDate::from_ymd_opt(2026, 8, 1).unwrap()));
+        assert_eq!(
+            sub.trial_end(),
+            Some(NaiveDate::from_ymd_opt(2026, 7, 1).unwrap())
+        );
+        // Sans essai : jamais en essai.
+        let plain =
+            Subscription::new(Uuid::from_u128(2), "P", money("10", "EUR"), cycle(), day()).unwrap();
+        assert!(!plain.is_in_trial(NaiveDate::from_ymd_opt(2026, 6, 30).unwrap()));
     }
 
     #[test]

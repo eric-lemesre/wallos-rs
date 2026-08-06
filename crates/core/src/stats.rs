@@ -98,17 +98,19 @@ pub fn yearly_cost_rounded(price: Money, cycle: crate::billing::BillingCycle) ->
 
 /// Montants entrant dans les agrégats statistiques à la date `reference` (REQ-SUB-008 / REQ-SUB-009).
 ///
-/// Un abonnement **désactivé** (REQ-SUB-008) ou **terminé** (date de fin dépassée à `reference`,
-/// REQ-SUB-009) est **exclu de tous les agrégats** : il est conservé mais ne pèse sur aucun total.
-/// Seuls les abonnements actifs et non terminés contribuent leur prix. C'est la primitive de domaine
+/// Un abonnement **désactivé** (REQ-SUB-008), **terminé** (date de fin dépassée à `reference`,
+/// REQ-SUB-009) **ou en période d'essai gratuit** (REQ-SUB-010, essai non encore terminé à `reference`)
+/// est **exclu de tous les agrégats** : il est conservé mais ne pèse sur aucun total. Seuls les
+/// abonnements actifs, non terminés et hors essai contribuent leur prix. C'est la primitive de domaine
 /// que les exigences `REQ-STA-*` consomment ; côté API, la vue liste applique la même règle au niveau
 /// des lignes stockées (`server::subscriptions::active_amounts`).
 #[requirement(REQ-SUB-008)]
 #[requirement(REQ-SUB-009)]
+#[requirement(REQ-SUB-010)]
 pub fn billable_amounts(subscriptions: &[Subscription], reference: NaiveDate) -> Vec<Money> {
     subscriptions
         .iter()
-        .filter(|s| s.is_active() && !s.has_ended(reference))
+        .filter(|s| s.is_active() && !s.has_ended(reference) && !s.is_in_trial(reference))
         .map(|s| *s.price())
         .collect()
 }
@@ -547,6 +549,22 @@ mod tests {
             subscription("Y", "20.00", false),
         ];
         assert!(billable_amounts(&subs, ref_day()).is_empty());
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-010, case = "abonnement en essai gratuit exclu des agrégats jusqu'à la fin d'essai")]
+    fn billable_amounts_excludes_in_trial() {
+        // En essai jusqu'au 2026-07-01 : exclu au 2026-06-01 (avant), compté au 2026-07-01 (fin d'essai).
+        let trial = subscription("Essai", "10.00", true)
+            .with_trial_end(NaiveDate::from_ymd_opt(2026, 7, 1).unwrap());
+        let normal = subscription("Normal", "20.00", true);
+        let during = billable_amounts(&[trial.clone(), normal.clone()], ref_day());
+        assert_eq!(during.len(), 1);
+        assert_eq!(during[0].amount(), "20.00".parse().unwrap());
+        // À la fin d'essai (inclus), l'abonnement compte de nouveau.
+        let after = billable_amounts(&[trial], NaiveDate::from_ymd_opt(2026, 7, 1).unwrap());
+        assert_eq!(after.len(), 1);
+        assert_eq!(after[0].amount(), "10.00".parse().unwrap());
     }
 
     #[test]

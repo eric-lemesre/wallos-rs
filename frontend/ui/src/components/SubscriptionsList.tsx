@@ -299,6 +299,9 @@ function SubscriptionRow({
       <span data-testid="subscription-yearly">
         {t("subscriptions.yearlyCost")}: {sub.yearly_cost} {sub.currency}
       </span>
+      {sub.in_trial && (
+        <span data-testid="subscription-trial">{t("subscriptions.trial")}</span>
+      )}
       {sub.ended ? (
         <span data-testid="subscription-ended">{t("subscriptions.ended")}</span>
       ) : (

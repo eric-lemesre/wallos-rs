@@ -84,6 +84,7 @@ fn row_to_create_request(row: SubscriptionRow) -> CreateSubscriptionRequest {
         notes: row.notes,
         active: row.active,
         end_date: row.end_date.map(|d| d.format("%Y-%m-%d").to_string()),
+        trial_end: row.trial_end_date.map(|d| d.format("%Y-%m-%d").to_string()),
     }
 }
 

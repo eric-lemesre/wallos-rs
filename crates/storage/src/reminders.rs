@@ -32,6 +32,8 @@ pub struct ReminderScanRow {
     pub first_payment: NaiveDate,
     /// Date de fin programmée, le cas échéant (REQ-SUB-009).
     pub end_date: Option<NaiveDate>,
+    /// Fin de période d'essai gratuit, le cas échéant (REQ-SUB-010) — pour le rappel de fin d'essai.
+    pub trial_end_date: Option<NaiveDate>,
     /// Délai de rappel du foyer (jours avant l'échéance).
     pub reminder_lead_days: i32,
 }
@@ -85,7 +87,7 @@ impl<'a> ReminderRepository<'a> {
     pub async fn scan_all(&self) -> Result<Vec<ReminderScanRow>, StorageError> {
         let rows = sqlx::query_as::<_, ReminderScanRow>(
             "select s.household_id, s.id, s.name, s.payer_id, s.cycle_unit, s.cycle_interval, \
-                    s.first_payment, s.end_date, h.reminder_lead_days \
+                    s.first_payment, s.end_date, s.trial_end_date, h.reminder_lead_days \
              from subscriptions s join households h on h.id = s.household_id \
              where s.active = true \
              order by s.household_id, s.id",
@@ -106,7 +108,7 @@ impl<'a> ReminderRepository<'a> {
     ) -> Result<Vec<ReminderScanRow>, StorageError> {
         let rows = sqlx::query_as::<_, ReminderScanRow>(
             "select s.household_id, s.id, s.name, s.payer_id, s.cycle_unit, s.cycle_interval, \
-                    s.first_payment, s.end_date, h.reminder_lead_days \
+                    s.first_payment, s.end_date, s.trial_end_date, h.reminder_lead_days \
              from subscriptions s join households h on h.id = s.household_id \
              where s.active = true and s.household_id = $1 \
              order by s.id",
@@ -117,9 +119,11 @@ impl<'a> ReminderRepository<'a> {
         Ok(rows)
     }
 
-    /// Enregistre l'émission d'un rappel. Renvoie `true` si une **nouvelle** ligne a été insérée, `false`
-    /// si le rappel avait déjà été émis pour ce `(foyer, abonnement, échéance)` — l'appelant n'émet alors
-    /// pas de doublon (préparation REQ-NOT-002).
+    /// Enregistre l'émission d'un rappel de type `kind` (`payment` / `trial_ending`, REQ-SUB-010).
+    /// Renvoie `true` si une **nouvelle** ligne a été insérée, `false` si ce rappel avait déjà été émis
+    /// pour ce `(foyer, abonnement, échéance, type)` — l'appelant n'émet alors pas de doublon
+    /// (préparation REQ-NOT-002). Un rappel de paiement et un rappel de fin d'essai coïncidant le même
+    /// jour sont distincts (types différents).
     ///
     /// # Errors
     /// `StorageError::Database` en cas d'échec d'insertion.
@@ -129,14 +133,17 @@ impl<'a> ReminderRepository<'a> {
         household_id: Uuid,
         subscription_id: Uuid,
         due_date: NaiveDate,
+        kind: &str,
     ) -> Result<bool, StorageError> {
         let result = sqlx::query(
-            "insert into reminder_log (household_id, subscription_id, due_date) values ($1, $2, $3) \
-             on conflict (household_id, subscription_id, due_date) do nothing",
+            "insert into reminder_log (household_id, subscription_id, due_date, kind) \
+             values ($1, $2, $3, $4) \
+             on conflict (household_id, subscription_id, due_date, kind) do nothing",
         )
         .bind(household_id)
         .bind(subscription_id)
         .bind(due_date)
+        .bind(kind)
         .execute(self.pool)
         .await?;
         Ok(result.rows_affected() > 0)

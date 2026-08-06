@@ -102,7 +102,8 @@
     "error": "Could not create the subscription",
     "endDate": "End date (optional)",
     "category": "Category",
-    "noCategory": "(none)"
+    "noCategory": "(none)",
+    "trialEnd": "Free trial ends"
   },
   "subscriptions": {
     "title": "My subscriptions",
@@ -137,7 +138,8 @@
       "amount": "Amount",
       "next_due": "Next payment"
     },
-    "delete": "Delete"
+    "delete": "Delete",
+    "trial": "Free trial"
   },
   "paymentMethods": {
     "title": "Payment methods",
