@@ -21,11 +21,14 @@ use uuid::Uuid;
 use wallos_core::billing::{BillingCycle, BillingUnit};
 use wallos_core::requirement;
 use wallos_core::{DueReminder, ReminderCandidate, due_reminders, next_due};
+use wallos_notifier::{Channel, ReminderItem, ReminderNotification, Webhook};
 use wallos_proto::{
     ReminderDto, ReminderSettingResponse, RemindersResponse, RunRemindersResponse,
     SetReminderSettingRequest, problem,
 };
-use wallos_storage::{Db, ReminderRepository, ReminderScanRow};
+use wallos_storage::{
+    Db, NotificationChannelRepository, NotificationChannelRow, ReminderRepository, ReminderScanRow,
+};
 
 use crate::auth::AuthActor;
 use crate::{CronToken, problem_response};
@@ -102,6 +105,19 @@ fn due_with_kind(rows: &[&ReminderScanRow], as_of: NaiveDate) -> Vec<(DueReminde
             .map(|d| (d, KIND_TRIAL)),
     );
     out
+}
+
+/// Construit un canal d'envoi ([`Channel`]) à partir d'une ligne stockée (REQ-NOT-005). `None` si le
+/// type est inconnu ou la configuration illisible (ne fait jamais échouer le cron).
+#[requirement(REQ-NOT-005)]
+fn channel_from_row(row: &NotificationChannelRow) -> Option<Channel> {
+    match row.kind.as_str() {
+        "webhook" => {
+            let url = row.config.get("url").and_then(|v| v.as_str())?;
+            Some(Channel::Webhook(Webhook::new(url)))
+        }
+        _ => None,
+    }
 }
 
 /// Réglage du délai de rappel du compte (REQ-NOT-001).
@@ -276,6 +292,15 @@ pub async fn run_reminders(
         Err(_) => return internal_error(),
     };
 
+    // Canaux **actifs** par foyer (REQ-NOT-005), chargés une fois pour tout le balayage.
+    let channels_by_household = match NotificationChannelRepository::new(db.pool())
+        .list_enabled_by_household()
+        .await
+    {
+        Ok(map) => map,
+        Err(_) => return internal_error(),
+    };
+
     // Regroupe par foyer (message unique par compte, critère #2).
     let mut by_household: BTreeMap<Uuid, Vec<&ReminderScanRow>> = BTreeMap::new();
     for row in &rows {
@@ -285,9 +310,13 @@ pub async fn run_reminders(
     let mut emitted = 0usize;
     let mut accounts_notified = 0usize;
     for (household_id, household_rows) in by_household {
+        let by_id: BTreeMap<Uuid, &ReminderScanRow> =
+            household_rows.iter().map(|r| (r.id, *r)).collect();
         // Rappels de paiement (REQ-NOT-001) ET de fin d'essai (REQ-SUB-010), chacun avec son type.
         let due = due_with_kind(&household_rows, as_of);
         let mut account_emitted = 0usize;
+        // Rappels **nouvellement émis** ce jour (hors doublons) → charge utile des canaux (REQ-NOT-005).
+        let mut fresh: Vec<ReminderItem> = Vec::new();
         for (d, kind) in due {
             // Journalise ; n'émet (compte) que si nouvellement inséré (pas de doublon le même jour, par type).
             match repo
@@ -297,6 +326,15 @@ pub async fn run_reminders(
                 Ok(true) => {
                     emitted += 1;
                     account_emitted += 1;
+                    if let Some(row) = by_id.get(&d.subscription_id) {
+                        fresh.push(ReminderItem {
+                            subscription_id: d.subscription_id.to_string(),
+                            name: row.name.clone(),
+                            due_date: d.due_date.format("%Y-%m-%d").to_string(),
+                            days_until: i64::from(d.days_until),
+                            kind: kind.to_string(),
+                        });
+                    }
                 }
                 Ok(false) => {}
                 Err(_) => return internal_error(),
@@ -304,6 +342,28 @@ pub async fn run_reminders(
         }
         if account_emitted > 0 {
             accounts_notified += 1;
+        }
+        // Émission sortante best-effort (REQ-NOT-005) : envoie le lot nouvellement émis aux canaux
+        // actifs du foyer. Un échec est journalisé sans interrompre les autres canaux ni le cron
+        // (esprit REQ-NOT-003 ; réessai = REQ-NOT-007, différé).
+        if !fresh.is_empty()
+            && let Some(channels) = channels_by_household.get(&household_id)
+        {
+            let notification =
+                ReminderNotification::new(as_of.format("%Y-%m-%d").to_string(), fresh);
+            for row in channels {
+                let Some(channel) = channel_from_row(row) else {
+                    continue;
+                };
+                if let Err(err) = channel.send(&notification).await {
+                    tracing::warn!(
+                        household_id = %household_id,
+                        channel = channel.kind(),
+                        error = %err,
+                        "échec d'envoi d'un canal de notification"
+                    );
+                }
+            }
         }
     }
 

@@ -104,7 +104,7 @@ depends_on: [REQ-NOT-001]
 id: REQ-NOT-005
 title: Webhook générique
 domain: notifications
-status: draft
+status: verified
 criticality: medium
 layer: [api, ui]
 e2e: optional

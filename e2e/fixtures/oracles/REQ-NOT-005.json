@@ -1,0 +1,35 @@
+{
+  "_requirement": "REQ-NOT-005",
+  "_source": "Wallos 5.4.2 — inspection de `endpoints/notifications/` et de la table `notification_settings` sur l'image épinglée bellamy/wallos@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f.",
+  "_note": "Wallos propose un canal 'webhook' (URL + payload JSON) parmi ses canaux de notification. subtrack en fait le PREMIER canal d'une abstraction unique (ADR 0043). La garde SSRF (refus des adresses internes) est un DURCISSEMENT de conception : Wallos n'valide pas l'URL contre le SSRF — c'est l'objet des critères NOT-005 #2 et REQ-SEC-005 (design).",
+  "legacy_webhook": {
+    "_observed": "Wallos envoie un POST JSON vers l'URL de webhook configurée quand une notification est due. Pas de validation d'URL contre les adresses internes.",
+    "has_webhook_channel": true,
+    "validates_ssrf": false
+  },
+  "design_rules": {
+    "_criterion_1": "URL configurée -> POST avec une charge utile JSON documentée dans l'OpenAPI.",
+    "payload": {
+      "shape": "{ as_of: 'YYYY-MM-DD', reminder_count: n, reminders: [{ subscription_id, name, due_date, days_until, kind }] }",
+      "documented_in": "OpenAPI components WebhookReminderPayload / WebhookReminderItem",
+      "sent_by": "le cron run_reminders (REQ-NOT-001), pour les rappels NOUVELLEMENT émis d'un foyer, best-effort (un échec n'interrompt ni les autres canaux ni le cron).",
+      "kinds": ["payment", "trial_ending"]
+    },
+    "_criterion_2": "URL vers une adresse interne/bouclage -> refusée à l'enregistrement (anti-SSRF).",
+    "ssrf_guard": {
+      "applied_at": "enregistrement (POST /notifications/channels)",
+      "rejects": [
+        "schéma non http(s)",
+        "bouclage (127.0.0.0/8, ::1)",
+        "privé (RFC 1918, ULA fc00::/7)",
+        "link-local (169.254.0.0/16 dont 169.254.169.254 métadonnées, fe80::/10)",
+        "non spécifié (0.0.0.0, ::)",
+        "CGNAT 100.64.0.0/10",
+        "IPv4 mappée en IPv6 vers une plage interne",
+        "nom 'localhost'"
+      ],
+      "not_yet_covered": "résolution DNS d'un nom d'hôte vers une IP privée, et validation à chaque saut de redirection sur le CHEMIN D'APPEL -> REQ-SEC-005 (cycle NOT-005<->SEC-005 rompu côté NOT-005, ADR 0043)."
+    },
+    "abstraction": "canal = enum fermé (webhook, puis email/messageries) partageant `Channel::send` et la charge utile ReminderNotification ; un canal `enabled = false` n'émet aucune requête (NOT-004)."
+  }
+}

@@ -58,6 +58,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0040 | NOT-001 rappels (cron + endpoint, déclenchement exact, regroupement) | 🔴 |
 | 0041 | SUB-010 essai gratuit (design — absent de Wallos) | 🔴 |
 | 0042 | STA-003 exclusion transverse (essai exclu par occurrence dans l'échéancier) | 🟡 |
+| 0043 | NOT-005 webhook (abstraction fermée, garde SSRF à l'enregistrement, cycle SEC-005) | 🔴 |
 
 ## À relire en priorité aujourd'hui (🔴)
 
