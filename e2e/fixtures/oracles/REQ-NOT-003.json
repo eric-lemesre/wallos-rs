@@ -1,0 +1,20 @@
+{
+  "_requirement": "REQ-NOT-003",
+  "_source": "Wallos 5.4.2 — table `notification_settings` (colonnes SMTP host/port/username/password/from) et code d'envoi PHP sur l'image épinglée bellamy/wallos@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f.",
+  "_note": "Wallos envoie les rappels par e-mail via une configuration SMTP. subtrack en fait une variante de l'abstraction de canal (ADR 0043/0044), avec le corps localisé dans la langue du compte (Wallos localise aussi ses e-mails). Dépendance Rust `lettre` (rustls) — feu vert Eric, ADR 0044 (R6).",
+  "legacy_email": {
+    "_observed": "Wallos stocke une config SMTP (host, port, username, password, encryption, from) et envoie un e-mail de rappel listant les abonnements dus.",
+    "config_fields": ["host", "port", "username", "password", "from", "encryption(starttls/ssl)"],
+    "localized_body": true
+  },
+  "design_rules": {
+    "_criterion_1": "config SMTP valide -> message envoyé, dans la langue du compte, avec le détail des abonnements concernés.",
+    "recipient": "le titulaire du foyer (utilisateur le plus ancien) ; adresse = son e-mail de compte, langue = sa langue (défaut en, REQ-I18N-004). Résolus à l'envoi via owner_contacts(), jamais figés dans la config du canal.",
+    "body": "fonction pure email_content(language, notification) -> (sujet, corps) ; gabarits en/fr ; ligne distincte pour une fin d'essai (REQ-SUB-010). Composée côté serveur (pas de framework i18n serveur introduit).",
+    "config_persisted": ["host", "port(1..=65535)", "username", "password", "from(adresse valide)", "starttls(défaut true)"],
+    "_criterion_2": "config SMTP invalide -> échec journalisé SANS exposer les identifiants, n'interrompt pas les autres canaux.",
+    "secrets": "mot de passe redacté dans le DTO (<redacted>) ; EmailConfig Debug masque username+password ; l'erreur d'envoi n'est jamais journalisée brute.",
+    "resilience": "envoi best-effort dans le cron (comme le webhook) : un échec SMTP est isolé, les autres canaux et le cron continuent. Réessai = REQ-NOT-007 (différé).",
+    "api": "aucun nouvel endpoint : le CRUD générique de canal (NOT-005) accepte kind='email'."
+  }
+}

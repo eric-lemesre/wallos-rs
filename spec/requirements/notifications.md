@@ -58,7 +58,7 @@ depends_on: [REQ-NOT-001, REQ-SUB-014]
 id: REQ-NOT-003
 title: Canal e-mail
 domain: notifications
-status: draft
+status: verified
 criticality: high
 layer: [api, ui]
 e2e: required

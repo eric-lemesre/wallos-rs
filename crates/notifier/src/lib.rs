@@ -15,9 +15,13 @@
 
 #![forbid(unsafe_code)]
 
+use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
+use lettre::message::header::ContentType;
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use serde::Serialize;
 
 /// Un rappel individuel à notifier (élément de la charge utile).
@@ -65,6 +69,8 @@ impl ReminderNotification {
 pub enum Channel {
     /// Webhook générique : POST JSON vers une URL configurée (REQ-NOT-005).
     Webhook(Webhook),
+    /// Canal e-mail : envoi SMTP, dans la langue du compte (REQ-NOT-003).
+    Email(Email),
 }
 
 impl Channel {
@@ -72,10 +78,11 @@ impl Channel {
     /// interrompre les autres canaux, esprit REQ-NOT-003).
     ///
     /// # Errors
-    /// Erreur réseau, délai dépassé, ou statut HTTP non 2xx pour le webhook.
+    /// Erreur réseau, délai dépassé, ou statut non favorable (HTTP non 2xx / échec SMTP).
     pub async fn send(&self, notification: &ReminderNotification) -> anyhow::Result<()> {
         match self {
             Self::Webhook(w) => w.send(notification).await,
+            Self::Email(e) => e.send(notification).await,
         }
     }
 
@@ -84,6 +91,7 @@ impl Channel {
     pub const fn kind(&self) -> &'static str {
         match self {
             Self::Webhook(_) => "webhook",
+            Self::Email(_) => "email",
         }
     }
 }
@@ -122,6 +130,162 @@ impl Webhook {
         }
         Ok(())
     }
+}
+
+/// Configuration SMTP d'un canal e-mail (REQ-NOT-003). `Debug` **redacte** identifiant et mot de passe
+/// (jamais journalisés, esprit du critère « échec journalisé sans exposer les identifiants »).
+#[derive(Clone)]
+pub struct EmailConfig {
+    /// Hôte du serveur SMTP (nom d'hôte).
+    pub host: String,
+    /// Port SMTP (587 STARTTLS, 465 TLS implicite, 25 clair).
+    pub port: u16,
+    /// Identifiant d'authentification SMTP.
+    pub username: String,
+    /// Mot de passe / jeton SMTP.
+    pub password: String,
+    /// Adresse d'expéditeur (`From`).
+    pub from: String,
+    /// Utiliser STARTTLS (sinon TLS implicite).
+    pub starttls: bool,
+}
+
+impl fmt::Debug for EmailConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EmailConfig")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("username", &"<redacted>")
+            .field("password", &"<redacted>")
+            .field("from", &self.from)
+            .field("starttls", &self.starttls)
+            .finish()
+    }
+}
+
+/// Canal e-mail (REQ-NOT-003) : connexion SMTP + **destinataire** et **langue** du compte (résolus au
+/// moment de l'envoi, jamais figés dans la configuration du canal).
+#[derive(Debug, Clone)]
+pub struct Email {
+    config: EmailConfig,
+    recipient: String,
+    language: String,
+}
+
+impl Email {
+    /// Construit un canal e-mail pour un destinataire et une langue de compte donnés.
+    #[must_use]
+    pub fn new(
+        config: EmailConfig,
+        recipient: impl Into<String>,
+        language: impl Into<String>,
+    ) -> Self {
+        Self {
+            config,
+            recipient: recipient.into(),
+            language: language.into(),
+        }
+    }
+
+    /// Compose et envoie l'e-mail de rappel via SMTP.
+    ///
+    /// # Errors
+    /// Adresse invalide (`from`/`to`), configuration SMTP illisible, ou échec de connexion/envoi. Le
+    /// message d'erreur ne contient jamais le mot de passe (voir [`EmailConfig`] `Debug`).
+    pub async fn send(&self, notification: &ReminderNotification) -> anyhow::Result<()> {
+        let message = compose_email(
+            &self.language,
+            &self.recipient,
+            &self.config.from,
+            notification,
+        )?;
+        let creds = Credentials::new(self.config.username.clone(), self.config.password.clone());
+        let builder = if self.config.starttls {
+            AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&self.config.host)?
+        } else {
+            AsyncSmtpTransport::<Tokio1Executor>::relay(&self.config.host)?
+        };
+        let mailer = builder
+            .port(self.config.port)
+            .credentials(creds)
+            .timeout(Some(Duration::from_secs(10)))
+            .build();
+        mailer.send(message).await?;
+        Ok(())
+    }
+}
+
+/// Contenu textuel (sujet, corps) d'un e-mail de rappel **dans la langue du compte** (REQ-NOT-003),
+/// avec le détail des abonnements concernés (nom, échéance, jours restants ; ligne distincte pour une
+/// fin d'essai). Fonction **pure** (testable sans SMTP) ; `language` non reconnue → repli anglais
+/// (cohérent avec REQ-I18N-004).
+#[must_use]
+pub fn email_content(language: &str, notification: &ReminderNotification) -> (String, String) {
+    let french = language.eq_ignore_ascii_case("fr");
+    let subject = if french {
+        "Rappel : échéances d'abonnement à venir"
+    } else {
+        "Reminder: upcoming subscription payments"
+    };
+    let intro = if french {
+        "Vous avez des échéances d'abonnement à venir :"
+    } else {
+        "You have upcoming subscription payments:"
+    };
+    let mut body = String::new();
+    body.push_str(intro);
+    body.push_str("\n\n");
+    for item in &notification.reminders {
+        let is_trial = item.kind == "trial_ending";
+        let line = match (french, is_trial) {
+            (true, true) => format!(
+                "- {} : fin de la période d'essai le {} (dans {} jour(s))\n",
+                item.name, item.due_date, item.days_until
+            ),
+            (true, false) => format!(
+                "- {} : échéance le {} (dans {} jour(s))\n",
+                item.name, item.due_date, item.days_until
+            ),
+            (false, true) => format!(
+                "- {}: free trial ends on {} (in {} day(s))\n",
+                item.name, item.due_date, item.days_until
+            ),
+            (false, false) => format!(
+                "- {}: due on {} (in {} day(s))\n",
+                item.name, item.due_date, item.days_until
+            ),
+        };
+        body.push_str(&line);
+    }
+    (subject.to_string(), body)
+}
+
+/// Vrai si `addr` est une adresse e-mail analysable (boîte aux lettres SMTP valide, REQ-NOT-003).
+/// Permet au serveur de valider une adresse d'expéditeur sans dépendre directement de `lettre`.
+#[must_use]
+pub fn is_valid_email_address(addr: &str) -> bool {
+    addr.parse::<lettre::message::Mailbox>().is_ok()
+}
+
+/// Compose le message e-mail de rappel (REQ-NOT-003) : localise via [`email_content`] puis construit le
+/// message SMTP (adresses `from`/`to`, corps texte).
+///
+/// # Errors
+/// Adresse `from` ou `to` non analysable, ou corps invalide.
+pub fn compose_email(
+    language: &str,
+    recipient: &str,
+    from: &str,
+    notification: &ReminderNotification,
+) -> anyhow::Result<Message> {
+    let (subject, body) = email_content(language, notification);
+    let message = Message::builder()
+        .from(from.parse()?)
+        .to(recipient.parse()?)
+        .subject(subject)
+        .header(ContentType::TEXT_PLAIN)
+        .body(body)?;
+    Ok(message)
 }
 
 /// Vrai si l'URL de webhook est **sûre** à enregistrer (prévention SSRF, REQ-NOT-005 critère #2) :
@@ -230,6 +394,91 @@ mod tests {
         assert!(!webhook_url_is_safe("file:///etc/passwd"));
         assert!(!webhook_url_is_safe("pas une url"));
         assert!(!webhook_url_is_safe(""));
+    }
+
+    fn sample_notification() -> ReminderNotification {
+        ReminderNotification::new(
+            "2026-08-06",
+            vec![
+                ReminderItem {
+                    subscription_id: "s1".into(),
+                    name: "Netflix".into(),
+                    due_date: "2026-08-07".into(),
+                    days_until: 1,
+                    kind: "payment".into(),
+                },
+                ReminderItem {
+                    subscription_id: "s2".into(),
+                    name: "Figma".into(),
+                    due_date: "2026-08-08".into(),
+                    days_until: 2,
+                    kind: "trial_ending".into(),
+                },
+            ],
+        )
+    }
+
+    #[test]
+    fn email_content_french_localizes_subject_and_body() {
+        let (subject, body) = email_content("fr", &sample_notification());
+        assert_eq!(subject, "Rappel : échéances d'abonnement à venir");
+        assert!(body.contains("Vous avez des échéances d'abonnement à venir :"));
+        assert!(body.contains("Netflix : échéance le 2026-08-07 (dans 1 jour(s))"));
+        // La fin d'essai a une formulation distincte.
+        assert!(body.contains("Figma : fin de la période d'essai le 2026-08-08 (dans 2 jour(s))"));
+    }
+
+    #[test]
+    fn email_content_english_and_unknown_language_fallback() {
+        let (subject, body) = email_content("en", &sample_notification());
+        assert_eq!(subject, "Reminder: upcoming subscription payments");
+        assert!(body.contains("Netflix: due on 2026-08-07 (in 1 day(s))"));
+        assert!(body.contains("Figma: free trial ends on 2026-08-08 (in 2 day(s))"));
+        // Langue inconnue -> repli anglais (REQ-I18N-004).
+        let (unknown_subject, _) = email_content("xx", &sample_notification());
+        assert_eq!(unknown_subject, "Reminder: upcoming subscription payments");
+    }
+
+    #[test]
+    fn compose_email_builds_message_with_addresses() {
+        let msg = compose_email(
+            "en",
+            "user@example.com",
+            "wallos@example.com",
+            &sample_notification(),
+        )
+        .unwrap();
+        let out = String::from_utf8(msg.formatted()).unwrap();
+        assert!(out.contains("To: user@example.com"));
+        assert!(out.contains("From: wallos@example.com"));
+    }
+
+    #[test]
+    fn compose_email_rejects_invalid_address() {
+        let err = compose_email(
+            "en",
+            "pas-une-adresse",
+            "w@example.com",
+            &sample_notification(),
+        );
+        assert!(err.is_err());
+    }
+
+    #[test]
+    fn email_config_debug_redacts_secrets() {
+        let config = EmailConfig {
+            host: "smtp.example.com".into(),
+            port: 587,
+            username: "alice".into(),
+            password: "s3cr3t".into(),
+            from: "wallos@example.com".into(),
+            starttls: true,
+        };
+        let debug = format!("{config:?}");
+        assert!(!debug.contains("s3cr3t"));
+        assert!(!debug.contains("alice"));
+        assert!(debug.contains("<redacted>"));
+        assert!(debug.contains("smtp.example.com"));
     }
 
     #[test]
