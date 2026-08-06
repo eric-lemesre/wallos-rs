@@ -104,14 +104,22 @@ impl Webhook {
 
     /// POST la charge utile JSON, délai borné (10 s). Échec si le statut n'est pas 2xx.
     ///
+    /// **Anti-SSRF (REQ-NOT-005 / socle REQ-SEC-005)** : le suivi de redirection est **désactivé**.
+    /// La garde `webhook_url_is_safe` ne valide que l'URL **initiale** à l'enregistrement ; sans cette
+    /// politique, une redirection `3xx` pourrait pointer vers une adresse interne (bouclage, métadonnées
+    /// d'instance) et reqwest la suivrait. Une réponse de redirection est donc traitée comme un échec.
+    ///
     /// # Errors
-    /// Construction du client, erreur réseau/délai, ou statut HTTP non 2xx.
+    /// Construction du client, erreur réseau/délai, ou statut HTTP non 2xx (redirection incluse).
     pub async fn send(&self, notification: &ReminderNotification) -> anyhow::Result<()> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
+            .redirect(reqwest::redirect::Policy::none())
             .build()?;
         let response = client.post(&self.url).json(notification).send().await?;
-        response.error_for_status()?;
+        if !response.status().is_success() {
+            anyhow::bail!("statut HTTP inattendu: {}", response.status());
+        }
         Ok(())
     }
 }
@@ -188,7 +196,9 @@ mod tests {
     fn public_urls_are_accepted() {
         assert!(webhook_url_is_safe("https://hooks.example.com/abc"));
         assert!(webhook_url_is_safe("http://93.184.216.34/notify")); // IPv4 publique (example.com)
-        assert!(webhook_url_is_safe("https://[2606:2800:220:1:248:1893:25c8:1946]/x"));
+        assert!(webhook_url_is_safe(
+            "https://[2606:2800:220:1:248:1893:25c8:1946]/x"
+        ));
     }
 
     #[test]

@@ -47,11 +47,16 @@ journalisé (`tracing::warn`) sans interrompre les autres canaux ni le cron.
 
 `spec` déclare NOT-005 `depends_on` SEC-005 **et** SEC-005 `depends_on` NOT-005 (cycle, comme
 NOT-002↔SUB-014, CUR-006↔I18N-003). On **rompt** le cycle en vérifiant NOT-005 avec sa garde **à
-l'enregistrement** (suffisante pour son critère #2). SEC-005 (criticality high, `oracle: design`)
-**durcira** ensuite la protection sur le **chemin d'appel** : résolution DNS du nom d'hôte vers son IP,
-et re-validation **à chaque saut de redirection** — ce que la garde syntaxique à l'enregistrement ne
-couvre pas (un nom DNS résolvant vers une IP privée, ou une redirection vers une adresse interne, restent
-possibles jusqu'à SEC-005). Limite **documentée**, assumée pour ce vertical.
+l'enregistrement**, complétée par un durcissement du **chemin d'appel** : `Webhook::send` **ne suit pas
+les redirections** (`redirect::Policy::none()`, une réponse `3xx` = échec) — cela ferme le vecteur SSRF
+« URL publique enregistrée redirigeant vers `169.254.169.254` ». Reste à SEC-005 (criticality high,
+`oracle: design`) : la **résolution DNS** d'un nom d'hôte vers son IP (rebinding — un nom public
+résolvant vers une IP privée passe encore la garde syntaxique), et l'extension de la protection aux
+**autres requêtes sortantes** (récupération de logos, SUB-015). Limite **documentée**, assumée ici.
+
+Côté **observabilité** : un échec d'envoi journalise seulement le type de canal et le foyer, **jamais
+l'erreur brute** (elle peut embarquer l'URL du canal, potentiellement porteuse d'un secret). Le
+diagnostic redacté exploitable relèvera de REQ-NOT-007.
 
 ## Conséquences
 
@@ -62,5 +67,5 @@ possibles jusqu'à SEC-005). Limite **documentée**, assumée pour ce vertical.
 - UI : `NotificationChannelsCard` (ajout/liste/suppression, signalement du refus SSRF).
 - Tests : notifier (SSRF exhaustif + charge utile), intégration (`notification_channels.rs` : CRUD, refus
   SSRF, canal désactivé muet, **envoi bout-en-bout** vers un récepteur local, trio authz ×3).
-- **Dette explicite** : SEC-005 (DNS + redirections) reste à faire ; jusque-là la protection est
-  syntaxique à l'enregistrement seulement.
+- **Dette explicite** : SEC-005 (résolution DNS anti-rebinding + protection des autres appels sortants)
+  reste à faire ; les redirections sont déjà **refusées** à l'envoi, et l'URL n'est jamais journalisée.
