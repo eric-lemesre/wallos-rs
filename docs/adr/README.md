@@ -52,6 +52,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0034 | SYN-002 pierres tombales (curseur since, purge, resync) | 🟡 |
 | 0035 | SYN-003 delta incrémental (keyset, payload = ligne stockée) | 🟡 |
 | 0036 | SYN-004 push (lot indépendant, idempotent, rejets par entité) | ⚪ |
+| 0037 | SYN-005 conflit (LWW + concurrence optimiste + journal) | 🔴 |
 
 ## À relire en priorité aujourd'hui (🔴)
 
@@ -66,6 +67,8 @@ Les décisions d'interprétation prises jusqu'ici, susceptibles de diverger de l
 - **0023** — jeu de catégories par défaut (impacte tout import/export et l'expérience initiale).
 - **0022** — règle de clamp des échéances mensuelles (28/29/30/31).
 - **0012** — foyer partagé, payeurs = membres : structurant pour SUB-017/STA-004 et l'isolation.
+- **0037** — résolution de conflit : la détection dépend de `base_version` fournie par le client ; sans
+  elle, LWW s'applique mais sans journal (écrasement silencieux possible). Compromis option A.
 - **0031** — répartition : bucket « (aucun) » explicite (subtrack rend l'axe nullable, là où Wallos a
   des sentinelles) ; petite divergence d'affichage (entrées de coût nul conservées, pas omises).
 

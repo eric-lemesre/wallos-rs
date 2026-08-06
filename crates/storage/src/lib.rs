@@ -4,6 +4,7 @@
 #![forbid(unsafe_code)]
 
 pub mod categories;
+pub mod conflict_journal;
 pub mod db;
 pub mod device_tokens;
 pub mod error;
@@ -21,6 +22,7 @@ pub mod tombstones;
 pub mod users;
 
 pub use categories::{CategoryRepository, CategoryRow, DeleteOutcome, RenameOutcome};
+pub use conflict_journal::{ConflictJournalRepository, ConflictRow};
 pub use db::Db;
 pub use device_tokens::DeviceTokenRepository;
 pub use error::StorageError;

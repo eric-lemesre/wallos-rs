@@ -845,7 +845,7 @@ requirements:
 - id: REQ-SYN-005
   title: Résolution de conflit
   domain: sync
-  status: draft
+  status: verified
   criticality: high
   layer:
   - core

@@ -17,17 +17,18 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use uuid::Uuid;
 use wallos_core::requirement;
 use wallos_core::{
-    DEFAULT_TOMBSTONE_RETENTION_DAYS, SyncCursor, requires_full_resync, retention_cutoff,
+    Arbitration, DEFAULT_TOMBSTONE_RETENTION_DAYS, SyncCursor, arbitrate, requires_full_resync,
+    retention_cutoff,
 };
 use wallos_proto::{
-    CreateSubscriptionRequest, SyncChangeDto, SyncChangesQuery, SyncChangesResponse,
-    SyncOperationInput, SyncOperationResult, SyncPushRequest, SyncPushResponse, TombstoneDto,
-    TombstonesQuery, TombstonesResponse, problem,
+    ConflictDto, ConflictsResponse, CreateSubscriptionRequest, SyncChangeDto, SyncChangesQuery,
+    SyncChangesResponse, SyncOperationInput, SyncOperationResult, SyncPushRequest,
+    SyncPushResponse, TombstoneDto, TombstonesQuery, TombstonesResponse, problem,
 };
 use wallos_storage::{
-    CategoryRepository, CreateOutcome, Db, DeleteOutcome, PayerDeleteOutcome, PayerRepository,
-    PaymentMethodRepository, RenameOutcome, SubscriptionRepository, SyncChangesRepository,
-    TombstoneRepository,
+    CategoryRepository, ConflictJournalRepository, CreateOutcome, Db, DeleteOutcome,
+    PayerDeleteOutcome, PayerRepository, PaymentMethodRepository, RenameOutcome,
+    SubscriptionRepository, SyncChangesRepository, TombstoneRepository, conflict_journal,
 };
 
 use crate::auth::AuthActor;
@@ -265,19 +266,19 @@ async fn upsert_bool_named(created: CreateOutcome, renamed: bool) -> Op {
     }
 }
 
-/// Applique une opération du lot. `Err` = échec d'infrastructure (→ 500) ; `Ok(Op)` = appliquée/rejetée.
+/// Applique l'écriture d'un upsert (création ou mise à jour, gardée par foyer §9), sans arbitrage.
+/// `entity_type` est déjà validé (ensemble fermé) par l'appelant.
 #[requirement(REQ-SYN-004)]
-async fn apply_op(
+async fn apply_upsert(
     db: &Db,
     actor: &wallos_core::actor::Actor,
     op: &SyncOperationInput,
+    id: Uuid,
+    entity_type: &str,
 ) -> Result<Op, wallos_storage::StorageError> {
-    let Ok(id) = Uuid::parse_str(&op.id) else {
-        return Ok(Op::Rejected("identifiant invalide".to_string()));
-    };
     let pool = db.pool();
-    match (op.op.as_str(), op.entity_type.as_str()) {
-        ("upsert", "category") => {
+    match entity_type {
+        "category" => {
             let Some(name) = name_of(op) else {
                 return Ok(Op::Rejected("nom requis".to_string()));
             };
@@ -294,7 +295,7 @@ async fn apply_op(
                 },
             }
         }
-        ("upsert", "payment_method") => {
+        "payment_method" => {
             let Some(name) = name_of(op) else {
                 return Ok(Op::Rejected("nom requis".to_string()));
             };
@@ -304,7 +305,7 @@ async fn apply_op(
                 && repo.rename(actor, id, &name).await?;
             Ok(upsert_bool_named(created, renamed).await)
         }
-        ("upsert", "payer") => {
+        "payer" => {
             let Some(name) = name_of(op) else {
                 return Ok(Op::Rejected("nom requis".to_string()));
             };
@@ -314,7 +315,7 @@ async fn apply_op(
                 && repo.rename(actor, id, &name).await?;
             Ok(upsert_bool_named(created, renamed).await)
         }
-        ("upsert", "subscription") => {
+        "subscription" => {
             let Some(payload) = op.payload.clone() else {
                 return Ok(Op::Rejected("charge utile requise".to_string()));
             };
@@ -337,6 +338,95 @@ async fn apply_op(
                     }
                 }
             }
+        }
+        _ => Ok(Op::Rejected("type d'entité inconnu".to_string())),
+    }
+}
+
+/// Upsert **arbitré** (REQ-SYN-005) : applique la règle « dernière écriture gagnante » avec journal.
+///
+/// - Si la cible est **supprimée** (pierre tombale) : la **suppression l'emporte** ; l'écriture entrante
+///   est écartée et **journalisée** (`deleted_remotely`).
+/// - Sinon, si `base_version` est fournie et **diffère** de la version courante : conflit d'écrasement ;
+///   la version courante est **journalisée** (`overwritten`) avant d'appliquer la nouvelle écriture
+///   (qui l'emporte, arrivée la plus récente).
+/// - Sinon : application simple.
+#[requirement(REQ-SYN-005)]
+async fn upsert_with_arbitration(
+    db: &Db,
+    actor: &wallos_core::actor::Actor,
+    op: &SyncOperationInput,
+    id: Uuid,
+    entity_type: &str,
+) -> Result<Op, wallos_storage::StorageError> {
+    let pool = db.pool();
+    let deleted = TombstoneRepository::new(pool)
+        .exists(actor, entity_type, id)
+        .await?;
+    let base_version = op
+        .base_version
+        .as_deref()
+        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+        .map(|dt| dt.with_timezone(&Utc));
+    let current = SyncChangesRepository::new(pool)
+        .current(actor, entity_type, id)
+        .await?;
+    let current_version = current.as_ref().map(|(ts, _)| *ts);
+
+    let journal = ConflictJournalRepository::new(pool);
+    match arbitrate(base_version, current_version, deleted) {
+        Arbitration::RejectDeleted => {
+            // La modification perdue (l'écriture entrante) est conservée pour consultation.
+            let lost = op
+                .payload
+                .as_ref()
+                .map_or_else(|| "null".to_string(), std::string::ToString::to_string);
+            journal
+                .record(
+                    actor,
+                    entity_type,
+                    id,
+                    &lost,
+                    conflict_journal::REASON_DELETED_REMOTELY,
+                )
+                .await?;
+            Ok(Op::Rejected(
+                "supprimé à distance — la suppression l'emporte".to_string(),
+            ))
+        }
+        Arbitration::ApplyAndJournal => {
+            // La version courante (écrasée) est conservée avant l'application.
+            if let Some((_, current_payload)) = current {
+                journal
+                    .record(
+                        actor,
+                        entity_type,
+                        id,
+                        &current_payload,
+                        conflict_journal::REASON_OVERWRITTEN,
+                    )
+                    .await?;
+            }
+            apply_upsert(db, actor, op, id, entity_type).await
+        }
+        Arbitration::Apply => apply_upsert(db, actor, op, id, entity_type).await,
+    }
+}
+
+/// Applique une opération du lot. `Err` = échec d'infrastructure (→ 500) ; `Ok(Op)` = appliquée/rejetée.
+#[requirement(REQ-SYN-004)]
+async fn apply_op(
+    db: &Db,
+    actor: &wallos_core::actor::Actor,
+    op: &SyncOperationInput,
+) -> Result<Op, wallos_storage::StorageError> {
+    let Ok(id) = Uuid::parse_str(&op.id) else {
+        return Ok(Op::Rejected("identifiant invalide".to_string()));
+    };
+    let pool = db.pool();
+    match (op.op.as_str(), op.entity_type.as_str()) {
+        ("upsert", entity_type @ ("category" | "payment_method" | "payer" | "subscription")) => {
+            upsert_with_arbitration(db, actor, op, id, entity_type).await
         }
         // Une suppression est idempotente : supprimer une entité déjà absente atteint l'état voulu
         // (Appliquée). Seul un refus métier (entité référencée) est un rejet.
@@ -431,4 +521,48 @@ pub async fn push_sync_changes(
         body,
     )
         .into_response()
+}
+
+/// Journal des conflits : les modifications perdues par arbitrage (REQ-SYN-005), consultables.
+///
+/// Renvoie les versions écrasées (`overwritten`) ou écartées par une suppression concurrente
+/// (`deleted_remotely`), de la plus récente à la plus ancienne. Le serveur purge au passage les entrées
+/// expirées (même rétention que les pierres tombales, ADR 0013). Isolation §9.
+#[utoipa::path(
+    get,
+    path = "/sync/conflicts",
+    operation_id = "getSyncConflicts",
+    extensions(("x-requirements" = json!(["REQ-SYN-005"]))),
+    responses(
+        (status = 200, description = "Journal des conflits", body = ConflictsResponse, content_type = "application/json"),
+        (status = 401, description = "Non authentifié", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 500, description = "Erreur interne", body = wallos_proto::Problem, content_type = "application/problem+json")
+    )
+)]
+#[requirement(REQ-SYN-005)]
+pub async fn get_sync_conflicts(AuthActor(actor): AuthActor, State(db): State<Db>) -> Response {
+    let repo = ConflictJournalRepository::new(db.pool());
+    // Purge d'entretien : borne calculée (now − rétention), injectée (testable sans horloge).
+    if repo
+        .purge_expired(retention_cutoff(Utc::now(), *RETENTION_DAYS))
+        .await
+        .is_err()
+    {
+        return internal_error();
+    }
+    let rows = match repo.list(&actor).await {
+        Ok(rows) => rows,
+        Err(_) => return internal_error(),
+    };
+    let conflicts = rows
+        .into_iter()
+        .map(|r| ConflictDto {
+            entity_type: r.entity_type,
+            entity_id: r.entity_id.to_string(),
+            lost_payload: serde_json::from_str::<serde_json::Value>(&r.lost_payload).ok(),
+            reason: r.reason,
+            recorded_at: r.recorded_at.to_rfc3339_opts(SecondsFormat::Micros, true),
+        })
+        .collect();
+    Json(ConflictsResponse { conflicts }).into_response()
 }

@@ -10,17 +10,17 @@ use utoipa::OpenApi;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use wallos_core::requirement;
 use wallos_proto::{
-    AggregateRequest, CategoryDto, ChangePasswordRequest, ConvertedTotalResponse,
-    CostEvolutionResponse, CreateAccountRequest, CreateCategoryRequest, CreateDeviceSessionRequest,
-    CreatePayerRequest, CreatePaymentMethodRequest, CreateSessionRequest,
-    CreateSubscriptionRequest, CurrencyDto, CurrentUser, DataBundle, DeviceSummary, DeviceToken,
-    HealthResponse, ImportCounts, ImportReport, LanguageResponse, MoneyInput, MonthlyCostPointDto,
-    NextDueRequest, NextDueResponse, PayerDto, PaymentMethodDto, Problem, ReferenceCurrencyDto,
-    RejectedRow, RenameCategoryRequest, RenamePayerRequest, RenamePaymentMethodRequest,
-    RepartitionEntryDto, RepartitionResponse, SetLanguageRequest, SubscriptionDto,
-    SubscriptionListResponse, SyncChangeDto, SyncChangesResponse, SyncOperationInput,
-    SyncOperationResult, SyncPushRequest, SyncPushResponse, TombstoneDto, TombstonesResponse,
-    problem,
+    AggregateRequest, CategoryDto, ChangePasswordRequest, ConflictDto, ConflictsResponse,
+    ConvertedTotalResponse, CostEvolutionResponse, CreateAccountRequest, CreateCategoryRequest,
+    CreateDeviceSessionRequest, CreatePayerRequest, CreatePaymentMethodRequest,
+    CreateSessionRequest, CreateSubscriptionRequest, CurrencyDto, CurrentUser, DataBundle,
+    DeviceSummary, DeviceToken, HealthResponse, ImportCounts, ImportReport, LanguageResponse,
+    MoneyInput, MonthlyCostPointDto, NextDueRequest, NextDueResponse, PayerDto, PaymentMethodDto,
+    Problem, ReferenceCurrencyDto, RejectedRow, RenameCategoryRequest, RenamePayerRequest,
+    RenamePaymentMethodRequest, RepartitionEntryDto, RepartitionResponse, SetLanguageRequest,
+    SubscriptionDto, SubscriptionListResponse, SyncChangeDto, SyncChangesResponse,
+    SyncOperationInput, SyncOperationResult, SyncPushRequest, SyncPushResponse, TombstoneDto,
+    TombstonesResponse, problem,
 };
 use wallos_storage::Db;
 
@@ -89,7 +89,8 @@ pub mod sync;
         settings::set_language,
         sync::get_tombstones,
         sync::get_sync_changes,
-        sync::push_sync_changes
+        sync::push_sync_changes,
+        sync::get_sync_conflicts
     ),
     components(schemas(
         HealthResponse,
@@ -137,7 +138,9 @@ pub mod sync;
         SyncOperationInput,
         SyncOperationResult,
         SyncPushRequest,
-        SyncPushResponse
+        SyncPushResponse,
+        ConflictDto,
+        ConflictsResponse
     ))
 )]
 pub struct ApiDoc;
@@ -249,6 +252,7 @@ pub fn app_with_db(db: Db) -> Router {
         .routes(routes!(sync::get_tombstones))
         .routes(routes!(sync::get_sync_changes))
         .routes(routes!(sync::push_sync_changes))
+        .routes(routes!(sync::get_sync_conflicts))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))

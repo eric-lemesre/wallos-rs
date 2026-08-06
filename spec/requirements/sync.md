@@ -102,7 +102,7 @@ depends_on: [REQ-SYN-001, REQ-SYN-006]
 id: REQ-SYN-005
 title: Résolution de conflit
 domain: sync
-status: draft
+status: verified
 criticality: high
 layer: [core, api]
 e2e: required
