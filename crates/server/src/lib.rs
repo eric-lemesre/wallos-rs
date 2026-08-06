@@ -18,7 +18,8 @@ use wallos_proto::{
     NextDueRequest, NextDueResponse, PayerDto, PaymentMethodDto, Problem, ReferenceCurrencyDto,
     RejectedRow, RenameCategoryRequest, RenamePayerRequest, RenamePaymentMethodRequest,
     RepartitionEntryDto, RepartitionResponse, SetLanguageRequest, SubscriptionDto,
-    SubscriptionListResponse, SyncChangeDto, SyncChangesResponse, TombstoneDto, TombstonesResponse,
+    SubscriptionListResponse, SyncChangeDto, SyncChangesResponse, SyncOperationInput,
+    SyncOperationResult, SyncPushRequest, SyncPushResponse, TombstoneDto, TombstonesResponse,
     problem,
 };
 use wallos_storage::Db;
@@ -87,7 +88,8 @@ pub mod sync;
         settings::get_language,
         settings::set_language,
         sync::get_tombstones,
-        sync::get_sync_changes
+        sync::get_sync_changes,
+        sync::push_sync_changes
     ),
     components(schemas(
         HealthResponse,
@@ -131,7 +133,11 @@ pub mod sync;
         TombstoneDto,
         TombstonesResponse,
         SyncChangeDto,
-        SyncChangesResponse
+        SyncChangesResponse,
+        SyncOperationInput,
+        SyncOperationResult,
+        SyncPushRequest,
+        SyncPushResponse
     ))
 )]
 pub struct ApiDoc;
@@ -242,6 +248,7 @@ pub fn app_with_db(db: Db) -> Router {
         .routes(routes!(settings::get_language, settings::set_language))
         .routes(routes!(sync::get_tombstones))
         .routes(routes!(sync::get_sync_changes))
+        .routes(routes!(sync::push_sync_changes))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))

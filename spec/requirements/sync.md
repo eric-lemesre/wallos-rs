@@ -79,7 +79,7 @@ depends_on: [REQ-SYN-001, REQ-SYN-002]
 id: REQ-SYN-004
 title: Poussée des modifications locales
 domain: sync
-status: draft
+status: verified
 criticality: high
 layer: [api, ui]
 e2e: required

@@ -576,6 +576,32 @@ export class TargetDriver implements AppDriver, Harness {
     }, pageSize);
   }
 
+  // --- Poussée des modifications locales (REQ-SYN-004) ---
+
+  /**
+   * Pousse un lot d'opérations locales via l'endpoint de synchronisation (comme un client offline-first
+   * au retour du réseau), avec une clé d'idempotence optionnelle. Renvoie les statuts par opération.
+   */
+  async pushSyncChanges(
+    operations: unknown[],
+    idempotencyKey?: string,
+  ): Promise<string[]> {
+    return this.page.evaluate(
+      async ({ operations, idempotencyKey }) => {
+        const headers: Record<string, string> = { "content-type": "application/json" };
+        if (idempotencyKey) headers["idempotency-key"] = idempotencyKey;
+        const res = await fetch("/api/v1/sync/push", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ operations }),
+        });
+        const body = (await res.json()) as { results: { status: string }[] };
+        return body.results.map((r) => r.status);
+      },
+      { operations, idempotencyKey },
+    );
+  }
+
   // --- Langue (REQ-I18N-001) ---
 
   async setLanguage(code: string): Promise<void> {
