@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
 import type { components } from "../api/client";
+import { SYNCED_EVENT, enqueue, isOnline } from "../sync/outbox";
 
 type PayerDto = components["schemas"]["PayerDto"];
 
@@ -12,7 +13,12 @@ type PayerDto = components["schemas"]["PayerDto"];
  * immédiatement (source du formulaire d'abonnement). La suppression d'un payeur référencé est refusée
  * par le serveur (409). Aucune chaîne d'affichage en dur (REQ-I18N-002). Calque des moyens de paiement.
  *
+ * **Création hors ligne (REQ-SYN-007)** : sans connectivité, la création aboutit **localement**
+ * (ajout optimiste) et l'opération est mise en file (`outbox`) pour une poussée automatique au retour
+ * du réseau ; l'indicateur global de synchronisation en informe l'utilisateur.
+ *
  * @implements REQ-SUB-017
+ * @implements REQ-SYN-007
  */
 export function PayersList() {
   const { t } = useTranslation();
@@ -33,12 +39,25 @@ export function PayersList() {
 
   useEffect(() => {
     void refresh();
+    // Après une synchronisation automatique (retour du réseau), la liste reflète l'état serveur.
+    const onSynced = () => void refresh();
+    window.addEventListener(SYNCED_EVENT, onSynced);
+    return () => window.removeEventListener(SYNCED_EVENT, onSynced);
   }, [refresh]);
 
   async function create() {
-    await api.POST("/payers", { body: { name: newName } });
+    const name = newName;
     setNewName("");
-    await refresh();
+    // Identifiant généré côté client (REQ-SYN-001) : permet la création hors ligne puis la poussée.
+    const id = crypto.randomUUID();
+    if (isOnline()) {
+      await api.POST("/payers", { body: { id, name } });
+      await refresh();
+      return;
+    }
+    // Hors ligne (REQ-SYN-007) : l'opération aboutit localement (ajout optimiste) et part en file.
+    enqueue({ op: "upsert", entity_type: "payer", id, payload: { name } });
+    setPayers((prev) => [...prev, { id, name }]);
   }
 
   async function rename(id: string, name: string) {

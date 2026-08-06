@@ -20,6 +20,7 @@ import { LanguageSetting } from "../../../ui/src/components/LanguageSetting";
 import { DevicesList } from "../../../ui/src/components/DevicesList";
 import { LoginForm } from "../../../ui/src/components/LoginForm";
 import { SignupForm } from "../../../ui/src/components/SignupForm";
+import { SyncStatus } from "../../../ui/src/components/SyncStatus";
 import i18n from "../../../ui/src/i18n";
 
 // Coquille web : mince par conception (AGENTS.md §7). Elle se contente de monter l'UI partagée.
@@ -30,6 +31,7 @@ if (root) {
     <StrictMode>
       <I18nextProvider i18n={i18n}>
         <main>
+          <SyncStatus />
           <SignupForm />
           <LoginForm />
           <LanguageSetting />

@@ -208,5 +208,11 @@
     "none": "(none)",
     "total": "Total",
     "empty": "No active subscription"
+  },
+  "sync": {
+    "offline": "Offline — changes are saved locally",
+    "pending": "{{count}} change not synced",
+    "pending_other": "{{count}} changes not synced",
+    "synced": "All changes synced"
   }
 }
