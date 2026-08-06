@@ -1,0 +1,28 @@
+{
+  "_requirement": "REQ-STA-003",
+  "_source": "Wallos 5.4.2 — lecture de `stats_calculations.php` et des requêtes de `endpoints/subscriptions/get_subscriptions_stats.php` sur l'image épinglée bellamy/wallos@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f.",
+  "_note": "STA-003 est une RÈGLE TRANSVERSE, pas un nouvel agrégat : elle exige que TOUS les agrégats appliquent identiquement l'exclusion des abonnements non actifs. La partie `inactive` est capturée sur Wallos (legacy) ; les états `terminé` (SUB-009) et `essai gratuit` (SUB-010, design ADR 0041) sont des extensions du modèle subtrack, appliquées de façon cohérente au même titre.",
+  "legacy_rule": {
+    "_observed": "Wallos filtre systématiquement `WHERE inactive = 0` dans chacune de ses requêtes de statistiques (coût mensuel, coût annuel, répartitions par catégorie/membre, échéancier). Un abonnement désactivé n'alimente AUCUN total ; il reste stocké mais invisible des agrégats. Aucune notion de date de fin ni d'essai côté legacy.",
+    "aggregates_observed": ["coût mensuel total", "coût annuel total", "répartition par catégorie", "répartition par membre (payeur)", "échéancier des prochains paiements"]
+  },
+  "design_rules": {
+    "_criterion_1": "des abonnements désactivés, terminés ou en essai -> exclus de TOUT agrégat, selon la règle propre à chaque état.",
+    "per_state": {
+      "disabled": "REQ-SUB-008 : `active = false` -> exclu intégralement de tous les agrégats (aucune contribution, aucune occurrence).",
+      "ended": "REQ-SUB-009 : à une date de référence `today`, `end_date < today` -> exclu des agrégats « à ce jour » (total, répartition) ; dans les agrégats temporels (échéancier, évolution), la borne haute effective est `min(fenêtre, end_date)` (aucune occurrence/mois postérieur à la fin).",
+      "in_trial": "REQ-SUB-010 : `today < trial_end_date` -> exclu des agrégats de coût « à ce jour » ; dans l'échéancier, aucune occurrence ANTÉRIEURE à `trial_end_date` (aucun paiement dû pendant l'essai) — borne basse effective `max(fenêtre, trial_end_date)` ; dans l'évolution, la fenêtre de coût démarre au plus tard de premier paiement / fin d'essai."
+    },
+    "_criterion_2": "un abonnement réactivé -> réintégré IMMÉDIATEMENT dès le recalcul.",
+    "reactivation": "aucun cache ni état dérivé : chaque agrégat lit l'état courant (`active`, `end_date`, `trial_end_date`) au moment du calcul. Repasser `active` à vrai réintègre l'abonnement au prochain appel, sans étape supplémentaire."
+  },
+  "surface": {
+    "aggregates_covered": [
+      "GET /subscriptions -> total converti (server::subscriptions::active_amounts)",
+      "GET /statistics/repartition (server::statistics::get_repartition)",
+      "GET /statistics/cost-evolution (server::statistics::get_cost_evolution)",
+      "GET /schedule/upcoming (server::schedule::get_upcoming_payments)"
+    ],
+    "domain_primitive": "core::billable_amounts (les trois états) et core::occurrences_in_range (bornes end_date + trial_end)."
+  }
+}

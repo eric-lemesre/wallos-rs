@@ -332,6 +332,7 @@ fn row_to_dto(row: SubscriptionRow, today: NaiveDate) -> SubscriptionDto {
 #[requirement(REQ-SUB-008)]
 #[requirement(REQ-SUB-009)]
 #[requirement(REQ-SUB-010)]
+#[requirement(REQ-STA-003)]
 fn active_amounts(rows: &[SubscriptionRow], today: NaiveDate) -> Vec<Money> {
     rows.iter()
         .filter(|r| {

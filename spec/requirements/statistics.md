@@ -53,7 +53,7 @@ depends_on: [REQ-STA-001]
 id: REQ-STA-003
 title: Exclusion des abonnements non actifs des agrégats
 domain: statistics
-status: draft
+status: verified
 criticality: high
 layer: [core, api]
 e2e: required
