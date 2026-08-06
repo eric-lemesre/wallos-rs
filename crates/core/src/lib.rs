@@ -21,6 +21,7 @@ pub mod password_policy;
 pub mod payer;
 pub mod payment_method;
 pub mod reference_currency;
+pub mod reminders;
 pub mod schedule;
 pub mod stats;
 pub mod subscription;
@@ -39,6 +40,7 @@ pub use language::Language;
 pub use payer::Payer;
 pub use payment_method::PaymentMethod;
 pub use reference_currency::ReferenceCurrency;
+pub use reminders::{DEFAULT_REMINDER_LEAD_DAYS, DueReminder, ReminderCandidate, due_reminders};
 pub use schedule::{next_due, occurrences_in_range};
 pub use stats::{
     CostSpan, MonthlyCostPoint, RepartitionShare, RepartitionSlice, monthly_cost_evolution,

@@ -9,6 +9,7 @@ import { NextDueCard } from "../../../ui/src/components/NextDueCard";
 import { UpcomingPaymentsCard } from "../../../ui/src/components/UpcomingPaymentsCard";
 import { CostEvolutionCard } from "../../../ui/src/components/CostEvolutionCard";
 import { RepartitionCard } from "../../../ui/src/components/RepartitionCard";
+import { RemindersCard } from "../../../ui/src/components/RemindersCard";
 import { ImportExportCard } from "../../../ui/src/components/ImportExportCard";
 import { SubscriptionForm } from "../../../ui/src/components/SubscriptionForm";
 import { SubscriptionsList } from "../../../ui/src/components/SubscriptionsList";
@@ -45,6 +46,7 @@ if (root) {
           <PayersList />
           <NextDueCard />
           <UpcomingPaymentsCard />
+          <RemindersCard />
           <CostEvolutionCard />
           <RepartitionCard />
           <SubscriptionForm />

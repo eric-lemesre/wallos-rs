@@ -602,6 +602,16 @@ export class TargetDriver implements AppDriver, Harness {
     );
   }
 
+  // --- Rappels avant échéance (REQ-NOT-001) ---
+
+  /** Noms des rappels dus aujourd'hui affichés dans la carte des rappels. */
+  async reminderNames(): Promise<string[]> {
+    return this.page
+      .getByTestId("reminders-card")
+      .getByTestId("reminder-name")
+      .allInnerTexts();
+  }
+
   // --- Appairage et synchronisation initiale (REQ-SYN-008) ---
 
   /**

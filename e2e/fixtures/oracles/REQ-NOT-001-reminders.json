@@ -1,0 +1,37 @@
+{
+  "_requirement": "REQ-NOT-001",
+  "_source": "Wallos 5.4.2 — endpoints/cronjobs/sendnotifications.php (cron de rappel) ; capturé §8.1 sur l'image épinglée bellamy/wallos@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f.",
+  "_note": "Comportement de référence du RAPPEL AVANT ÉCHÉANCE, exécuté par un CRON (déclenchement périodique). subtrack retient l'option A (endpoint POST /internal/run-reminders déclenché par un cron externe) — fidèle au modèle Wallos. Les CANAUX concrets (e-mail, messageries, webhook) relèvent de REQ-NOT-003/004/005 ; NOT-001 porte sur la RÈGLE de déclenchement et le REGROUPEMENT.",
+  "trigger_rule": {
+    "_source_php": "SELECT * FROM subscriptions WHERE user_id=:u AND notify=1 AND inactive=0 ORDER BY payer_user_id ASC; puis: daysToCompare = (notify_days_before != -1) ? notify_days_before : notification_settings.days; difference = jours calendaires (aujourd'hui->next_payment) ; if (difference === daysToCompare && next_payment >= today) -> notifier.",
+    "only_active_and_notify_enabled": "abonnement inactif (inactive=1) ou sans rappel (notify=0) exclu",
+    "lead_time": "par-abonnement notify_days_before s'il est défini (!= -1), sinon le défaut du compte notification_settings.days (défaut 1 jour)",
+    "exact_day_match": true,
+    "_exact_day_note": "DÉCLENCHEMENT EXACT : le rappel est émis quand le paiement est à EXACTEMENT N jours calendaires (difference === daysToCompare), PAS pour toute la fenêtre [0..N]. Un cron quotidien émet donc chaque rappel une fois, le jour J-N. difference=0 -> 'Today', 1 -> 'Tomorrow', n -> 'In n days'.",
+    "not_in_past": "next_payment >= aujourd'hui (un paiement déjà passé ne déclenche pas)"
+  },
+  "grouping": {
+    "_source_php": "$notify[payer_user_id][] = ... ; buildNotificationMessage: 'the following subscriptions are up for renewal:' puis une ligne par abonnement '<name> for <price> (<dayText>)'.",
+    "per_account_single_message": true,
+    "_grouping_note": "CRITÈRE D'ACCEPTATION #2 : plusieurs abonnements échéant le même jour pour un compte sont regroupés dans UN SEUL rappel (message unique listant chaque abonnement), et non un rappel par abonnement. Wallos indexe par payer_user_id (membre du foyer) à l'intérieur du message ; subtrack regroupe par compte (foyer) et conserve le rattachement payeur.",
+    "keyed_by_payer_within_account": true
+  },
+  "scheduling": {
+    "mechanism": "cron externe appelant un endpoint (subtrack) — Wallos: crontab exécutant sendnotifications.php périodiquement (typiquement quotidien).",
+    "subtrack_endpoint": "POST /internal/run-reminders (authentifié par un secret d'opérateur ; balaie tous les foyers ; as_of injectable pour tester sans horloge, REQ-STA-008).",
+    "idempotence_note": "Ré-exécuter le cron le même jour ne doit pas ré-émettre (REQ-NOT-002, exigence distincte) : subtrack enregistre les rappels émis (reminder_log, unicité (foyer, abonnement, date_due)) dès NOT-001 pour préparer l'idempotence."
+  },
+  "worked_example": {
+    "_note": "Aujourd'hui = 2026-08-06, délai par défaut = 1 jour. Abonnements actifs avec rappel activé :",
+    "subscriptions": [
+      { "name": "Netflix", "next_payment": "2026-08-07", "lead": 1, "due_today": true, "day_text": "Tomorrow" },
+      { "name": "Spotify", "next_payment": "2026-08-07", "lead": 1, "due_today": true, "day_text": "Tomorrow" },
+      { "name": "Presse", "next_payment": "2026-08-10", "lead": 1, "due_today": false, "_why": "à 4 jours, pas exactement 1" },
+      { "name": "Cloud", "next_payment": "2026-08-09", "lead": 3, "due_today": true, "_why": "lead par-abonnement = 3, paiement à 3 jours", "day_text": "In 3 days" }
+    ],
+    "emitted_for_account": {
+      "single_message": true,
+      "listed": ["Netflix (Tomorrow)", "Spotify (Tomorrow)", "Cloud (In 3 days)"]
+    }
+  }
+}
