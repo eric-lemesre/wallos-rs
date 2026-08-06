@@ -251,6 +251,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications/channels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Liste les canaux de notification du foyer de l'appelant (REQ-NOT-005). */
+        get: operations["listNotificationChannels"];
+        put?: never;
+        /**
+         * Crée un canal de notification dans le foyer de l'appelant (REQ-NOT-005).
+         * @description Webhook : `config.url` doit être une URL `http(s)` **publique** ; les adresses internes, de
+         *     bouclage, privées ou `localhost` sont refusées (422) pour prévenir la SSRF (critère #2).
+         */
+        post: operations["createNotificationChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/channels/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Supprime un canal de notification du foyer de l'appelant (REQ-NOT-005). */
+        delete: operations["deleteNotificationChannel"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/password": {
         parameters: {
             query?: never;
@@ -909,6 +948,22 @@ export interface components {
              */
             platform: string;
         };
+        /**
+         * @description Requête de création d'un canal de notification (REQ-NOT-005). Pour un webhook, `config` doit contenir
+         *     une clé `url` en `http(s)` pointant vers une adresse **publique** — les adresses internes/bouclage
+         *     sont refusées (422) pour prévenir la falsification de requête côté serveur (SSRF).
+         */
+        CreateNotificationChannelRequest: {
+            /** @description Configuration propre au type. Webhook : `{ "url": "https://hooks.example.com/…" }`. */
+            config: unknown;
+            /** @description Actif à la création (défaut : vrai). */
+            enabled?: boolean | null;
+            /**
+             * @description Type de canal (`webhook` pour l'instant ; les autres types → 422).
+             * @example webhook
+             */
+            kind: string;
+        };
         /** @description Requête de création d'un payeur (REQ-SUB-017). */
         CreatePayerRequest: {
             /**
@@ -1197,6 +1252,32 @@ export interface components {
              * @example 2025-02-28
              */
             next_payment: string;
+        };
+        /**
+         * @description Un canal de notification exposé à l'interface (REQ-NOT-005). Abstraction **unique** partagée par
+         *     tous les canaux : `kind` porte le type (`webhook` pour l'instant), `config` sa configuration propre
+         *     au type (webhook = `{ "url": "https://…" }`). Un canal `enabled = false` n'émet aucune requête.
+         */
+        NotificationChannelDto: {
+            /** @description Configuration propre au type (webhook : `{ "url": … }`). */
+            config: unknown;
+            /**
+             * @description Actif : un canal désactivé n'émet aucune requête sortante.
+             * @example true
+             */
+            enabled: boolean;
+            /** @description Identifiant stable (UUID). */
+            id: string;
+            /**
+             * @description Type de canal.
+             * @example webhook
+             */
+            kind: string;
+        };
+        /** @description Liste des canaux de notification du compte (REQ-NOT-005). */
+        NotificationChannelsResponse: {
+            /** @description Canaux configurés, du plus ancien au plus récent. */
+            channels: components["schemas"]["NotificationChannelDto"][];
         };
         /** @description Un payeur exposé à l'interface (REQ-SUB-017). Étiquette nominative du foyer (pas de compte). */
         PayerDto: {
@@ -1683,6 +1764,53 @@ export interface components {
             payments: components["schemas"]["UpcomingPayment"][];
             /** @description Fin de fenêtre (incluse), `YYYY-MM-DD`. */
             to: string;
+        };
+        /**
+         * @description Élément de la **charge utile de webhook** (REQ-NOT-005) : un abonnement concerné par le rappel.
+         *     Documenté ici pour que l'intégrateur connaisse le format reçu sur son endpoint.
+         */
+        WebhookReminderItem: {
+            /**
+             * Format: int64
+             * @description Jours calendaires jusqu'à la date.
+             * @example 1
+             */
+            days_until: number;
+            /**
+             * @description Date déclenchant le rappel (`YYYY-MM-DD`).
+             * @example 2026-08-07
+             */
+            due_date: string;
+            /**
+             * @description Type de rappel : `payment` ou `trial_ending`.
+             * @example payment
+             */
+            kind: string;
+            /**
+             * @description Nom de l'abonnement.
+             * @example Netflix
+             */
+            name: string;
+            /** @description Abonnement concerné (UUID). */
+            subscription_id: string;
+        };
+        /**
+         * @description **Charge utile POST d'un webhook** (REQ-NOT-005) : le corps JSON envoyé à l'URL configurée quand un
+         *     rappel est émis. Contrat stable, documenté dans l'OpenAPI (critère #1).
+         */
+        WebhookReminderPayload: {
+            /**
+             * @description Date de référence du balayage (`YYYY-MM-DD`).
+             * @example 2026-08-06
+             */
+            as_of: string;
+            /**
+             * @description Nombre de rappels du lot.
+             * @example 2
+             */
+            reminder_count: number;
+            /** @description Détail des abonnements concernés. */
+            reminders: components["schemas"]["WebhookReminderItem"][];
         };
     };
     responses: never;
@@ -2278,6 +2406,143 @@ export interface operations {
             };
             /** @description Non authentifié */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listNotificationChannels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Canaux du foyer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationChannelsResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createNotificationChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateNotificationChannelRequest"];
+            };
+        };
+        responses: {
+            /** @description Canal créé */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationChannelDto"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Type non supporté, configuration invalide, ou URL refusée (SSRF) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deleteNotificationChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant (UUID) du canal */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Canal supprimé */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Canal inconnu ou hors du foyer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

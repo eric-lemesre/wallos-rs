@@ -227,5 +227,15 @@
     "loadError": "Impossible de charger les rappels",
     "dueIn": "Dans {{count}} jour",
     "dueIn_other": "Dans {{count}} jours"
+  },
+  "notificationChannels": {
+    "title": "Canaux de notification",
+    "urlLabel": "URL du webhook",
+    "urlPlaceholder": "https://hooks.example.com/…",
+    "add": "Ajouter un webhook",
+    "delete": "Supprimer",
+    "empty": "Aucun canal configuré",
+    "loadError": "Impossible de charger les canaux",
+    "urlRejected": "URL refusée (les adresses internes ou de bouclage ne sont pas autorisées)"
   }
 }

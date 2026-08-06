@@ -578,6 +578,79 @@ pub struct RunRemindersResponse {
     pub accounts_notified: usize,
 }
 
+/// Un canal de notification exposé à l'interface (REQ-NOT-005). Abstraction **unique** partagée par
+/// tous les canaux : `kind` porte le type (`webhook` pour l'instant), `config` sa configuration propre
+/// au type (webhook = `{ "url": "https://…" }`). Un canal `enabled = false` n'émet aucune requête.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct NotificationChannelDto {
+    /// Identifiant stable (UUID).
+    pub id: String,
+    /// Type de canal.
+    #[schema(example = "webhook")]
+    pub kind: String,
+    /// Configuration propre au type (webhook : `{ "url": … }`).
+    pub config: serde_json::Value,
+    /// Actif : un canal désactivé n'émet aucune requête sortante.
+    #[schema(example = true)]
+    pub enabled: bool,
+}
+
+/// Requête de création d'un canal de notification (REQ-NOT-005). Pour un webhook, `config` doit contenir
+/// une clé `url` en `http(s)` pointant vers une adresse **publique** — les adresses internes/bouclage
+/// sont refusées (422) pour prévenir la falsification de requête côté serveur (SSRF).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct CreateNotificationChannelRequest {
+    /// Type de canal (`webhook` pour l'instant ; les autres types → 422).
+    #[schema(example = "webhook")]
+    pub kind: String,
+    /// Configuration propre au type. Webhook : `{ "url": "https://hooks.example.com/…" }`.
+    pub config: serde_json::Value,
+    /// Actif à la création (défaut : vrai).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+}
+
+/// Liste des canaux de notification du compte (REQ-NOT-005).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct NotificationChannelsResponse {
+    /// Canaux configurés, du plus ancien au plus récent.
+    pub channels: Vec<NotificationChannelDto>,
+}
+
+/// Élément de la **charge utile de webhook** (REQ-NOT-005) : un abonnement concerné par le rappel.
+/// Documenté ici pour que l'intégrateur connaisse le format reçu sur son endpoint.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct WebhookReminderItem {
+    /// Abonnement concerné (UUID).
+    pub subscription_id: String,
+    /// Nom de l'abonnement.
+    #[schema(example = "Netflix")]
+    pub name: String,
+    /// Date déclenchant le rappel (`YYYY-MM-DD`).
+    #[schema(example = "2026-08-07")]
+    pub due_date: String,
+    /// Jours calendaires jusqu'à la date.
+    #[schema(example = 1)]
+    pub days_until: i64,
+    /// Type de rappel : `payment` ou `trial_ending`.
+    #[schema(example = "payment")]
+    pub kind: String,
+}
+
+/// **Charge utile POST d'un webhook** (REQ-NOT-005) : le corps JSON envoyé à l'URL configurée quand un
+/// rappel est émis. Contrat stable, documenté dans l'OpenAPI (critère #1).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct WebhookReminderPayload {
+    /// Date de référence du balayage (`YYYY-MM-DD`).
+    #[schema(example = "2026-08-06")]
+    pub as_of: String,
+    /// Nombre de rappels du lot.
+    #[schema(example = 2)]
+    pub reminder_count: usize,
+    /// Détail des abonnements concernés.
+    pub reminders: Vec<WebhookReminderItem>,
+}
+
 /// Une catégorie d'abonnements exposée à l'interface (REQ-CAT-001).
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct CategoryDto {
