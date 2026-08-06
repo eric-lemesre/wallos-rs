@@ -555,6 +555,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sync/push": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Poussée d'un lot de modifications locales (REQ-SYN-004).
+         * @description Chaque opération est appliquée **indépendamment** (succès partiel) : la réponse aligne un résultat par
+         *     opération, identifiant précisément les entités rejetées tandis que les autres sont appliquées (critère
+         *     #2). Le lot est **idempotent** : rejoué à l'identique (en-tête `Idempotency-Key`, REQ-SYN-006, ou par
+         *     nature — les upserts sont clés par `id`, les suppressions sont des no-op), il mène au **même état
+         *     final** qu'un envoi unique (critère #1). Isolation §9 : chaque opération est portée par le foyer de
+         *     l'appelant.
+         */
+        post: operations["pushSyncChanges"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sync/tombstones": {
         parameters: {
             query?: never;
@@ -1328,6 +1353,54 @@ export interface components {
              *     conserver pour la prochaine synchronisation.
              */
             next_cursor: string;
+        };
+        /** @description Une opération d'un lot de poussée locale (REQ-SYN-004). */
+        SyncOperationInput: {
+            /**
+             * @description Type d'entité (`category` / `payment_method` / `payer` / `subscription`).
+             * @example payer
+             */
+            entity_type: string;
+            /** @description Identifiant (UUID) **généré côté client** (REQ-SYN-001) de l'entité visée. */
+            id: string;
+            /**
+             * @description `upsert` (création/modification) ou `delete` (suppression).
+             * @example upsert
+             */
+            op: string;
+            /** @description Corps de l'entité pour un `upsert` (objet JSON) ; ignoré pour un `delete`. */
+            payload?: Record<string, never>;
+        };
+        /** @description Résultat d'une opération poussée (REQ-SYN-004). */
+        SyncOperationResult: {
+            /** @description Type d'entité (écho de l'entrée). */
+            entity_type: string;
+            /** @description Identifiant (écho de l'entrée). */
+            id: string;
+            /** @description Motif du rejet, le cas échéant (identifie précisément l'échec). */
+            reason?: string | null;
+            /**
+             * @description `applied` (appliquée) ou `rejected` (rejetée — les autres restent appliquées).
+             * @example applied
+             */
+            status: string;
+        };
+        /**
+         * @description Lot de modifications locales à pousser (REQ-SYN-004). **Idempotent** : rejouer le même lot (via
+         *     l'en-tête `Idempotency-Key`, REQ-SYN-006, ou par nature — les upserts sont clés par `id`) mène au
+         *     **même état final** qu'un envoi unique.
+         */
+        SyncPushRequest: {
+            /** @description Opérations à appliquer, dans l'ordre. Chacune est appliquée **indépendamment** (succès partiel). */
+            operations: components["schemas"]["SyncOperationInput"][];
+        };
+        /**
+         * @description Réponse à une poussée locale (REQ-SYN-004) : un résultat **par opération**, dans l'ordre d'entrée.
+         *     Un envoi partiellement rejeté identifie précisément les entités en échec ; les autres sont appliquées.
+         */
+        SyncPushResponse: {
+            /** @description Résultats, alignés sur les opérations de la requête. */
+            results: components["schemas"]["SyncOperationResult"][];
         };
         /** @description Une pierre tombale : la suppression d'une entité répliquée (REQ-SYN-002). */
         TombstoneDto: {
@@ -3037,6 +3110,57 @@ export interface operations {
             };
             /** @description Curseur invalide */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pushSyncChanges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SyncPushRequest"];
+            };
+        };
+        responses: {
+            /** @description Résultat par opération */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SyncPushResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Clé d'idempotence réutilisée avec un corps différent */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

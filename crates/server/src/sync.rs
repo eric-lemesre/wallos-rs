@@ -14,17 +14,24 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, SecondsFormat, Utc};
+use uuid::Uuid;
 use wallos_core::requirement;
 use wallos_core::{
     DEFAULT_TOMBSTONE_RETENTION_DAYS, SyncCursor, requires_full_resync, retention_cutoff,
 };
 use wallos_proto::{
-    SyncChangeDto, SyncChangesQuery, SyncChangesResponse, TombstoneDto, TombstonesQuery,
-    TombstonesResponse, problem,
+    CreateSubscriptionRequest, SyncChangeDto, SyncChangesQuery, SyncChangesResponse,
+    SyncOperationInput, SyncOperationResult, SyncPushRequest, SyncPushResponse, TombstoneDto,
+    TombstonesQuery, TombstonesResponse, problem,
 };
-use wallos_storage::{Db, SyncChangesRepository, TombstoneRepository};
+use wallos_storage::{
+    CategoryRepository, CreateOutcome, Db, DeleteOutcome, PayerDeleteOutcome, PayerRepository,
+    PaymentMethodRepository, RenameOutcome, SubscriptionRepository, SyncChangesRepository,
+    TombstoneRepository,
+};
 
 use crate::auth::AuthActor;
+use crate::idempotency::{self, IdempotencyKey, Outcome};
 use crate::problem_response;
 
 /// Fenêtre de rétention des pierres tombales (jours), **configurable côté serveur** via
@@ -225,4 +232,203 @@ pub async fn get_sync_changes(
         full_resync_required,
     })
     .into_response()
+}
+
+/// Suite d'une opération de lot : appliquée, ou rejetée avec motif (les autres restent appliquées).
+enum Op {
+    Applied,
+    Rejected(String),
+}
+
+/// Nom (obligatoire) d'un upsert d'entité nominative, extrait de la charge utile.
+fn name_of(op: &SyncOperationInput) -> Option<String> {
+    op.payload
+        .as_ref()?
+        .get("name")?
+        .as_str()
+        .map(str::to_string)
+}
+
+/// Upsert d'une entité nominative dont le renommage renvoie un simple booléen (payeur, moyen de
+/// paiement) : crée, ou met à jour si l'id existe déjà dans le foyer (sinon rejet — id d'un autre foyer).
+async fn upsert_bool_named(created: CreateOutcome, renamed: bool) -> Op {
+    match created {
+        CreateOutcome::Created => Op::Applied,
+        CreateOutcome::DuplicateName => Op::Rejected("nom déjà utilisé".to_string()),
+        CreateOutcome::DuplicateId => {
+            if renamed {
+                Op::Applied
+            } else {
+                Op::Rejected("entité inconnue dans ce foyer".to_string())
+            }
+        }
+    }
+}
+
+/// Applique une opération du lot. `Err` = échec d'infrastructure (→ 500) ; `Ok(Op)` = appliquée/rejetée.
+#[requirement(REQ-SYN-004)]
+async fn apply_op(
+    db: &Db,
+    actor: &wallos_core::actor::Actor,
+    op: &SyncOperationInput,
+) -> Result<Op, wallos_storage::StorageError> {
+    let Ok(id) = Uuid::parse_str(&op.id) else {
+        return Ok(Op::Rejected("identifiant invalide".to_string()));
+    };
+    let pool = db.pool();
+    match (op.op.as_str(), op.entity_type.as_str()) {
+        ("upsert", "category") => {
+            let Some(name) = name_of(op) else {
+                return Ok(Op::Rejected("nom requis".to_string()));
+            };
+            let repo = CategoryRepository::new(pool);
+            match repo.create(actor, id, &name).await? {
+                CreateOutcome::Created => Ok(Op::Applied),
+                CreateOutcome::DuplicateName => Ok(Op::Rejected("nom déjà utilisé".to_string())),
+                CreateOutcome::DuplicateId => match repo.rename(actor, id, &name).await? {
+                    RenameOutcome::Renamed => Ok(Op::Applied),
+                    RenameOutcome::Duplicate => Ok(Op::Rejected("nom déjà utilisé".to_string())),
+                    RenameOutcome::NotFound => {
+                        Ok(Op::Rejected("entité inconnue dans ce foyer".to_string()))
+                    }
+                },
+            }
+        }
+        ("upsert", "payment_method") => {
+            let Some(name) = name_of(op) else {
+                return Ok(Op::Rejected("nom requis".to_string()));
+            };
+            let repo = PaymentMethodRepository::new(pool);
+            let created = repo.create(actor, id, &name).await?;
+            let renamed = matches!(created, CreateOutcome::DuplicateId)
+                && repo.rename(actor, id, &name).await?;
+            Ok(upsert_bool_named(created, renamed).await)
+        }
+        ("upsert", "payer") => {
+            let Some(name) = name_of(op) else {
+                return Ok(Op::Rejected("nom requis".to_string()));
+            };
+            let repo = PayerRepository::new(pool);
+            let created = repo.create(actor, id, &name).await?;
+            let renamed = matches!(created, CreateOutcome::DuplicateId)
+                && repo.rename(actor, id, &name).await?;
+            Ok(upsert_bool_named(created, renamed).await)
+        }
+        ("upsert", "subscription") => {
+            let Some(payload) = op.payload.clone() else {
+                return Ok(Op::Rejected("charge utile requise".to_string()));
+            };
+            let Ok(req) = serde_json::from_value::<CreateSubscriptionRequest>(payload) else {
+                return Ok(Op::Rejected("charge utile invalide".to_string()));
+            };
+            let sub = match req.into_core(id) {
+                Ok(sub) => sub,
+                Err(err) => return Ok(Op::Rejected(format!("{}: {}", err.field, err.message))),
+            };
+            let repo = SubscriptionRepository::new(pool);
+            match repo.create(actor, &sub).await? {
+                CreateOutcome::Created => Ok(Op::Applied),
+                CreateOutcome::DuplicateName => Ok(Op::Rejected("doublon".to_string())),
+                CreateOutcome::DuplicateId => {
+                    if repo.update(actor, &sub).await? {
+                        Ok(Op::Applied)
+                    } else {
+                        Ok(Op::Rejected("entité inconnue dans ce foyer".to_string()))
+                    }
+                }
+            }
+        }
+        // Une suppression est idempotente : supprimer une entité déjà absente atteint l'état voulu
+        // (Appliquée). Seul un refus métier (entité référencée) est un rejet.
+        ("delete", "category") => match CategoryRepository::new(pool).delete(actor, id).await? {
+            DeleteOutcome::Deleted | DeleteOutcome::NotFound => Ok(Op::Applied),
+            DeleteOutcome::InUse => Ok(Op::Rejected("référencée par un abonnement".to_string())),
+        },
+        ("delete", "payer") => match PayerRepository::new(pool).delete(actor, id).await? {
+            PayerDeleteOutcome::Deleted | PayerDeleteOutcome::NotFound => Ok(Op::Applied),
+            PayerDeleteOutcome::InUse => {
+                Ok(Op::Rejected("référencé par un abonnement".to_string()))
+            }
+        },
+        ("delete", "payment_method") => {
+            PaymentMethodRepository::new(pool).delete(actor, id).await?;
+            Ok(Op::Applied)
+        }
+        ("delete", "subscription") => {
+            SubscriptionRepository::new(pool).delete(actor, id).await?;
+            Ok(Op::Applied)
+        }
+        _ => Ok(Op::Rejected(
+            "opération ou type d'entité inconnu".to_string(),
+        )),
+    }
+}
+
+/// Poussée d'un lot de modifications locales (REQ-SYN-004).
+///
+/// Chaque opération est appliquée **indépendamment** (succès partiel) : la réponse aligne un résultat par
+/// opération, identifiant précisément les entités rejetées tandis que les autres sont appliquées (critère
+/// #2). Le lot est **idempotent** : rejoué à l'identique (en-tête `Idempotency-Key`, REQ-SYN-006, ou par
+/// nature — les upserts sont clés par `id`, les suppressions sont des no-op), il mène au **même état
+/// final** qu'un envoi unique (critère #1). Isolation §9 : chaque opération est portée par le foyer de
+/// l'appelant.
+#[utoipa::path(
+    post,
+    path = "/sync/push",
+    operation_id = "pushSyncChanges",
+    extensions(("x-requirements" = json!(["REQ-SYN-004"]))),
+    request_body = SyncPushRequest,
+    responses(
+        (status = 200, description = "Résultat par opération", body = SyncPushResponse, content_type = "application/json"),
+        (status = 401, description = "Non authentifié", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 409, description = "Clé d'idempotence réutilisée avec un corps différent", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 500, description = "Erreur interne", body = wallos_proto::Problem, content_type = "application/problem+json")
+    )
+)]
+#[requirement(REQ-SYN-004)]
+pub async fn push_sync_changes(
+    AuthActor(actor): AuthActor,
+    State(db): State<Db>,
+    IdempotencyKey(key): IdempotencyKey,
+    Json(req): Json<SyncPushRequest>,
+) -> Response {
+    // Idempotence au niveau du lot (REQ-SYN-006) : un rejeu à clé + corps identiques renvoie la réponse
+    // mémorisée sans réappliquer les opérations.
+    if let Outcome::Short(resp) = idempotency::begin(&db, &actor, key.as_deref(), &req).await {
+        return resp;
+    }
+
+    let mut results = Vec::with_capacity(req.operations.len());
+    for op in &req.operations {
+        match apply_op(&db, &actor, op).await {
+            Ok(Op::Applied) => results.push(SyncOperationResult {
+                entity_type: op.entity_type.clone(),
+                id: op.id.clone(),
+                status: "applied".to_string(),
+                reason: None,
+            }),
+            Ok(Op::Rejected(reason)) => results.push(SyncOperationResult {
+                entity_type: op.entity_type.clone(),
+                id: op.id.clone(),
+                status: "rejected".to_string(),
+                reason: Some(reason),
+            }),
+            Err(_) => {
+                // Échec d'infrastructure : on relâche la réservation d'idempotence pour permettre un
+                // nouvel essai, et on renvoie 500 (aucune réponse mémorisée).
+                idempotency::abort(&db, &actor, key.as_deref()).await;
+                return internal_error();
+            }
+        }
+    }
+
+    let response = SyncPushResponse { results };
+    let body = serde_json::to_string(&response).unwrap_or_default();
+    idempotency::finish(&db, &actor, key.as_deref(), StatusCode::OK, &body).await;
+    (
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        body,
+    )
+        .into_response()
 }

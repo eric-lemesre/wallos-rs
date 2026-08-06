@@ -832,7 +832,7 @@ requirements:
 - id: REQ-SYN-004
   title: Poussée des modifications locales
   domain: sync
-  status: draft
+  status: verified
   criticality: high
   layer:
   - api
