@@ -555,6 +555,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sync/conflicts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Journal des conflits : les modifications perdues par arbitrage (REQ-SYN-005), consultables.
+         * @description Renvoie les versions écrasées (`overwritten`) ou écartées par une suppression concurrente
+         *     (`deleted_remotely`), de la plus récente à la plus ancienne. Le serveur purge au passage les entrées
+         *     expirées (même rétention que les pierres tombales, ADR 0013). Isolation §9.
+         */
+        get: operations["getSyncConflicts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sync/push": {
         parameters: {
             query?: never;
@@ -662,6 +684,37 @@ export interface components {
              * @description Nouveau mot de passe (longueur minimale + non compromis, REQ-AUT-003).
              */
             new_password: string;
+        };
+        /** @description Une version **perdue par arbitrage** de conflit (REQ-SYN-005), conservée pour consultation. */
+        ConflictDto: {
+            /** @description Identifiant (UUID) de l'entité concernée. */
+            entity_id: string;
+            /**
+             * @description Type d'entité concernée.
+             * @example subscription
+             */
+            entity_type: string;
+            /** @description Version perdue (objet JSON de l'entité, tel que capturé). */
+            lost_payload: Record<string, never>;
+            /**
+             * @description Motif : `overwritten` (écrasée par une écriture concurrente) ou `deleted_remotely` (écartée par
+             *     une suppression concurrente).
+             * @example overwritten
+             */
+            reason: string;
+            /**
+             * @description Horodatage serveur d'enregistrement (RFC 3339).
+             * @example 2026-08-05T12:00:00Z
+             */
+            recorded_at: string;
+        };
+        /**
+         * @description Journal des conflits (REQ-SYN-005) : les modifications perdues par arbitrage, de la plus récente à la
+         *     plus ancienne, que l'utilisateur peut consulter.
+         */
+        ConflictsResponse: {
+            /** @description Entrées du journal. */
+            conflicts: components["schemas"]["ConflictDto"][];
         };
         /**
          * @description Résultat d'une agrégation convertie, en **mode dégradé** explicite (REQ-CUR-004).
@@ -1356,6 +1409,13 @@ export interface components {
         };
         /** @description Une opération d'un lot de poussée locale (REQ-SYN-004). */
         SyncOperationInput: {
+            /**
+             * @description **Version que le client croit modifier** (`updated_at` observé, RFC 3339). Concurrence optimiste
+             *     (REQ-SYN-005) : si la version courante en diffère, l'écriture l'emporte (dernière écriture
+             *     gagnante) mais la version écrasée est **journalisée**. Absente → aucune détection de conflit.
+             * @example 2026-08-05T12:00:00Z
+             */
+            base_version?: string | null;
             /**
              * @description Type d'entité (`category` / `payment_method` / `payer` / `subscription`).
              * @example payer
@@ -3110,6 +3170,44 @@ export interface operations {
             };
             /** @description Curseur invalide */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getSyncConflicts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Journal des conflits */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConflictsResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

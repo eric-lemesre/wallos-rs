@@ -446,6 +446,12 @@ pub struct SyncOperationInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Object)]
     pub payload: Option<serde_json::Value>,
+    /// **Version que le client croit modifier** (`updated_at` observé, RFC 3339). Concurrence optimiste
+    /// (REQ-SYN-005) : si la version courante en diffère, l'écriture l'emporte (dernière écriture
+    /// gagnante) mais la version écrasée est **journalisée**. Absente → aucune détection de conflit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(example = "2026-08-05T12:00:00Z")]
+    pub base_version: Option<String>,
 }
 
 /// Lot de modifications locales à pousser (REQ-SYN-004). **Idempotent** : rejouer le même lot (via
@@ -478,6 +484,34 @@ pub struct SyncOperationResult {
 pub struct SyncPushResponse {
     /// Résultats, alignés sur les opérations de la requête.
     pub results: Vec<SyncOperationResult>,
+}
+
+/// Une version **perdue par arbitrage** de conflit (REQ-SYN-005), conservée pour consultation.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct ConflictDto {
+    /// Type d'entité concernée.
+    #[schema(example = "subscription")]
+    pub entity_type: String,
+    /// Identifiant (UUID) de l'entité concernée.
+    pub entity_id: String,
+    /// Version perdue (objet JSON de l'entité, tel que capturé).
+    #[schema(value_type = Object)]
+    pub lost_payload: Option<serde_json::Value>,
+    /// Motif : `overwritten` (écrasée par une écriture concurrente) ou `deleted_remotely` (écartée par
+    /// une suppression concurrente).
+    #[schema(example = "overwritten")]
+    pub reason: String,
+    /// Horodatage serveur d'enregistrement (RFC 3339).
+    #[schema(example = "2026-08-05T12:00:00Z")]
+    pub recorded_at: String,
+}
+
+/// Journal des conflits (REQ-SYN-005) : les modifications perdues par arbitrage, de la plus récente à la
+/// plus ancienne, que l'utilisateur peut consulter.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct ConflictsResponse {
+    /// Entrées du journal.
+    pub conflicts: Vec<ConflictDto>,
 }
 
 /// Une catégorie d'abonnements exposée à l'interface (REQ-CAT-001).
