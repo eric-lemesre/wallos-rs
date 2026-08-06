@@ -88,11 +88,7 @@ async fn account(pool: &PgPool, email: &str) -> String {
 }
 
 /// Crée un canal webhook et renvoie la réponse.
-async fn create_webhook(
-    pool: &PgPool,
-    cookie: &str,
-    url: &str,
-) -> axum::http::Response<Body> {
+async fn create_webhook(pool: &PgPool, cookie: &str, url: &str) -> axum::http::Response<Body> {
     send(
         pool,
         "POST",
@@ -293,6 +289,98 @@ async fn cron_posts_payload_to_webhook(pool: PgPool) {
     assert_eq!(p["reminders"][0]["days_until"], 1);
 }
 
+/// Récepteur qui **redirige** (307) `/redirect` vers `/internal`, et note tout accès à `/internal`.
+/// Sert à prouver que l'envoi ne suit PAS les redirections (anti-SSRF).
+async fn spawn_redirecting_receiver() -> (String, Arc<Mutex<bool>>) {
+    let internal_hit: Arc<Mutex<bool>> = Arc::new(Mutex::new(false));
+    let state = internal_hit.clone();
+    // On construit l'URL `/internal` absolue une fois le port connu ; d'abord on réserve le port.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let internal_url = format!("http://{addr}/internal");
+    let router = Router::new()
+        .route(
+            "/redirect",
+            post({
+                let loc = internal_url.clone();
+                move || {
+                    let loc = loc.clone();
+                    async move {
+                        (
+                            StatusCode::TEMPORARY_REDIRECT,
+                            [(axum::http::header::LOCATION, loc)],
+                        )
+                    }
+                }
+            }),
+        )
+        .route(
+            "/internal",
+            post(|State(s): State<Arc<Mutex<bool>>>| async move {
+                *s.lock().unwrap() = true;
+                StatusCode::OK
+            }),
+        )
+        .with_state(state);
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, router).await;
+    });
+    (format!("http://{addr}/redirect"), internal_hit)
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-005, case = "l'envoi ne suit pas les redirections (anti-SSRF au niveau du chemin d'appel)")]
+async fn webhook_send_does_not_follow_redirects(pool: PgPool) {
+    let web = account(&pool, "not005-redirect@example.com").await;
+    assert_eq!(
+        send(
+            &pool,
+            "POST",
+            "/api/v1/subscriptions",
+            Some(&web),
+            Some(json!({
+                "name": "Netflix", "amount": "9.99", "currency": "EUR",
+                "cycle": { "unit": "month", "interval": 1 }, "first_payment": "2026-08-07",
+                "active": true
+            })),
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+    let (redirect_url, internal_hit) = spawn_redirecting_receiver().await;
+    let created = body_json(create_webhook(&pool, &web, "https://hooks.example.com/x").await).await;
+    let id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    sqlx::query("update notification_channels set config = $2 where id = $1")
+        .bind(id)
+        .bind(json!({ "url": redirect_url }))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let cron = app_with_db_and_cron(
+        Db::from_pool(pool.clone()),
+        CronToken(Some(CRON_SECRET.to_string())),
+    );
+    let resp = cron
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/internal/run-reminders?as_of=2026-08-06")
+                .header("x-cron-token", CRON_SECRET)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    // Le cron réussit (envoi best-effort) mais la redirection n'est PAS suivie : `/internal` jamais touché.
+    assert_eq!(body_json(resp).await["emitted"], 1);
+    assert!(
+        !*internal_hit.lock().unwrap(),
+        "la redirection vers une cible interne ne doit pas être suivie"
+    );
+}
+
 #[sqlx::test(migrations = "../storage/migrations")]
 #[verifies(REQ-NOT-005, case = "un canal désactivé n'émet aucune requête sortante")]
 async fn disabled_channel_sends_nothing(pool: PgPool) {
@@ -394,10 +482,7 @@ async fn authz_owner_list_notification_channels(pool: PgPool) {
     )
     .await;
     assert_eq!(r.status(), StatusCode::OK);
-    assert_eq!(
-        body_json(r).await["channels"].as_array().unwrap().len(),
-        1
-    );
+    assert_eq!(body_json(r).await["channels"].as_array().unwrap().len(), 1);
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
@@ -424,14 +509,7 @@ async fn authz_other_list_notification_channels(pool: PgPool) {
 #[sqlx::test(migrations = "../storage/migrations")]
 #[verifies(REQ-NOT-005)]
 async fn authz_anon_list_notification_channels(pool: PgPool) {
-    let r = send(
-        &pool,
-        "GET",
-        "/api/v1/notifications/channels",
-        None,
-        None,
-    )
-    .await;
+    let r = send(&pool, "GET", "/api/v1/notifications/channels", None, None).await;
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 }
 

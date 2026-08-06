@@ -355,11 +355,13 @@ pub async fn run_reminders(
                 let Some(channel) = channel_from_row(row) else {
                     continue;
                 };
-                if let Err(err) = channel.send(&notification).await {
+                // Best-effort : on ne journalise PAS l'erreur brute (elle peut contenir l'URL du canal,
+                // potentiellement porteuse d'un secret) — seulement le type de canal et le foyer. Le
+                // détail exploitable et redacté relèvera de REQ-NOT-007 (réessai/diagnostic).
+                if channel.send(&notification).await.is_err() {
                     tracing::warn!(
                         household_id = %household_id,
                         channel = channel.kind(),
-                        error = %err,
                         "échec d'envoi d'un canal de notification"
                     );
                 }

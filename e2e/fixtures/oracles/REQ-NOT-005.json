@@ -28,7 +28,8 @@
         "IPv4 mappée en IPv6 vers une plage interne",
         "nom 'localhost'"
       ],
-      "not_yet_covered": "résolution DNS d'un nom d'hôte vers une IP privée, et validation à chaque saut de redirection sur le CHEMIN D'APPEL -> REQ-SEC-005 (cycle NOT-005<->SEC-005 rompu côté NOT-005, ADR 0043)."
+      "send_path_hardening": "l'envoi ne SUIT PAS les redirections (redirect::Policy::none ; un 3xx = échec) -> ferme le vecteur 'URL publique redirigeant vers une adresse interne'. L'erreur d'envoi n'est jamais journalisée brute (peut contenir l'URL/un secret).",
+      "not_yet_covered": "résolution DNS d'un nom d'hôte vers une IP privée (rebinding), et extension aux autres appels sortants (logos, SUB-015) -> REQ-SEC-005 (cycle NOT-005<->SEC-005 rompu côté NOT-005, ADR 0043)."
     },
     "abstraction": "canal = enum fermé (webhook, puis email/messageries) partageant `Channel::send` et la charge utile ReminderNotification ; un canal `enabled = false` n'émet aucune requête (NOT-004)."
   }
