@@ -102,6 +102,30 @@ impl<'a> TombstoneRepository<'a> {
         Ok(rows)
     }
 
+    /// Vrai si une pierre tombale existe pour `(foyer, type, entité)` — c.-à-d. l'entité a été
+    /// **supprimée** (REQ-SYN-005 : la suppression l'emporte sur une modification concurrente).
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-SYN-005)]
+    pub async fn exists(
+        &self,
+        actor: &Actor,
+        entity_type: &str,
+        entity_id: Uuid,
+    ) -> Result<bool, StorageError> {
+        let found: Option<i32> = sqlx::query_scalar(
+            "select 1 from tombstones \
+             where household_id = $1 and entity_type = $2 and entity_id = $3",
+        )
+        .bind(actor.household_id())
+        .bind(entity_type)
+        .bind(entity_id)
+        .fetch_optional(self.pool)
+        .await?;
+        Ok(found.is_some())
+    }
+
     /// Purge les pierres tombales dont `deleted_at` est **strictement antérieur** à `cutoff` (borne
     /// calculée par l'appelant = `now − rétention`, ADR 0013). Purge **globale** (maintenance serveur,
     /// tous foyers) ; renvoie le nombre de lignes supprimées. Borne injectée → testable sans horloge.

@@ -98,6 +98,46 @@ impl SyncCursor {
     }
 }
 
+/// Issue de l'arbitrage d'une écriture concurrente (REQ-SYN-005), règle **dernière écriture gagnante**
+/// au niveau de l'enregistrement (aucune fusion champ à champ, aucun CRDT).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Arbitration {
+    /// Pas de conflit : appliquer (base concordante, entité neuve, ou base non fournie).
+    Apply,
+    /// **Conflit d'écrasement** : l'écriture entrante est fondée sur une version **périmée** mais
+    /// l'emporte (arrivée la plus récente → horodatage serveur le plus récent) ; la **version courante
+    /// est perdue** et doit être journalisée pour consultation.
+    ApplyAndJournal,
+    /// **La suppression l'emporte** : la cible a été supprimée concurremment ; l'écriture entrante est
+    /// **écartée** et journalisée (critère #3).
+    RejectDeleted,
+}
+
+/// Arbitre une écriture entrante contre l'état courant (REQ-SYN-005).
+///
+/// Règle prescriptive : **dernière écriture gagnante**, l'ordre d'arrivée déterminant l'horodatage
+/// serveur. Une suppression concurrente l'emporte sur une modification. Un écrasement fondé sur une
+/// version périmée (`base_version` fournie ≠ version courante) applique la nouvelle écriture **et**
+/// journalise la version écrasée. Fonction **pure** (REQ-STA-008).
+#[must_use]
+#[requirement(REQ-SYN-005)]
+pub fn arbitrate(
+    base_version: Option<DateTime<Utc>>,
+    current_version: Option<DateTime<Utc>>,
+    is_deleted: bool,
+) -> Arbitration {
+    if is_deleted {
+        // La cible est tombstonée : la suppression l'emporte, la modification est perdue.
+        return Arbitration::RejectDeleted;
+    }
+    match (base_version, current_version) {
+        // Écriture fondée sur une version différente de la version courante : conflit d'écrasement.
+        (Some(base), Some(current)) if base != current => Arbitration::ApplyAndJournal,
+        // Base concordante, entité neuve, ou pas de base fournie : simple application.
+        _ => Arbitration::Apply,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,5 +215,43 @@ mod tests {
         assert!(SyncCursor::parse("pas-un-curseur").is_none());
         assert!(SyncCursor::parse("2026-08-05T12:00:00Z_pas-un-uuid").is_none());
         assert!(SyncCursor::parse("").is_none());
+    }
+
+    // --- Arbitrage de conflit (REQ-SYN-005) ---
+
+    #[test]
+    #[verifies(REQ-SYN-005, case = "base concordante ou entité neuve -> application sans journal")]
+    fn matching_base_applies_without_journal() {
+        let v = at(2026, 2, 1);
+        // Base = version courante : édition séquentielle normale, pas un conflit.
+        assert_eq!(arbitrate(Some(v), Some(v), false), Arbitration::Apply);
+        // Entité neuve (pas de version courante) : création, pas un conflit.
+        assert_eq!(arbitrate(Some(v), None, false), Arbitration::Apply);
+        // Pas de base fournie : aucune détection.
+        assert_eq!(arbitrate(None, Some(v), false), Arbitration::Apply);
+    }
+
+    #[test]
+    #[verifies(REQ-SYN-005, case = "écrasement fondé sur une version périmée -> appliqué + journalisé")]
+    fn stale_overwrite_applies_and_journals() {
+        let base = at(2026, 1, 1); // version que le client croyait éditer
+        let current = at(2026, 2, 1); // une écriture concurrente est déjà passée
+        assert_eq!(
+            arbitrate(Some(base), Some(current), false),
+            Arbitration::ApplyAndJournal
+        );
+    }
+
+    #[test]
+    #[verifies(REQ-SYN-005, case = "la suppression concurrente l'emporte sur la modification")]
+    fn deletion_wins_over_modification() {
+        let base = at(2026, 1, 1);
+        let current = at(2026, 2, 1);
+        // Peu importe les versions : si la cible est supprimée, la suppression l'emporte.
+        assert_eq!(
+            arbitrate(Some(base), Some(current), true),
+            Arbitration::RejectDeleted
+        );
+        assert_eq!(arbitrate(None, None, true), Arbitration::RejectDeleted);
     }
 }

@@ -602,6 +602,17 @@ export class TargetDriver implements AppDriver, Harness {
     );
   }
 
+  // --- Résolution de conflit (REQ-SYN-005) ---
+
+  /** Motifs des entrées du journal des conflits, de la plus récente à la plus ancienne. */
+  async conflictReasons(): Promise<string[]> {
+    return this.page.evaluate(async () => {
+      const res = await fetch("/api/v1/sync/conflicts");
+      const body = (await res.json()) as { conflicts: { reason: string }[] };
+      return body.conflicts.map((c) => c.reason);
+    });
+  }
+
   // --- Langue (REQ-I18N-001) ---
 
   async setLanguage(code: string): Promise<void> {
