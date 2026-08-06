@@ -53,6 +53,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0035 | SYN-003 delta incrémental (keyset, payload = ligne stockée) | 🟡 |
 | 0036 | SYN-004 push (lot indépendant, idempotent, rejets par entité) | ⚪ |
 | 0037 | SYN-005 conflit (LWW + concurrence optimiste + journal) | 🔴 |
+| 0038 | SYN-007 hors ligne (outbox local, synchro auto, sans natif) | 🟡 |
 
 ## À relire en priorité aujourd'hui (🔴)
 

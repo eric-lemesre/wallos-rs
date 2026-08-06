@@ -42,7 +42,12 @@ describe("PayersList", () => {
 
     await user.type(screen.getByTestId("payer-new-name"), "Alex");
     await user.click(screen.getByTestId("payer-create"));
-    await waitFor(() => expect(post).toHaveBeenCalledWith("/payers", { body: { name: "Alex" } }));
+    // En ligne : POST direct avec un id généré côté client (REQ-SYN-001) + le nom.
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith("/payers", {
+        body: expect.objectContaining({ name: "Alex" }),
+      }),
+    );
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
     expect(await screen.findByTestId("payer-name")).toHaveTextContent("Alex");
   });

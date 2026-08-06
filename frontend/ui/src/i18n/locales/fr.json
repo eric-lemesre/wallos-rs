@@ -208,5 +208,11 @@
     "none": "(aucun)",
     "total": "Total",
     "empty": "Aucun abonnement actif"
+  },
+  "sync": {
+    "offline": "Hors ligne — les modifications sont enregistrées localement",
+    "pending": "{{count}} modification non synchronisée",
+    "pending_other": "{{count}} modifications non synchronisées",
+    "synced": "Toutes les modifications sont synchronisées"
   }
 }
