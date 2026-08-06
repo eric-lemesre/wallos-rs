@@ -214,5 +214,16 @@
     "pending": "{{count}} modification non synchronisée",
     "pending_other": "{{count}} modifications non synchronisées",
     "synced": "Toutes les modifications sont synchronisées"
+  },
+  "reminders": {
+    "title": "Rappels de paiement",
+    "leadLabel": "Me rappeler ce nombre de jours avant l'échéance",
+    "leadCurrent": "Délai de rappel : {{count}} jour",
+    "leadCurrent_other": "Délai de rappel : {{count}} jours",
+    "save": "Enregistrer",
+    "empty": "Aucun rappel dû aujourd'hui",
+    "loadError": "Impossible de charger les rappels",
+    "dueIn": "Dans {{count}} jour",
+    "dueIn_other": "Dans {{count}} jours"
   }
 }

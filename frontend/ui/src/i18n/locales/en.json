@@ -214,5 +214,16 @@
     "pending": "{{count}} change not synced",
     "pending_other": "{{count}} changes not synced",
     "synced": "All changes synced"
+  },
+  "reminders": {
+    "title": "Payment reminders",
+    "leadLabel": "Remind me this many days before renewal",
+    "leadCurrent": "Reminder lead time: {{count}} day",
+    "leadCurrent_other": "Reminder lead time: {{count}} days",
+    "save": "Save",
+    "empty": "No reminder due today",
+    "loadError": "Could not load reminders",
+    "dueIn": "In {{count}} day",
+    "dueIn_other": "In {{count}} days"
   }
 }
