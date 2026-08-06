@@ -602,6 +602,35 @@ export class TargetDriver implements AppDriver, Harness {
     );
   }
 
+  // --- Appairage et synchronisation initiale (REQ-SYN-008) ---
+
+  /**
+   * Exécute **un pas** de synchronisation initiale : récupère une page du delta depuis le curseur
+   * persisté (localStorage), le met à jour, et renvoie les changements de la page + s'il en reste. Le
+   * curseur survivant à un rechargement, appeler cette méthode après un `page.reload()` **reprend** au
+   * dernier lot appliqué, sans repartir de zéro.
+   */
+  async initialSyncStep(pageSize: number): Promise<{ ids: string[]; hasMore: boolean }> {
+    return this.page.evaluate(async (page) => {
+      const KEY = "wallos.e2e.initialSync";
+      const cursor = localStorage.getItem(KEY);
+      const q = cursor
+        ? `?limit=${page}&cursor=${encodeURIComponent(cursor)}`
+        : `?limit=${page}`;
+      const res = await fetch(`/api/v1/sync/changes${q}`);
+      const body = (await res.json()) as {
+        changes: { entity_type: string; id: string }[];
+        next_cursor: string;
+        has_more: boolean;
+      };
+      localStorage.setItem(KEY, body.next_cursor);
+      return {
+        ids: body.changes.map((c) => `${c.entity_type}:${c.id}`),
+        hasMore: body.has_more,
+      };
+    }, pageSize);
+  }
+
   // --- Fonctionnement hors ligne (REQ-SYN-007) ---
 
   /** État affiché par l'indicateur de synchronisation (`synced` / `offline` / `pending`). */

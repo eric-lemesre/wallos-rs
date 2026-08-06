@@ -881,7 +881,7 @@ requirements:
 - id: REQ-SYN-008
   title: Appairage et synchronisation initiale
   domain: sync
-  status: draft
+  status: verified
   criticality: medium
   layer:
   - api

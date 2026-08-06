@@ -54,6 +54,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0036 | SYN-004 push (lot indépendant, idempotent, rejets par entité) | ⚪ |
 | 0037 | SYN-005 conflit (LWW + concurrence optimiste + journal) | 🔴 |
 | 0038 | SYN-007 hors ligne (outbox local, synchro auto, sans natif) | 🟡 |
+| 0039 | SYN-008 appairage + synchro initiale reprenable (curseur) | ⚪ |
 
 ## À relire en priorité aujourd'hui (🔴)
 
