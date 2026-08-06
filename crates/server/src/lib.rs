@@ -15,13 +15,15 @@ use wallos_proto::{
     CreateDeviceSessionRequest, CreatePayerRequest, CreatePaymentMethodRequest,
     CreateSessionRequest, CreateSubscriptionRequest, CurrencyDto, CurrentUser, DataBundle,
     DeviceSummary, DeviceToken, HealthResponse, ImportCounts, ImportReport, LanguageResponse,
-    MoneyInput, MonthlyCostPointDto, NextDueRequest, NextDueResponse, PayerDto, PaymentMethodDto,
+    MoneyInput, MonthlyCostPointDto, NextDueRequest, NextDueResponse, NotificationChannelDto,
+    CreateNotificationChannelRequest, NotificationChannelsResponse, PayerDto, PaymentMethodDto,
     Problem, ReferenceCurrencyDto, RejectedRow, ReminderDto, ReminderSettingResponse,
     RemindersResponse, RenameCategoryRequest, RenamePayerRequest, RenamePaymentMethodRequest,
     RepartitionEntryDto, RepartitionResponse, RunRemindersResponse, SetLanguageRequest,
     SetReminderSettingRequest, SubscriptionDto, SubscriptionListResponse, SyncChangeDto,
     SyncChangesResponse, SyncOperationInput, SyncOperationResult, SyncPushRequest,
-    SyncPushResponse, TombstoneDto, TombstonesResponse, problem,
+    SyncPushResponse, TombstoneDto, TombstonesResponse, WebhookReminderItem,
+    WebhookReminderPayload, problem,
 };
 use wallos_storage::Db;
 
@@ -32,6 +34,7 @@ pub mod currencies;
 pub mod data;
 pub mod exchange;
 pub mod idempotency;
+pub mod notifications;
 pub mod payers;
 pub mod payment_methods;
 pub mod reminders;
@@ -96,7 +99,10 @@ pub mod sync;
         reminders::get_reminder_setting,
         reminders::set_reminder_setting,
         reminders::get_reminders,
-        reminders::run_reminders
+        reminders::run_reminders,
+        notifications::create_notification_channel,
+        notifications::list_notification_channels,
+        notifications::delete_notification_channel
     ),
     components(schemas(
         HealthResponse,
@@ -151,7 +157,12 @@ pub mod sync;
         SetReminderSettingRequest,
         ReminderDto,
         RemindersResponse,
-        RunRemindersResponse
+        RunRemindersResponse,
+        NotificationChannelDto,
+        CreateNotificationChannelRequest,
+        NotificationChannelsResponse,
+        WebhookReminderItem,
+        WebhookReminderPayload
     ))
 )]
 pub struct ApiDoc;
@@ -285,6 +296,11 @@ pub fn app_with_db_and_cron(db: Db, cron: CronToken) -> Router {
         ))
         .routes(routes!(reminders::get_reminders))
         .routes(routes!(reminders::run_reminders))
+        .routes(routes!(
+            notifications::create_notification_channel,
+            notifications::list_notification_channels
+        ))
+        .routes(routes!(notifications::delete_notification_channel))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))

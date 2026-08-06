@@ -227,5 +227,15 @@
     "loadError": "Could not load reminders",
     "dueIn": "In {{count}} day",
     "dueIn_other": "In {{count}} days"
+  },
+  "notificationChannels": {
+    "title": "Notification channels",
+    "urlLabel": "Webhook URL",
+    "urlPlaceholder": "https://hooks.example.com/…",
+    "add": "Add webhook",
+    "delete": "Remove",
+    "empty": "No channel configured",
+    "loadError": "Could not load channels",
+    "urlRejected": "This URL was rejected (internal or loopback addresses are not allowed)"
   }
 }
