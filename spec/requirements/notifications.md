@@ -170,7 +170,7 @@ depends_on: [REQ-NOT-002]
 id: REQ-NOT-008
 title: Notification native sur desktop et mobile
 domain: notifications
-status: draft
+status: verified
 criticality: low
 layer: [ui]
 e2e: optional
