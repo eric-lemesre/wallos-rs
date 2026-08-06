@@ -1,0 +1,275 @@
+//! Rappels avant échéance (REQ-NOT-001).
+//!
+//! Trois faces : le **réglage** du délai de rappel du compte (jours avant l'échéance), la **vue** des
+//! rappels dus aujourd'hui pour le foyer (§9), et le **cron** `POST /internal/run-reminders` — déclenché
+//! périodiquement par un ordonnanceur externe (choix d'architecture, ADR 0040) — qui balaie **tous** les
+//! foyers, émet les rappels dus et les **journalise** pour ne pas ré-émettre le même jour.
+//!
+//! Règle de déclenchement **exacte** (oracle Wallos, gelé) déléguée au domaine pur `core::due_reminders`
+//! (fenêtre injectée : `as_of`, aucun accès horloge — REQ-STA-008). Le regroupement par compte (message
+//! unique) est reconstitué ici (critère d'acceptation #2).
+
+use std::collections::BTreeMap;
+
+use axum::extract::{Query, State};
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
+use axum::{Extension, Json};
+use chrono::{NaiveDate, Utc};
+use serde::Deserialize;
+use uuid::Uuid;
+use wallos_core::billing::{BillingCycle, BillingUnit};
+use wallos_core::requirement;
+use wallos_core::{ReminderCandidate, due_reminders, next_due};
+use wallos_proto::{
+    ReminderDto, ReminderSettingResponse, RemindersResponse, RunRemindersResponse,
+    SetReminderSettingRequest, problem,
+};
+use wallos_storage::{Db, ReminderRepository, ReminderScanRow};
+
+use crate::auth::AuthActor;
+use crate::{CronToken, problem_response};
+
+/// `500` générique.
+#[requirement(REQ-NOT-001)]
+fn internal_error() -> Response {
+    problem_response(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        problem(500, "about:blank", "Internal Server Error"),
+    )
+}
+
+/// Prochaine échéance d'une ligne de balayage, si l'abonnement est encore actif à `as_of` (non terminé).
+/// `None` si le cycle est illisible ou l'abonnement terminé.
+#[requirement(REQ-NOT-001)]
+fn candidate_of(row: &ReminderScanRow, as_of: NaiveDate) -> Option<ReminderCandidate> {
+    let unit = BillingUnit::parse(&row.cycle_unit).ok()?;
+    let interval = u32::try_from(row.cycle_interval).ok()?;
+    let cycle = BillingCycle::from_parts(unit, interval).ok()?;
+    // Prochaine occurrence à partir de la veille (inclut aujourd'hui), comme l'échéancier.
+    let reference = as_of.pred_opt().unwrap_or(as_of);
+    let next = next_due(row.first_payment, cycle, reference)?;
+    // Un abonnement terminé (échéance au-delà de la date de fin) ne déclenche plus (REQ-SUB-009).
+    if row.end_date.is_some_and(|end| next > end) {
+        return None;
+    }
+    let lead_days = u32::try_from(row.reminder_lead_days).unwrap_or(1);
+    Some(ReminderCandidate {
+        subscription_id: row.id,
+        next_due: next,
+        lead_days,
+    })
+}
+
+/// Réglage du délai de rappel du compte (REQ-NOT-001).
+#[utoipa::path(
+    get,
+    path = "/settings/reminder",
+    operation_id = "getReminderSetting",
+    extensions(("x-requirements" = json!(["REQ-NOT-001"]))),
+    responses(
+        (status = 200, description = "Délai de rappel", body = ReminderSettingResponse, content_type = "application/json"),
+        (status = 401, description = "Non authentifié", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 500, description = "Erreur interne", body = wallos_proto::Problem, content_type = "application/problem+json")
+    )
+)]
+#[requirement(REQ-NOT-001)]
+pub async fn get_reminder_setting(AuthActor(actor): AuthActor, State(db): State<Db>) -> Response {
+    match ReminderRepository::new(db.pool()).lead_days(&actor).await {
+        Ok(lead_days) => Json(ReminderSettingResponse { lead_days }).into_response(),
+        Err(_) => internal_error(),
+    }
+}
+
+/// Met à jour le délai de rappel du compte (REQ-NOT-001).
+#[utoipa::path(
+    put,
+    path = "/settings/reminder",
+    operation_id = "setReminderSetting",
+    extensions(("x-requirements" = json!(["REQ-NOT-001"]))),
+    request_body = SetReminderSettingRequest,
+    responses(
+        (status = 200, description = "Délai mis à jour", body = ReminderSettingResponse, content_type = "application/json"),
+        (status = 401, description = "Non authentifié", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 422, description = "Délai hors bornes", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 500, description = "Erreur interne", body = wallos_proto::Problem, content_type = "application/problem+json")
+    )
+)]
+#[requirement(REQ-NOT-001)]
+pub async fn set_reminder_setting(
+    AuthActor(actor): AuthActor,
+    State(db): State<Db>,
+    Json(req): Json<SetReminderSettingRequest>,
+) -> Response {
+    if !(0..=365).contains(&req.lead_days) {
+        return problem_response(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            problem(422, "about:blank", "Unprocessable Entity")
+                .with_detail("lead_days: hors bornes (0..=365)"),
+        );
+    }
+    let repo = ReminderRepository::new(db.pool());
+    if repo.set_lead_days(&actor, req.lead_days).await.is_err() {
+        return internal_error();
+    }
+    Json(ReminderSettingResponse {
+        lead_days: req.lead_days,
+    })
+    .into_response()
+}
+
+/// Rappels dus aujourd'hui pour le compte (REQ-NOT-001), vue lisible du message groupé.
+#[utoipa::path(
+    get,
+    path = "/reminders",
+    operation_id = "getReminders",
+    extensions(("x-requirements" = json!(["REQ-NOT-001"]))),
+    responses(
+        (status = 200, description = "Rappels dus aujourd'hui", body = RemindersResponse, content_type = "application/json"),
+        (status = 401, description = "Non authentifié", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 500, description = "Erreur interne", body = wallos_proto::Problem, content_type = "application/problem+json")
+    )
+)]
+#[requirement(REQ-NOT-001)]
+pub async fn get_reminders(AuthActor(actor): AuthActor, State(db): State<Db>) -> Response {
+    let today = Utc::now().date_naive();
+    let rows = match ReminderRepository::new(db.pool())
+        .scan_household(&actor)
+        .await
+    {
+        Ok(rows) => rows,
+        Err(_) => return internal_error(),
+    };
+    let candidates: Vec<ReminderCandidate> =
+        rows.iter().filter_map(|r| candidate_of(r, today)).collect();
+    let due = due_reminders(&candidates, today);
+    // Retrouve nom + payeur par id pour composer la vue.
+    let by_id: BTreeMap<Uuid, &ReminderScanRow> = rows.iter().map(|r| (r.id, r)).collect();
+    let reminders = due
+        .into_iter()
+        .filter_map(|d| {
+            let row = by_id.get(&d.subscription_id)?;
+            Some(ReminderDto {
+                subscription_id: d.subscription_id.to_string(),
+                name: row.name.clone(),
+                due_date: d.due_date.format("%Y-%m-%d").to_string(),
+                days_until: d.days_until,
+                payer_id: row.payer_id.map(|p| p.to_string()),
+            })
+        })
+        .collect();
+    Json(RemindersResponse {
+        as_of: today.format("%Y-%m-%d").to_string(),
+        reminders,
+    })
+    .into_response()
+}
+
+/// Paramètres du cron (date de référence injectable pour les tests).
+#[derive(Debug, Deserialize)]
+pub struct RunRemindersQuery {
+    /// Date de référence (`YYYY-MM-DD`) ; défaut : aujourd'hui (horloge serveur).
+    #[serde(default)]
+    pub as_of: Option<String>,
+}
+
+/// Exécute le cron de rappel (REQ-NOT-001) : balaie **tous** les foyers, émet les rappels dus et les
+/// journalise (idempotent le même jour). **Endpoint d'opérateur** : authentifié par le secret
+/// `X-Cron-Token` (configuré côté serveur, `CRON_TOKEN`) ; désactivé (404) si le secret n'est pas
+/// configuré. Déclenché périodiquement par un ordonnanceur externe (ADR 0040).
+#[utoipa::path(
+    post,
+    path = "/internal/run-reminders",
+    operation_id = "runReminders",
+    extensions(("x-requirements" = json!(["REQ-NOT-001"]))),
+    params(("as_of" = Option<String>, Query, description = "Date de référence YYYY-MM-DD (tests)")),
+    responses(
+        (status = 200, description = "Rappels émis", body = RunRemindersResponse, content_type = "application/json"),
+        (status = 401, description = "Secret de cron absent ou invalide", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Cron désactivé (aucun secret configuré)", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 500, description = "Erreur interne", body = wallos_proto::Problem, content_type = "application/problem+json")
+    )
+)]
+#[requirement(REQ-NOT-001)]
+pub async fn run_reminders(
+    State(db): State<Db>,
+    Extension(CronToken(cron_token)): Extension<CronToken>,
+    headers: HeaderMap,
+    Query(q): Query<RunRemindersQuery>,
+) -> Response {
+    // Cron désactivé si aucun secret n'est configuré (jamais ouvert par défaut).
+    let Some(expected) = cron_token.as_deref() else {
+        return problem_response(
+            StatusCode::NOT_FOUND,
+            problem(404, "about:blank", "Not Found"),
+        );
+    };
+    let presented = headers.get("x-cron-token").and_then(|v| v.to_str().ok());
+    if presented != Some(expected) {
+        return problem_response(
+            StatusCode::UNAUTHORIZED,
+            problem(401, "about:blank", "Unauthorized"),
+        );
+    }
+
+    let as_of = match q.as_of.as_deref().filter(|s| !s.is_empty()) {
+        Some(raw) => match NaiveDate::parse_from_str(raw, "%Y-%m-%d") {
+            Ok(d) => d,
+            Err(_) => {
+                return problem_response(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    problem(422, "about:blank", "Unprocessable Entity")
+                        .with_detail("as_of: date YYYY-MM-DD attendue"),
+                );
+            }
+        },
+        None => Utc::now().date_naive(),
+    };
+
+    let repo = ReminderRepository::new(db.pool());
+    let rows = match repo.scan_all().await {
+        Ok(rows) => rows,
+        Err(_) => return internal_error(),
+    };
+
+    // Regroupe par foyer (message unique par compte, critère #2).
+    let mut by_household: BTreeMap<Uuid, Vec<&ReminderScanRow>> = BTreeMap::new();
+    for row in &rows {
+        by_household.entry(row.household_id).or_default().push(row);
+    }
+
+    let mut emitted = 0usize;
+    let mut accounts_notified = 0usize;
+    for (household_id, household_rows) in by_household {
+        let candidates: Vec<ReminderCandidate> = household_rows
+            .iter()
+            .filter_map(|r| candidate_of(r, as_of))
+            .collect();
+        let due = due_reminders(&candidates, as_of);
+        let mut account_emitted = 0usize;
+        for d in due {
+            // Journalise ; n'émet (compte) que si nouvellement inséré (pas de doublon le même jour).
+            match repo
+                .record_emitted(household_id, d.subscription_id, d.due_date)
+                .await
+            {
+                Ok(true) => {
+                    emitted += 1;
+                    account_emitted += 1;
+                }
+                Ok(false) => {}
+                Err(_) => return internal_error(),
+            }
+        }
+        if account_emitted > 0 {
+            accounts_notified += 1;
+        }
+    }
+
+    Json(RunRemindersResponse {
+        as_of: as_of.format("%Y-%m-%d").to_string(),
+        emitted,
+        accounts_notified,
+    })
+    .into_response()
+}

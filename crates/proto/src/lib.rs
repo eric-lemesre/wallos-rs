@@ -514,6 +514,66 @@ pub struct ConflictsResponse {
     pub conflicts: Vec<ConflictDto>,
 }
 
+/// Réglage du délai de rappel du compte (REQ-NOT-001) : nombre de jours avant l'échéance.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct ReminderSettingResponse {
+    /// Délai de rappel (jours avant l'échéance). Défaut 1.
+    #[schema(example = 1)]
+    pub lead_days: i32,
+}
+
+/// Requête de mise à jour du délai de rappel (REQ-NOT-001).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct SetReminderSettingRequest {
+    /// Nouveau délai (jours, 0..=365).
+    #[schema(example = 3)]
+    pub lead_days: i32,
+}
+
+/// Un rappel dû (REQ-NOT-001), exposé à l'interface.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct ReminderDto {
+    /// Abonnement concerné (UUID).
+    pub subscription_id: String,
+    /// Nom de l'abonnement.
+    #[schema(example = "Netflix")]
+    pub name: String,
+    /// Date de l'échéance qui déclenche le rappel (`YYYY-MM-DD`).
+    #[schema(example = "2026-08-07")]
+    pub due_date: String,
+    /// Jours calendaires jusqu'à l'échéance (égal au délai de rappel).
+    #[schema(example = 1)]
+    pub days_until: u32,
+    /// Payeur rattaché, le cas échéant (regroupement par payeur).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payer_id: Option<String>,
+}
+
+/// Rappels **dus aujourd'hui** pour le compte (REQ-NOT-001), regroupés en une seule vue — le pendant
+/// lisible du message unique émis par le cron. Ordonnés par échéance puis identifiant.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct RemindersResponse {
+    /// Date de référence (`YYYY-MM-DD`) pour laquelle les rappels sont calculés.
+    #[schema(example = "2026-08-06")]
+    pub as_of: String,
+    /// Rappels dus.
+    pub reminders: Vec<ReminderDto>,
+}
+
+/// Résultat d'une exécution du cron de rappel (REQ-NOT-001).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct RunRemindersResponse {
+    /// Date de référence de l'exécution (`YYYY-MM-DD`).
+    #[schema(example = "2026-08-06")]
+    pub as_of: String,
+    /// Nombre de rappels **nouvellement émis** (hors doublons déjà journalisés).
+    #[schema(example = 3)]
+    pub emitted: usize,
+    /// Nombre de comptes destinataires (rappels regroupés par compte).
+    #[schema(example = 2)]
+    pub accounts_notified: usize,
+}
+
 /// Une catégorie d'abonnements exposée à l'interface (REQ-CAT-001).
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct CategoryDto {

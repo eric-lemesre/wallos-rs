@@ -8,7 +8,7 @@
 id: REQ-NOT-001
 title: Rappel avant échéance
 domain: notifications
-status: draft
+status: verified
 criticality: high
 layer: [core, api, ui]
 e2e: required

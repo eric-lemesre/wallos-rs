@@ -212,6 +212,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/internal/run-reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exécute le cron de rappel (REQ-NOT-001) : balaie **tous** les foyers, émet les rappels dus et les
+         *     journalise (idempotent le même jour). **Endpoint d'opérateur** : authentifié par le secret
+         *     `X-Cron-Token` (configuré côté serveur, `CRON_TOKEN`) ; désactivé (404) si le secret n'est pas
+         *     configuré. Déclenché périodiquement par un ordonnanceur externe (ADR 0040).
+         */
+        post: operations["runReminders"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -334,6 +356,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Rappels dus aujourd'hui pour le compte (REQ-NOT-001), vue lisible du message groupé. */
+        get: operations["getReminders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/schedule/next-due": {
         parameters: {
             query?: never;
@@ -424,6 +463,24 @@ export interface paths {
         get: operations["getReferenceCurrency"];
         /** Fixe la devise de référence du foyer de l'appelant. */
         put: operations["setReferenceCurrency"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/reminder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Réglage du délai de rappel du compte (REQ-NOT-001). */
+        get: operations["getReminderSetting"];
+        /** Met à jour le délai de rappel du compte (REQ-NOT-001). */
+        put: operations["setReminderSetting"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1202,6 +1259,51 @@ export interface components {
             /** @description Référence permettant de localiser la ligne (nom ou identifiant fourni). */
             reference: string;
         };
+        /** @description Un rappel dû (REQ-NOT-001), exposé à l'interface. */
+        ReminderDto: {
+            /**
+             * Format: int32
+             * @description Jours calendaires jusqu'à l'échéance (égal au délai de rappel).
+             * @example 1
+             */
+            days_until: number;
+            /**
+             * @description Date de l'échéance qui déclenche le rappel (`YYYY-MM-DD`).
+             * @example 2026-08-07
+             */
+            due_date: string;
+            /**
+             * @description Nom de l'abonnement.
+             * @example Netflix
+             */
+            name: string;
+            /** @description Payeur rattaché, le cas échéant (regroupement par payeur). */
+            payer_id?: string | null;
+            /** @description Abonnement concerné (UUID). */
+            subscription_id: string;
+        };
+        /** @description Réglage du délai de rappel du compte (REQ-NOT-001) : nombre de jours avant l'échéance. */
+        ReminderSettingResponse: {
+            /**
+             * Format: int32
+             * @description Délai de rappel (jours avant l'échéance). Défaut 1.
+             * @example 1
+             */
+            lead_days: number;
+        };
+        /**
+         * @description Rappels **dus aujourd'hui** pour le compte (REQ-NOT-001), regroupés en une seule vue — le pendant
+         *     lisible du message unique émis par le cron. Ordonnés par échéance puis identifiant.
+         */
+        RemindersResponse: {
+            /**
+             * @description Date de référence (`YYYY-MM-DD`) pour laquelle les rappels sont calculés.
+             * @example 2026-08-06
+             */
+            as_of: string;
+            /** @description Rappels dus. */
+            reminders: components["schemas"]["ReminderDto"][];
+        };
         /** @description Requête de renommage d'une catégorie (REQ-CAT-001). */
         RenameCategoryRequest: {
             /**
@@ -1276,6 +1378,24 @@ export interface components {
              */
             total: string;
         };
+        /** @description Résultat d'une exécution du cron de rappel (REQ-NOT-001). */
+        RunRemindersResponse: {
+            /**
+             * @description Nombre de comptes destinataires (rappels regroupés par compte).
+             * @example 2
+             */
+            accounts_notified: number;
+            /**
+             * @description Date de référence de l'exécution (`YYYY-MM-DD`).
+             * @example 2026-08-06
+             */
+            as_of: string;
+            /**
+             * @description Nombre de rappels **nouvellement émis** (hors doublons déjà journalisés).
+             * @example 3
+             */
+            emitted: number;
+        };
         /** @description Requête de choix de langue (REQ-I18N-001) : le code doit être une langue supportée. */
         SetLanguageRequest: {
             /**
@@ -1283,6 +1403,15 @@ export interface components {
              * @example fr
              */
             language: string;
+        };
+        /** @description Requête de mise à jour du délai de rappel (REQ-NOT-001). */
+        SetReminderSettingRequest: {
+            /**
+             * Format: int32
+             * @description Nouveau délai (jours, 0..=365).
+             * @example 3
+             */
+            lead_days: number;
         };
         /**
          * @description Représentation d'un abonnement dans le contrat API (REQ-SUB-001).
@@ -2060,6 +2189,56 @@ export interface operations {
             };
         };
     };
+    runReminders: {
+        parameters: {
+            query?: {
+                /** @description Date de référence YYYY-MM-DD (tests) */
+                as_of?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rappels émis */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunRemindersResponse"];
+                };
+            };
+            /** @description Secret de cron absent ou invalide */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Cron désactivé (aucun secret configuré) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     getCurrentUser: {
         parameters: {
             query?: never;
@@ -2508,6 +2687,44 @@ export interface operations {
             };
         };
     };
+    getReminders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rappels dus aujourd'hui */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemindersResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     computeNextDue: {
         parameters: {
             query?: never;
@@ -2799,6 +3016,95 @@ export interface operations {
             };
             /** @description Devise hors référentiel */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getReminderSetting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Délai de rappel */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReminderSettingResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    setReminderSetting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetReminderSettingRequest"];
+            };
+        };
+        responses: {
+            /** @description Délai mis à jour */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReminderSettingResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Délai hors bornes */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

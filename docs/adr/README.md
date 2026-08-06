@@ -55,6 +55,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0037 | SYN-005 conflit (LWW + concurrence optimiste + journal) | 🔴 |
 | 0038 | SYN-007 hors ligne (outbox local, synchro auto, sans natif) | 🟡 |
 | 0039 | SYN-008 appairage + synchro initiale reprenable (curseur) | ⚪ |
+| 0040 | NOT-001 rappels (cron + endpoint, déclenchement exact, regroupement) | 🔴 |
 
 ## À relire en priorité aujourd'hui (🔴)
 
@@ -69,6 +70,8 @@ Les décisions d'interprétation prises jusqu'ici, susceptibles de diverger de l
 - **0023** — jeu de catégories par défaut (impacte tout import/export et l'expérience initiale).
 - **0022** — règle de clamp des échéances mensuelles (28/29/30/31).
 - **0012** — foyer partagé, payeurs = membres : structurant pour SUB-017/STA-004 et l'isolation.
+- **0040** — rappels : déclenchement **exact** (jour J−N, pas la fenêtre) et regroupement par compte
+  capturés sur Wallos ; émission « enregistrée » seulement (canaux réels = NOT-003+, différés).
 - **0037** — résolution de conflit : la détection dépend de `base_version` fournie par le client ; sans
   elle, LWW s'applique mais sans journal (écrasement silencieux possible). Compromis option A.
 - **0031** — répartition : bucket « (aucun) » explicite (subtrack rend l'axe nullable, là où Wallos a

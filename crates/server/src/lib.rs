@@ -16,11 +16,12 @@ use wallos_proto::{
     CreateSessionRequest, CreateSubscriptionRequest, CurrencyDto, CurrentUser, DataBundle,
     DeviceSummary, DeviceToken, HealthResponse, ImportCounts, ImportReport, LanguageResponse,
     MoneyInput, MonthlyCostPointDto, NextDueRequest, NextDueResponse, PayerDto, PaymentMethodDto,
-    Problem, ReferenceCurrencyDto, RejectedRow, RenameCategoryRequest, RenamePayerRequest,
-    RenamePaymentMethodRequest, RepartitionEntryDto, RepartitionResponse, SetLanguageRequest,
-    SubscriptionDto, SubscriptionListResponse, SyncChangeDto, SyncChangesResponse,
-    SyncOperationInput, SyncOperationResult, SyncPushRequest, SyncPushResponse, TombstoneDto,
-    TombstonesResponse, problem,
+    Problem, ReferenceCurrencyDto, RejectedRow, ReminderDto, ReminderSettingResponse,
+    RemindersResponse, RenameCategoryRequest, RenamePayerRequest, RenamePaymentMethodRequest,
+    RepartitionEntryDto, RepartitionResponse, RunRemindersResponse, SetLanguageRequest,
+    SetReminderSettingRequest, SubscriptionDto, SubscriptionListResponse, SyncChangeDto,
+    SyncChangesResponse, SyncOperationInput, SyncOperationResult, SyncPushRequest,
+    SyncPushResponse, TombstoneDto, TombstonesResponse, problem,
 };
 use wallos_storage::Db;
 
@@ -33,6 +34,7 @@ pub mod exchange;
 pub mod idempotency;
 pub mod payers;
 pub mod payment_methods;
+pub mod reminders;
 pub mod schedule;
 pub mod security;
 pub mod settings;
@@ -90,7 +92,11 @@ pub mod sync;
         sync::get_tombstones,
         sync::get_sync_changes,
         sync::push_sync_changes,
-        sync::get_sync_conflicts
+        sync::get_sync_conflicts,
+        reminders::get_reminder_setting,
+        reminders::set_reminder_setting,
+        reminders::get_reminders,
+        reminders::run_reminders
     ),
     components(schemas(
         HealthResponse,
@@ -140,7 +146,12 @@ pub mod sync;
         SyncPushRequest,
         SyncPushResponse,
         ConflictDto,
-        ConflictsResponse
+        ConflictsResponse,
+        ReminderSettingResponse,
+        SetReminderSettingRequest,
+        ReminderDto,
+        RemindersResponse,
+        RunRemindersResponse
     ))
 )]
 pub struct ApiDoc;
@@ -197,9 +208,24 @@ pub fn app() -> Router {
         .layer(axum::middleware::map_response(security::security_headers))
 }
 
+/// Secret d'opérateur autorisant le cron de rappel (`X-Cron-Token`, REQ-NOT-001). Propagé en extension
+/// de requête. `None` → le cron est **désactivé** (jamais ouvert par défaut).
+#[derive(Debug, Clone)]
+pub struct CronToken(pub Option<String>);
+
 /// Construit le routeur complet, avec état (base de données) : santé + création de compte.
+///
+/// Le secret du cron de rappel est lu depuis l'environnement (`CRON_TOKEN`). Les tests utilisent
+/// [`app_with_db_and_cron`] pour l'injecter sans variable d'environnement.
 #[requirement(REQ-AUT-001)]
 pub fn app_with_db(db: Db) -> Router {
+    let cron = std::env::var("CRON_TOKEN").ok().filter(|s| !s.is_empty());
+    app_with_db_and_cron(db, CronToken(cron))
+}
+
+/// Comme [`app_with_db`], mais le secret du cron est fourni explicitement (injection de test).
+#[requirement(REQ-AUT-001)]
+pub fn app_with_db_and_cron(db: Db, cron: CronToken) -> Router {
     let (router, _api) = OpenApiRouter::new()
         .routes(routes!(api_v1_health))
         .routes(routes!(accounts::create_account))
@@ -253,9 +279,16 @@ pub fn app_with_db(db: Db) -> Router {
         .routes(routes!(sync::get_sync_changes))
         .routes(routes!(sync::push_sync_changes))
         .routes(routes!(sync::get_sync_conflicts))
+        .routes(routes!(
+            reminders::get_reminder_setting,
+            reminders::set_reminder_setting
+        ))
+        .routes(routes!(reminders::get_reminders))
+        .routes(routes!(reminders::run_reminders))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))
         .fallback(not_found)
+        .layer(axum::Extension(cron))
         .layer(axum::middleware::map_response(security::security_headers))
 }
