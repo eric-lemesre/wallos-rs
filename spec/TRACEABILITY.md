@@ -2,7 +2,7 @@
 
 # Matrice de traçabilité des exigences
 
-Total : **73** exigences — 57 verified · 16 draft.
+Total : **73** exigences — 58 verified · 15 draft.
 
 Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et [`spec/requirements/`](requirements/). Régénérer avec `cargo xtask trace --write`.
 
@@ -127,5 +127,5 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 | `REQ-SYN-005` | Résolution de conflit | high | ✅ verified |
 | `REQ-SYN-006` | Idempotence des opérations d'écriture | high | ✅ verified |
 | `REQ-SYN-007` | Fonctionnement hors ligne | high | ✅ verified |
-| `REQ-SYN-008` | Appairage et synchronisation initiale | medium | ⚪ draft |
+| `REQ-SYN-008` | Appairage et synchronisation initiale | medium | ✅ verified |
 

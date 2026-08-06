@@ -176,7 +176,7 @@ depends_on: [REQ-SYN-004, REQ-SYN-005]
 id: REQ-SYN-008
 title: Appairage et synchronisation initiale
 domain: sync
-status: draft
+status: verified
 criticality: medium
 layer: [api, ui]
 e2e: required
