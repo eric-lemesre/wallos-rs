@@ -41,6 +41,9 @@ allow = [
     "CDLA-Permissive-2.0",
     "CC0-1.0",
     "Unlicense",
+    # 0BSD (BSD Zero Clause) : permissive, équivalent domaine public, OSI. Portée par `quoted_printable`,
+    # tirée transitivement par `lettre` (canal e-mail SMTP, REQ-NOT-003 / ADR 0044).
+    "0BSD",
 ]
 confidence-threshold = 0.8
 

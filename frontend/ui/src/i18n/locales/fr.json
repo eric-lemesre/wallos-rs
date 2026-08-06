@@ -230,12 +230,20 @@
   },
   "notificationChannels": {
     "title": "Canaux de notification",
+    "typeLabel": "Type de canal",
+    "webhook": "Webhook",
+    "email": "E-mail",
     "urlLabel": "URL du webhook",
     "urlPlaceholder": "https://hooks.example.com/…",
-    "add": "Ajouter un webhook",
+    "host": "Hôte SMTP",
+    "port": "Port",
+    "username": "Identifiant",
+    "password": "Mot de passe",
+    "from": "Adresse d'expéditeur",
+    "add": "Ajouter un canal",
     "delete": "Supprimer",
     "empty": "Aucun canal configuré",
     "loadError": "Impossible de charger les canaux",
-    "urlRejected": "URL refusée (les adresses internes ou de bouclage ne sont pas autorisées)"
+    "rejected": "Canal refusé (configuration invalide, ou adresse interne/de bouclage non autorisée)"
   }
 }

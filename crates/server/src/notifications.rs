@@ -50,26 +50,96 @@ fn invalid(detail: &str) -> Response {
     )
 }
 
-/// Projette une ligne stockée en DTO.
+/// Projette une ligne stockée en DTO, en **redactant** tout secret de la configuration (le mot de passe
+/// SMTP d'un canal e-mail n'est jamais renvoyé au client — REQ-NOT-003 « sans exposer les identifiants »).
 #[requirement(REQ-NOT-005)]
+#[requirement(REQ-NOT-003)]
 fn row_to_dto(row: NotificationChannelRow) -> NotificationChannelDto {
+    let mut config = row.config;
+    if let Some(password) = config.get_mut("password") {
+        *password = serde_json::Value::String("<redacted>".to_string());
+    }
     NotificationChannelDto {
         id: row.id.to_string(),
         kind: row.kind,
-        config: row.config,
+        config,
         enabled: row.enabled,
     }
 }
 
-/// Crée un canal de notification dans le foyer de l'appelant (REQ-NOT-005).
+/// Type de canal e-mail (REQ-NOT-003).
+const KIND_EMAIL: &str = "email";
+
+/// Valide+normalise la configuration d'un webhook (REQ-NOT-005) : `url` `http(s)` **publique**
+/// (anti-SSRF à l'enregistrement). `Err` = message de champ fautif (422).
+#[requirement(REQ-NOT-005)]
+fn validate_webhook_config(config: &serde_json::Value) -> Result<serde_json::Value, &'static str> {
+    let url = config
+        .get("url")
+        .and_then(|v| v.as_str())
+        .ok_or("config.url: requis (chaîne)")?;
+    if !webhook_url_is_safe(url) {
+        return Err("config.url: adresse non autorisée (interne/bouclage) ou URL invalide");
+    }
+    Ok(serde_json::json!({ "url": url }))
+}
+
+/// Valide+normalise la configuration SMTP d'un canal e-mail (REQ-NOT-003). On ne persiste que les
+/// clés connues (jamais le corps brut). `Err` = message de champ fautif (422).
+#[requirement(REQ-NOT-003)]
+fn validate_email_config(config: &serde_json::Value) -> Result<serde_json::Value, &'static str> {
+    let host = config
+        .get("host")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .ok_or("config.host: requis (chaîne non vide)")?;
+    let port = config
+        .get("port")
+        .and_then(serde_json::Value::as_u64)
+        .filter(|p| (1..=65535).contains(p))
+        .ok_or("config.port: requis (entier 1..=65535)")?;
+    let username = config
+        .get("username")
+        .and_then(|v| v.as_str())
+        .ok_or("config.username: requis (chaîne)")?;
+    let password = config
+        .get("password")
+        .and_then(|v| v.as_str())
+        .ok_or("config.password: requis (chaîne)")?;
+    let from = config
+        .get("from")
+        .and_then(|v| v.as_str())
+        .ok_or("config.from: requis (adresse e-mail)")?;
+    // L'adresse d'expéditeur doit être analysable (sinon l'envoi échouerait systématiquement).
+    if !wallos_notifier::is_valid_email_address(from) {
+        return Err("config.from: adresse e-mail invalide");
+    }
+    // STARTTLS par défaut (587) ; TLS implicite si explicitement false.
+    let starttls = config
+        .get("starttls")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(true);
+    Ok(serde_json::json!({
+        "host": host,
+        "port": port,
+        "username": username,
+        "password": password,
+        "from": from,
+        "starttls": starttls,
+    }))
+}
+
+/// Crée un canal de notification dans le foyer de l'appelant (REQ-NOT-005 webhook, REQ-NOT-003 e-mail).
 ///
-/// Webhook : `config.url` doit être une URL `http(s)` **publique** ; les adresses internes, de
-/// bouclage, privées ou `localhost` sont refusées (422) pour prévenir la SSRF (critère #2).
+/// - **webhook** : `config.url` doit être une URL `http(s)` **publique** ; les adresses internes, de
+///   bouclage, privées ou `localhost` sont refusées (422) pour prévenir la SSRF (NOT-005 critère #2).
+/// - **email** : `config` doit porter `host`, `port`, `username`, `password`, `from` (adresse valide) ;
+///   `starttls` optionnel (défaut vrai).
 #[utoipa::path(
     post,
     path = "/notifications/channels",
     operation_id = "createNotificationChannel",
-    extensions(("x-requirements" = json!(["REQ-NOT-005"]))),
+    extensions(("x-requirements" = json!(["REQ-NOT-005", "REQ-NOT-003"]))),
     request_body = CreateNotificationChannelRequest,
     responses(
         (status = 201, description = "Canal créé", body = NotificationChannelDto, content_type = "application/json"),
@@ -79,27 +149,27 @@ fn row_to_dto(row: NotificationChannelRow) -> NotificationChannelDto {
     )
 )]
 #[requirement(REQ-NOT-005)]
+#[requirement(REQ-NOT-003)]
 pub async fn create_notification_channel(
     AuthActor(actor): AuthActor,
     State(db): State<Db>,
     Json(req): Json<CreateNotificationChannelRequest>,
 ) -> Response {
-    // Seul le webhook est implémenté ; tout autre type est refusé explicitement.
-    if req.kind != KIND_WEBHOOK {
-        return invalid("kind: type de canal non supporté (webhook attendu)");
-    }
-    // `config.url` requis, chaîne, et **sûr** (anti-SSRF, validé à l'enregistrement).
-    let Some(url) = req.config.get("url").and_then(|v| v.as_str()) else {
-        return invalid("config.url: requis (chaîne)");
+    // Normalise la configuration selon le type ; tout autre type est refusé explicitement.
+    let (kind, config) = match req.kind.as_str() {
+        KIND_WEBHOOK => match validate_webhook_config(&req.config) {
+            Ok(config) => (KIND_WEBHOOK, config),
+            Err(detail) => return invalid(detail),
+        },
+        KIND_EMAIL => match validate_email_config(&req.config) {
+            Ok(config) => (KIND_EMAIL, config),
+            Err(detail) => return invalid(detail),
+        },
+        _ => return invalid("kind: type de canal non supporté (webhook ou email attendu)"),
     };
-    if !webhook_url_is_safe(url) {
-        return invalid("config.url: adresse non autorisée (interne/bouclage) ou URL invalide");
-    }
-    // Config normalisée : on ne persiste que les clés connues du type (jamais le corps brut du client).
-    let config = serde_json::json!({ "url": url });
     let enabled = req.enabled.unwrap_or(true);
     match NotificationChannelRepository::new(db.pool())
-        .create(&actor, KIND_WEBHOOK, &config, enabled)
+        .create(&actor, kind, &config, enabled)
         .await
     {
         Ok(row) => (StatusCode::CREATED, Json(row_to_dto(row))).into_response(),

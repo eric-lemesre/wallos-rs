@@ -71,7 +71,38 @@ describe("NotificationChannelsCard", () => {
     expect(await screen.findByTestId("notification-channel-target")).toBeInTheDocument();
   });
 
-  it("signale une URL refusée (SSRF)", async () => {
+  it("ajoute un canal e-mail avec sa configuration SMTP", async () => {
+    vi.spyOn(api, "GET").mockResolvedValue(ok({ channels: [] }));
+    const post = vi.spyOn(api, "POST").mockResolvedValue(ok({ ...CHANNEL, kind: "email" }, 201));
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.selectOptions(await screen.findByTestId("notification-channel-type"), "email");
+    await user.type(screen.getByTestId("notification-channel-host"), "smtp.example.com");
+    await user.clear(screen.getByTestId("notification-channel-port"));
+    await user.type(screen.getByTestId("notification-channel-port"), "587");
+    await user.type(screen.getByTestId("notification-channel-username"), "alice");
+    await user.type(screen.getByTestId("notification-channel-password"), "s3cr3t");
+    await user.type(screen.getByTestId("notification-channel-from"), "wallos@example.com");
+    await user.click(screen.getByTestId("notification-channel-add"));
+
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith("/notifications/channels", {
+        body: {
+          kind: "email",
+          config: {
+            host: "smtp.example.com",
+            port: 587,
+            username: "alice",
+            password: "s3cr3t",
+            from: "wallos@example.com",
+          },
+        },
+      }),
+    );
+  });
+
+  it("signale une configuration refusée (SSRF / SMTP)", async () => {
     vi.spyOn(api, "GET").mockResolvedValue(ok({ channels: [] }));
     vi.spyOn(api, "POST").mockResolvedValue(ok(undefined, 422));
     const user = userEvent.setup();

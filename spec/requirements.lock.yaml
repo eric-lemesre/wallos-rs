@@ -284,7 +284,7 @@ requirements:
 - id: REQ-NOT-003
   title: Canal e-mail
   domain: notifications
-  status: draft
+  status: verified
   criticality: high
   layer:
   - api
