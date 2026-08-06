@@ -60,6 +60,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0042 | STA-003 exclusion transverse (essai exclu par occurrence dans l'échéancier) | 🟡 |
 | 0043 | NOT-005 webhook (abstraction fermée, garde SSRF à l'enregistrement, cycle SEC-005) | 🔴 |
 | 0044 | NOT-003 e-mail (dépendance `lettre`, destinataire=compte, corps localisé serveur) | 🟡 |
+| 0045 | NOT-008 natif hors périmètre (OQ-009 ; consultation in-app via RemindersCard) | 🟡 |
 
 ## À relire en priorité aujourd'hui (🔴)
 

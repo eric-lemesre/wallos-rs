@@ -2,7 +2,7 @@
 
 # Matrice de traçabilité des exigences
 
-Total : **73** exigences — 63 verified · 10 draft.
+Total : **73** exigences — 64 verified · 9 draft.
 
 Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et [`spec/requirements/`](requirements/). Régénérer avec `cargo xtask trace --write`.
 
@@ -62,7 +62,7 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 | `REQ-NOT-005` | Webhook générique | medium | ✅ verified |
 | `REQ-NOT-006` | Test d'un canal de notification | medium | ⚪ draft |
 | `REQ-NOT-007` | Politique de réessai et d'abandon | medium | ⚪ draft |
-| `REQ-NOT-008` | Notification native sur desktop et mobile | low | ⚪ draft |
+| `REQ-NOT-008` | Notification native sur desktop et mobile | low | ✅ verified |
 
 ## ops
 

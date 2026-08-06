@@ -347,7 +347,7 @@ requirements:
 - id: REQ-NOT-008
   title: Notification native sur desktop et mobile
   domain: notifications
-  status: draft
+  status: verified
   criticality: low
   layer:
   - ui
