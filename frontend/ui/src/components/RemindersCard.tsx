@@ -12,7 +12,12 @@ type Reminder = components["schemas"]["ReminderDto"];
  * rappels sont regroupés par compte (un seul bloc). Isolée par le serveur (§9). S'appuie sur le client
  * généré ; aucune chaîne d'affichage en dur (REQ-I18N-002).
  *
+ * Cette vue in-app **est** la surface de consultation des rappels : elle satisfait le volet applicable
+ * de REQ-NOT-008 (« l'information reste consultable dans l'interface »), la notification **native** étant
+ * hors périmètre (OQ-009, ADR 0045 — pas de coquille native pour la parité, comme SEC-006/AUT-005).
+ *
  * @implements REQ-NOT-001
+ * @implements REQ-NOT-008
  */
 export function RemindersCard() {
   const { t } = useTranslation();
