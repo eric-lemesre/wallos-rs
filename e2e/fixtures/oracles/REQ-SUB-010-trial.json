@@ -1,0 +1,19 @@
+{
+  "_requirement": "REQ-SUB-010",
+  "_source": "Wallos 5.4.2 — inspection du schéma SQLite (table subscriptions) et du code PHP ; capturé §8.1 sur l'image épinglée bellamy/wallos@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f.",
+  "_note": "CORRECTION D'HYPOTHÈSE (comme ADR 0016/0030) : l'exigence est marquée oracle:legacy, MAIS Wallos 5.4.2 n'a AUCUNE notion de PÉRIODE D'ESSAI GRATUIT. Aucune colonne (subscriptions n'a que start_date / next_payment / cancellation_date), aucun code (`grep -ri 'trial|free_trial'` sur /var/www/html = vide). Il n'y a donc PAS de comportement de référence à capturer : SUB-010 est traité par CONCEPTION (design), à partir des seuls critères d'acceptation. Consigné en ADR 0041.",
+  "legacy_has_free_trial": false,
+  "design_rules": {
+    "trial_field": "subscriptions.trial_end_date (date, nullable). Un abonnement est EN ESSAI tant que today < trial_end_date ; l'essai est TERMINÉ à partir de today >= trial_end_date.",
+    "cost_exclusion": {
+      "_criterion": "#1 : le coût d'un abonnement en essai n'est PAS compté dans les statistiques tant que l'essai n'est pas terminé.",
+      "rule": "un abonnement en essai (today < trial_end_date) contribue 0 à tous les agrégats de coût (coût mensuel/annuel normalisé, total converti, répartition, évolution). Dès la fin d'essai (today >= trial_end_date), il compte normalement.",
+      "note": "règle appliquée dans le domaine pur (core::billable_amounts et les normalisations de coût), fenêtre `today` injectée (REQ-STA-008)."
+    },
+    "distinct_notification": {
+      "_criterion": "#2 : quand la fin d'essai approche du délai de rappel configuré, une notification DISTINCTE du rappel d'échéance est émise.",
+      "rule": "le cron de rappel (REQ-NOT-001) émet, pour un abonnement dont trial_end_date est à EXACTEMENT le délai de rappel du foyer (même règle exacte que l'échéance), un rappel de type `trial_ending`, distinct du rappel de paiement (`payment`). Journalisé séparément (reminder_log.kind).",
+      "reminder_kind": ["payment", "trial_ending"]
+    }
+  }
+}

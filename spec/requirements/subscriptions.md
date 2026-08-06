@@ -217,7 +217,7 @@ depends_on: [REQ-SUB-012]
 id: REQ-SUB-010
 title: Période d'essai gratuit
 domain: subscriptions
-status: draft
+status: verified
 criticality: medium
 layer: [core, api, ui]
 e2e: required

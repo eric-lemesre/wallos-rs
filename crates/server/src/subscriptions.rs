@@ -140,7 +140,12 @@ async fn build_subscription(
         .await
     {
         Ok(CreateOutcome::Created) => {
-            let dto = SubscriptionDto::from_core_derived(&subscription, next, ended);
+            let dto = SubscriptionDto::from_core_derived(
+                &subscription,
+                next,
+                ended,
+                subscription.is_in_trial(today),
+            );
             Ok((
                 StatusCode::CREATED,
                 serde_json::to_string(&dto).unwrap_or_default(),
@@ -203,6 +208,7 @@ pub async fn update_subscription(
             &subscription,
             next,
             ended,
+            subscription.is_in_trial(today),
         ))
         .into_response(),
         Ok(false) => subscription_not_found(),
@@ -311,6 +317,9 @@ fn row_to_dto(row: SubscriptionRow, today: NaiveDate) -> SubscriptionDto {
         next_payment,
         end_date: row.end_date.map(|d| d.to_string()),
         ended,
+        trial_end: row.trial_end_date.map(|d| d.to_string()),
+        // En essai si la fin d'essai n'est pas encore atteinte à la date du jour (REQ-SUB-010).
+        in_trial: row.trial_end_date.is_some_and(|end| today < end),
         monthly_cost: monthly,
         yearly_cost: yearly,
     }
@@ -322,9 +331,15 @@ fn row_to_dto(row: SubscriptionRow, today: NaiveDate) -> SubscriptionDto {
 /// (jamais traitée comme zéro silencieux dans le calcul).
 #[requirement(REQ-SUB-008)]
 #[requirement(REQ-SUB-009)]
+#[requirement(REQ-SUB-010)]
 fn active_amounts(rows: &[SubscriptionRow], today: NaiveDate) -> Vec<Money> {
     rows.iter()
-        .filter(|r| r.active && r.end_date.is_none_or(|end| today <= end))
+        .filter(|r| {
+            r.active
+                && r.end_date.is_none_or(|end| today <= end)
+                // En essai gratuit : exclu du total tant que l'essai n'est pas terminé (REQ-SUB-010).
+                && r.trial_end_date.is_none_or(|trial| today >= trial)
+        })
         .filter_map(|r| {
             CurrencyCode::new(&r.currency)
                 .ok()

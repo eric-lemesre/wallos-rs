@@ -20,7 +20,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 use wallos_core::billing::{BillingCycle, BillingUnit};
 use wallos_core::requirement;
-use wallos_core::{ReminderCandidate, due_reminders, next_due};
+use wallos_core::{DueReminder, ReminderCandidate, due_reminders, next_due};
 use wallos_proto::{
     ReminderDto, ReminderSettingResponse, RemindersResponse, RunRemindersResponse,
     SetReminderSettingRequest, problem,
@@ -29,6 +29,11 @@ use wallos_storage::{Db, ReminderRepository, ReminderScanRow};
 
 use crate::auth::AuthActor;
 use crate::{CronToken, problem_response};
+
+/// Type de rappel : échéance de paiement (REQ-NOT-001).
+const KIND_PAYMENT: &str = "payment";
+/// Type de rappel : fin de période d'essai gratuit (REQ-SUB-010), **distinct** du rappel de paiement.
+const KIND_TRIAL: &str = "trial_ending";
 
 /// `500` générique.
 #[requirement(REQ-NOT-001)]
@@ -59,6 +64,44 @@ fn candidate_of(row: &ReminderScanRow, as_of: NaiveDate) -> Option<ReminderCandi
         next_due: next,
         lead_days,
     })
+}
+
+/// Candidat au rappel de **fin d'essai** (REQ-SUB-010) : la date déclencheuse est `trial_end_date`.
+/// `None` si l'abonnement n'a pas d'essai ou si l'essai est déjà terminé (`trial_end < as_of`).
+#[requirement(REQ-SUB-010)]
+fn trial_candidate_of(row: &ReminderScanRow, as_of: NaiveDate) -> Option<ReminderCandidate> {
+    let trial_end = row.trial_end_date?;
+    if trial_end < as_of {
+        return None;
+    }
+    let lead_days = u32::try_from(row.reminder_lead_days).unwrap_or(1);
+    Some(ReminderCandidate {
+        subscription_id: row.id,
+        next_due: trial_end,
+        lead_days,
+    })
+}
+
+/// Rappels **dus** à `as_of` pour un lot de lignes, avec leur type (`payment` / `trial_ending`).
+/// Le rappel de fin d'essai est distinct du rappel d'échéance (REQ-SUB-010, critère #2).
+#[requirement(REQ-NOT-001)]
+fn due_with_kind(rows: &[&ReminderScanRow], as_of: NaiveDate) -> Vec<(DueReminder, &'static str)> {
+    let payment: Vec<ReminderCandidate> =
+        rows.iter().filter_map(|r| candidate_of(r, as_of)).collect();
+    let mut out: Vec<(DueReminder, &'static str)> = due_reminders(&payment, as_of)
+        .into_iter()
+        .map(|d| (d, KIND_PAYMENT))
+        .collect();
+    let trial: Vec<ReminderCandidate> = rows
+        .iter()
+        .filter_map(|r| trial_candidate_of(r, as_of))
+        .collect();
+    out.extend(
+        due_reminders(&trial, as_of)
+            .into_iter()
+            .map(|d| (d, KIND_TRIAL)),
+    );
+    out
 }
 
 /// Réglage du délai de rappel du compte (REQ-NOT-001).
@@ -140,16 +183,17 @@ pub async fn get_reminders(AuthActor(actor): AuthActor, State(db): State<Db>) ->
         Ok(rows) => rows,
         Err(_) => return internal_error(),
     };
-    let candidates: Vec<ReminderCandidate> =
-        rows.iter().filter_map(|r| candidate_of(r, today)).collect();
-    let due = due_reminders(&candidates, today);
+    let refs: Vec<&ReminderScanRow> = rows.iter().collect();
+    // Rappels de paiement ET de fin d'essai (distincts, REQ-SUB-010).
+    let due = due_with_kind(&refs, today);
     // Retrouve nom + payeur par id pour composer la vue.
     let by_id: BTreeMap<Uuid, &ReminderScanRow> = rows.iter().map(|r| (r.id, r)).collect();
     let reminders = due
         .into_iter()
-        .filter_map(|d| {
+        .filter_map(|(d, kind)| {
             let row = by_id.get(&d.subscription_id)?;
             Some(ReminderDto {
+                kind: kind.to_string(),
                 subscription_id: d.subscription_id.to_string(),
                 name: row.name.clone(),
                 due_date: d.due_date.format("%Y-%m-%d").to_string(),
@@ -241,16 +285,13 @@ pub async fn run_reminders(
     let mut emitted = 0usize;
     let mut accounts_notified = 0usize;
     for (household_id, household_rows) in by_household {
-        let candidates: Vec<ReminderCandidate> = household_rows
-            .iter()
-            .filter_map(|r| candidate_of(r, as_of))
-            .collect();
-        let due = due_reminders(&candidates, as_of);
+        // Rappels de paiement (REQ-NOT-001) ET de fin d'essai (REQ-SUB-010), chacun avec son type.
+        let due = due_with_kind(&household_rows, as_of);
         let mut account_emitted = 0usize;
-        for d in due {
-            // Journalise ; n'émet (compte) que si nouvellement inséré (pas de doublon le même jour).
+        for (d, kind) in due {
+            // Journalise ; n'émet (compte) que si nouvellement inséré (pas de doublon le même jour, par type).
             match repo
-                .record_emitted(household_id, d.subscription_id, d.due_date)
+                .record_emitted(household_id, d.subscription_id, d.due_date, kind)
                 .await
             {
                 Ok(true) => {

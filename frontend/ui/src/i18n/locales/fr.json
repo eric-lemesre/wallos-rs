@@ -102,7 +102,8 @@
     "error": "Impossible de créer l'abonnement",
     "endDate": "Date de fin (optionnelle)",
     "category": "Catégorie",
-    "noCategory": "(aucune)"
+    "noCategory": "(aucune)",
+    "trialEnd": "Fin d'essai gratuit"
   },
   "subscriptions": {
     "title": "Mes abonnements",
@@ -137,7 +138,8 @@
       "amount": "Montant",
       "next_due": "Prochaine échéance"
     },
-    "delete": "Supprimer"
+    "delete": "Supprimer",
+    "trial": "Essai gratuit"
   },
   "paymentMethods": {
     "title": "Moyens de paiement",
