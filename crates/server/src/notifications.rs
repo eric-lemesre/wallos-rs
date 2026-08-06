@@ -124,7 +124,10 @@ pub async fn list_notification_channels(
     AuthActor(actor): AuthActor,
     State(db): State<Db>,
 ) -> Response {
-    match NotificationChannelRepository::new(db.pool()).list(&actor).await {
+    match NotificationChannelRepository::new(db.pool())
+        .list(&actor)
+        .await
+    {
         Ok(rows) => Json(NotificationChannelsResponse {
             channels: rows.into_iter().map(row_to_dto).collect(),
         })
