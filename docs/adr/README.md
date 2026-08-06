@@ -51,6 +51,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0033 | I18N-004 repli langue (fallbackLng + porte de parité) | ⚪ |
 | 0034 | SYN-002 pierres tombales (curseur since, purge, resync) | 🟡 |
 | 0035 | SYN-003 delta incrémental (keyset, payload = ligne stockée) | 🟡 |
+| 0036 | SYN-004 push (lot indépendant, idempotent, rejets par entité) | ⚪ |
 
 ## À relire en priorité aujourd'hui (🔴)
 

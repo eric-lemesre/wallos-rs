@@ -431,6 +431,55 @@ pub struct SyncChangesResponse {
     pub full_resync_required: bool,
 }
 
+/// Une opération d'un lot de poussée locale (REQ-SYN-004).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct SyncOperationInput {
+    /// `upsert` (création/modification) ou `delete` (suppression).
+    #[schema(example = "upsert")]
+    pub op: String,
+    /// Type d'entité (`category` / `payment_method` / `payer` / `subscription`).
+    #[schema(example = "payer")]
+    pub entity_type: String,
+    /// Identifiant (UUID) **généré côté client** (REQ-SYN-001) de l'entité visée.
+    pub id: String,
+    /// Corps de l'entité pour un `upsert` (objet JSON) ; ignoré pour un `delete`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Object)]
+    pub payload: Option<serde_json::Value>,
+}
+
+/// Lot de modifications locales à pousser (REQ-SYN-004). **Idempotent** : rejouer le même lot (via
+/// l'en-tête `Idempotency-Key`, REQ-SYN-006, ou par nature — les upserts sont clés par `id`) mène au
+/// **même état final** qu'un envoi unique.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct SyncPushRequest {
+    /// Opérations à appliquer, dans l'ordre. Chacune est appliquée **indépendamment** (succès partiel).
+    pub operations: Vec<SyncOperationInput>,
+}
+
+/// Résultat d'une opération poussée (REQ-SYN-004).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct SyncOperationResult {
+    /// Type d'entité (écho de l'entrée).
+    pub entity_type: String,
+    /// Identifiant (écho de l'entrée).
+    pub id: String,
+    /// `applied` (appliquée) ou `rejected` (rejetée — les autres restent appliquées).
+    #[schema(example = "applied")]
+    pub status: String,
+    /// Motif du rejet, le cas échéant (identifie précisément l'échec).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// Réponse à une poussée locale (REQ-SYN-004) : un résultat **par opération**, dans l'ordre d'entrée.
+/// Un envoi partiellement rejeté identifie précisément les entités en échec ; les autres sont appliquées.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct SyncPushResponse {
+    /// Résultats, alignés sur les opérations de la requête.
+    pub results: Vec<SyncOperationResult>,
+}
+
 /// Une catégorie d'abonnements exposée à l'interface (REQ-CAT-001).
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct CategoryDto {
