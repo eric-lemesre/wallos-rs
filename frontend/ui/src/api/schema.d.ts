@@ -401,8 +401,9 @@ export interface paths {
          * Échéancier des prochains paiements sur une fenêtre de `days` jours (REQ-STA-005).
          * @description Énumère, pour chaque abonnement **actif** du foyer (oracle Wallos `inactive = 0`, REQ-SUB-008),
          *     **toutes** ses occurrences de paiement dans `[from, from + days]` (bornes incluses), en respectant
-         *     sa date de fin (REQ-SUB-009). `from` par défaut = date du jour (horloge serveur). Le résultat est
-         *     trié par date, puis nom, puis id (ordre déterministe).
+         *     sa date de fin (REQ-SUB-009) **et** sa fin d'essai gratuit (REQ-SUB-010 : aucun paiement dû pendant
+         *     l'essai — exclusion transverse REQ-STA-003). `from` par défaut = date du jour (horloge serveur). Le
+         *     résultat est trié par date, puis nom, puis id (ordre déterministe).
          */
         get: operations["getUpcomingPayments"];
         put?: never;
