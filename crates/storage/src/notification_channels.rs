@@ -126,6 +126,41 @@ impl<'a> NotificationChannelRepository<'a> {
         Ok(row)
     }
 
+    /// Nombre d'envois de test du foyer depuis `since`, et horodatage du plus ancien (REQ-NOT-006,
+    /// limitation de taux — fenêtre glissante persistante, correcte multi-instance).
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-NOT-006)]
+    pub async fn count_and_earliest_test_attempts(
+        &self,
+        household_id: Uuid,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(i64, Option<chrono::DateTime<chrono::Utc>>), StorageError> {
+        let row: (i64, Option<chrono::DateTime<chrono::Utc>>) = sqlx::query_as(
+            "select count(*), min(attempted_at) from notification_test_attempts \
+             where household_id = $1 and attempted_at >= $2",
+        )
+        .bind(household_id)
+        .bind(since)
+        .fetch_one(self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    /// Journalise un envoi de test du foyer (REQ-NOT-006, limitation de taux).
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec d'insertion.
+    #[requirement(REQ-NOT-006)]
+    pub async fn record_test_attempt(&self, household_id: Uuid) -> Result<(), StorageError> {
+        sqlx::query("insert into notification_test_attempts (household_id) values ($1)")
+            .bind(household_id)
+            .execute(self.pool)
+            .await?;
+        Ok(())
+    }
+
     /// Supprime un canal **du foyer de l'appelant**. Renvoie `true` si supprimé, `false` s'il n'existe
     /// pas ou appartient à un autre foyer (→ 404, jamais 403, §9).
     ///

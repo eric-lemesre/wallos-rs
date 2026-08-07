@@ -369,17 +369,41 @@ fn test_notification(as_of: chrono::NaiveDate) -> ReminderNotification {
             subscription_id: Uuid::nil().to_string(),
             name: "Test subscription".to_string(),
             due_date: due.to_string(),
-            days_until: 5,
+            // Dérivé de la date réelle (revue NOT-006 F7 : cohérent même si l'addition sature).
+            days_until: (due - as_of).num_days(),
             kind: "payment".to_string(),
         }],
     )
+}
+
+/// Envois de test autorisés par foyer sur la fenêtre glissante (revue NOT-006 F1) : l'endpoint
+/// déclenche une requête sortante vers la cible du canal — sans limite, il servirait
+/// d'amplificateur de spam et d'oracle de connectivité.
+const TEST_RATELIMIT_MAX: i64 = 5;
+/// Fenêtre de la limitation des envois de test (secondes).
+const TEST_RATELIMIT_WINDOW_SECS: i64 = 300;
+
+/// `429` avec `Retry-After` (secondes) — même forme que la limitation d'authentification
+/// (REQ-AUT-008), appliquée aux envois de test (REQ-NOT-006).
+#[requirement(REQ-NOT-006)]
+fn too_many_tests(retry_after: i64) -> Response {
+    let mut response = problem_response(
+        StatusCode::TOO_MANY_REQUESTS,
+        problem(429, "about:blank", "Too Many Requests"),
+    );
+    response.headers_mut().insert(
+        axum::http::header::RETRY_AFTER,
+        axum::http::HeaderValue::from(retry_after),
+    );
+    response
 }
 
 /// Envoie un message de **test** sur un canal enregistré du foyer (REQ-NOT-006) et renvoie un
 /// diagnostic exploitable : `sent`, ou un code d'échec stable (`http-status` + code, `timeout`,
 /// `connection-failed`, `smtp-failed`, `send-failed`) — jamais le texte brut de l'erreur (il peut
 /// refléter l'URL cible, donc un jeton). Un canal **désactivé** reste testable : le test sert
-/// précisément à valider une configuration avant de l'activer.
+/// précisément à valider une configuration avant de l'activer. Limité à 5 envois de test par
+/// foyer et par 5 minutes (429 + `Retry-After` au-delà).
 #[utoipa::path(
     post,
     path = "/notifications/channels/{id}/test",
@@ -391,6 +415,7 @@ fn test_notification(as_of: chrono::NaiveDate) -> ReminderNotification {
         (status = 401, description = "Non authentifié", body = wallos_proto::Problem, content_type = "application/problem+json"),
         (status = 404, description = "Canal inconnu ou hors du foyer", body = wallos_proto::Problem, content_type = "application/problem+json"),
         (status = 422, description = "Configuration stockée illisible pour ce type de canal", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 429, description = "Trop d'envois de test (Retry-After en secondes)", body = wallos_proto::Problem, content_type = "application/problem+json"),
         (status = 500, description = "Erreur interne", body = wallos_proto::Problem, content_type = "application/problem+json")
     )
 )]
@@ -418,7 +443,28 @@ pub async fn test_notification_channel(
         // Config stockée illisible pour ce type (ne devrait pas arriver : validée à la création).
         return invalid("config: configuration stockée illisible pour ce canal");
     };
-    let notification = test_notification(chrono::Utc::now().date_naive());
+    // Limitation de taux par foyer (revue F1) : fenêtre glissante persistante. Une tentative
+    // refusée n'est pas journalisée ; une tentative acceptée l'est AVANT l'envoi (une instance
+    // concurrente ne peut pas dépasser la limite pendant qu'un envoi est en cours).
+    let now = chrono::Utc::now();
+    let window = chrono::Duration::seconds(TEST_RATELIMIT_WINDOW_SECS);
+    match repo
+        .count_and_earliest_test_attempts(row.household_id, now - window)
+        .await
+    {
+        Ok((count, earliest)) if count >= TEST_RATELIMIT_MAX => {
+            let retry_after = earliest
+                .map(|e| (e + window - now).num_seconds().max(1))
+                .unwrap_or(TEST_RATELIMIT_WINDOW_SECS);
+            return too_many_tests(retry_after);
+        }
+        Ok(_) => {}
+        Err(_) => return internal_error(),
+    }
+    if repo.record_test_attempt(row.household_id).await.is_err() {
+        return internal_error();
+    }
+    let notification = test_notification(now.date_naive());
     let response = match channel.send(&notification).await {
         Ok(()) => TestNotificationChannelResponse {
             ok: true,
