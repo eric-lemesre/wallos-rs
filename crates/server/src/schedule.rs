@@ -37,7 +37,7 @@ fn unprocessable() -> Response {
     post,
     path = "/schedule/next-due",
     operation_id = "computeNextDue",
-    extensions(("x-requirements" = json!(["REQ-SUB-012"]))),
+    extensions(("x-requirements" = json!(["REQ-SUB-012", "REQ-SUB-014"]))),
     request_body = NextDueRequest,
     responses(
         (status = 200, description = "Prochaine échéance", body = NextDueResponse, content_type = "application/json"),
@@ -46,6 +46,7 @@ fn unprocessable() -> Response {
     )
 )]
 #[requirement(REQ-SUB-012)]
+#[requirement(REQ-SUB-014)]
 pub async fn compute_next_due(
     // Auth requise ; le calcul est sans état (pas de portée foyer).
     AuthActor(_actor): AuthActor,
