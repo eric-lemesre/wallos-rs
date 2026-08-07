@@ -244,6 +244,16 @@
     "delete": "Remove",
     "empty": "No channel configured",
     "loadError": "Could not load channels",
-    "rejected": "Channel rejected (invalid configuration, or an internal/loopback address is not allowed)"
+    "rejected": "Channel rejected (invalid configuration, or an internal/loopback address is not allowed)",
+    "telegram": "Telegram",
+    "discord": "Discord",
+    "gotify": "Gotify",
+    "pushover": "Pushover",
+    "botToken": "Bot token",
+    "chatId": "Chat ID",
+    "token": "Application token",
+    "userKey": "User key",
+    "botUsername": "Bot name (optional)",
+    "botAvatarUrl": "Bot avatar URL (optional)"
   }
 }

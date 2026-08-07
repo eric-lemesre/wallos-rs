@@ -244,6 +244,16 @@
     "delete": "Supprimer",
     "empty": "Aucun canal configuré",
     "loadError": "Impossible de charger les canaux",
-    "rejected": "Canal refusé (configuration invalide, ou adresse interne/de bouclage non autorisée)"
+    "rejected": "Canal refusé (configuration invalide, ou adresse interne/de bouclage non autorisée)",
+    "telegram": "Telegram",
+    "discord": "Discord",
+    "gotify": "Gotify",
+    "pushover": "Pushover",
+    "botToken": "Jeton du bot",
+    "chatId": "Identifiant de conversation",
+    "token": "Jeton d'application",
+    "userKey": "Clé utilisateur",
+    "botUsername": "Nom du bot (optionnel)",
+    "botAvatarUrl": "URL de l'avatar du bot (optionnel)"
   }
 }

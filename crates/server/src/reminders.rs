@@ -21,7 +21,10 @@ use uuid::Uuid;
 use wallos_core::billing::{BillingCycle, BillingUnit};
 use wallos_core::requirement;
 use wallos_core::{DueReminder, ReminderCandidate, due_reminders, next_due};
-use wallos_notifier::{Channel, Email, EmailConfig, ReminderItem, ReminderNotification, Webhook};
+use wallos_notifier::{
+    Channel, Discord, Email, EmailConfig, Gotify, Pushover, ReminderItem, ReminderNotification,
+    Telegram, Webhook,
+};
 use wallos_proto::{
     ReminderDto, ReminderSettingResponse, RemindersResponse, RunRemindersResponse,
     SetReminderSettingRequest, problem,
@@ -108,20 +111,21 @@ fn due_with_kind(rows: &[&ReminderScanRow], as_of: NaiveDate) -> Vec<(DueReminde
 }
 
 /// Construit un canal d'envoi ([`Channel`]) à partir d'une ligne stockée (REQ-NOT-005 webhook,
-/// REQ-NOT-003 e-mail). `contact` = `(email, langue)` du titulaire du foyer, requis pour l'e-mail.
+/// REQ-NOT-003 e-mail, REQ-NOT-004 messageries). `contact` = `(email, langue)` du titulaire du
+/// foyer : requis pour l'e-mail, la langue localise aussi les messageries (repli anglais sinon).
 /// `None` si le type est inconnu, la configuration illisible, ou le contact manquant — ne fait jamais
 /// échouer le cron.
 #[requirement(REQ-NOT-005)]
 #[requirement(REQ-NOT-003)]
+#[requirement(REQ-NOT-004)]
 fn channel_from_row(
     row: &NotificationChannelRow,
     contact: Option<&(String, String)>,
 ) -> Option<Channel> {
+    let language = contact.map_or("en", |(_, language)| language.as_str());
+    let get = |key: &str| row.config.get(key).and_then(|v| v.as_str());
     match row.kind.as_str() {
-        "webhook" => {
-            let url = row.config.get("url").and_then(|v| v.as_str())?;
-            Some(Channel::Webhook(Webhook::new(url)))
-        }
+        "webhook" => Some(Channel::Webhook(Webhook::new(get("url")?))),
         "email" => {
             let (recipient, language) = contact?;
             let config = email_config_from(&row.config)?;
@@ -130,6 +134,33 @@ fn channel_from_row(
                 recipient.clone(),
                 language.clone(),
             )))
+        }
+        "telegram" => {
+            let mut telegram = Telegram::new(get("bot_token")?, get("chat_id")?, language);
+            // Base d'API repointable en test uniquement (posable par SQL direct, jamais via l'API —
+            // la validation à l'enregistrement jette toute clé inconnue).
+            if let Some(api_base) = get("api_base") {
+                telegram = telegram.with_api_base(api_base);
+            }
+            Some(Channel::Telegram(telegram))
+        }
+        "discord" => Some(Channel::Discord(Discord::new(
+            get("url")?,
+            get("username").map(String::from),
+            get("avatar_url").map(String::from),
+            language,
+        ))),
+        "gotify" => Some(Channel::Gotify(Gotify::new(
+            get("url")?,
+            get("token")?,
+            language,
+        ))),
+        "pushover" => {
+            let mut pushover = Pushover::new(get("user_key")?, get("token")?, language);
+            if let Some(api_base) = get("api_base") {
+                pushover = pushover.with_api_base(api_base);
+            }
+            Some(Channel::Pushover(pushover))
         }
         _ => None,
     }
