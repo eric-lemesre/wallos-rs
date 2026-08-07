@@ -30,6 +30,11 @@ test.describe("Import et export des données", { tag: ["@design", "@REQ-SUB-016"
       firstPayment: "2025-01-31",
     });
 
+    // ATTENDRE la persistance avant d'exporter (course UI → serveur : le clic d'export peut
+    // précéder le commit de la création — flake observé en CI, même pattern que reminder-idempotence).
+    await page.reload();
+    await expect.poll(() => app.subscriptionNames()).toContain("Netflix");
+
     // Export : l'enveloppe contient l'abonnement créé.
     await app.exportData();
     await expect.poll(() => app.exportedBundle()).toContain("Netflix");
