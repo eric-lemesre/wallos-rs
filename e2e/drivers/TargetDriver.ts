@@ -1,3 +1,4 @@
+import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import type { AppDriver, MoneyInput, SignupInput } from "./AppDriver";
@@ -234,6 +235,21 @@ export class TargetDriver implements AppDriver, Harness {
   async refreshSubscriptions(): Promise<void> {
     await this.page.getByTestId("subscriptions-apply").click();
     await this.page.getByTestId("subscriptions-total").waitFor({ state: "visible", timeout: 5000 });
+  }
+
+  /**
+   * Barrière de persistance : re-rafraîchit la liste jusqu'à ce que tous les `names` soient
+   * présents. À appeler entre des créations (UI → serveur) et toute lecture de la liste : un
+   * rafraîchissement unique peut précéder le commit de la dernière création (famille de flakes
+   * observée en CI et en suite parallèle — OQ-012).
+   */
+  async awaitSubscriptions(names: string[]): Promise<void> {
+    await expect
+      .poll(async () => {
+        await this.refreshSubscriptions();
+        return this.subscriptionNames();
+      })
+      .toEqual(expect.arrayContaining(names));
   }
 
   async filterSubscriptionsByCategory(category: string): Promise<void> {

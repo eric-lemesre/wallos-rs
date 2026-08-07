@@ -20,13 +20,23 @@ test.describe("Abonnement désactivé", { tag: ["@design", "@REQ-SUB-008"] }, ()
     await app.createSubscription({
       name: "Netflix", amount: "9.99", currency: "EUR", unit: "month", interval: "1", firstPayment: "2030-01-31",
     });
-    await app.refreshSubscriptions();
-    expect(await app.subscriptionsTotal()).toContain("9.99");
+    // Poll AVEC re-rafraîchissement : le premier refresh peut précéder le commit de la création.
+    await expect
+      .poll(async () => {
+        await app.refreshSubscriptions();
+        return app.subscriptionsTotal();
+      })
+      .toContain("9.99");
 
     // Désactivation : l'abonnement reste listé, mais le total tombe (exclu de l'agrégat).
     await app.deactivateSubscription("Netflix");
     expect(await app.subscriptionListed("Netflix")).toBe(true);
-    // Le total, après rechargement, n'inclut plus le montant du désactivé (attente robuste).
-    await expect.poll(() => app.subscriptionsTotal()).not.toContain("9.99");
+    // Même barrière côté décroissance : la désactivation doit être committée ET relue.
+    await expect
+      .poll(async () => {
+        await app.refreshSubscriptions();
+        return app.subscriptionsTotal();
+      })
+      .not.toContain("9.99");
   });
 });
