@@ -482,6 +482,11 @@ pub async fn run_reminders(
     // Phase de réessai (REQ-NOT-007) : rejoue les livraisons dues, réclamées atomiquement (une
     // instance concurrente ne rejoue jamais la même — esprit REQ-NOT-002).
     let (retried, abandoned) = retry_due_deliveries(&deliveries, &contacts).await;
+    // Purge au fil de l'eau (revue NOT-007 F3) : un abandon reste visible 30 jours puis disparaît
+    // — la table ne croît pas indéfiniment sur un canal durablement cassé. Best-effort.
+    let _ = deliveries
+        .purge_abandoned_before(Utc::now() - chrono::Duration::days(30))
+        .await;
 
     Json(RunRemindersResponse {
         as_of: as_of.format("%Y-%m-%d").to_string(),
@@ -502,10 +507,13 @@ async fn retry_due_deliveries(
     contacts: &BTreeMap<Uuid, (String, String)>,
 ) -> (usize, usize) {
     let now = Utc::now();
-    // Échéance provisoire posée au claim ; corrigée après le résultat (inutile en cas de succès ou
-    // d'abandon). Politique pure : délai de la tentative qui vient d'être réclamée.
+    // Échéance provisoire posée au claim, recalée après le résultat. CONSERVATRICE (revue NOT-007
+    // F1) : le délai MAXIMAL de la politique — si le processus meurt entre le claim et la
+    // conclusion, la livraison n'est jamais réessayée plus tôt que ce que la politique autorise.
+    let max_delay =
+        wallos_core::retry_delay_minutes(wallos_core::MAX_DELIVERY_ATTEMPTS - 1).unwrap_or(1440);
     let due = match deliveries
-        .claim_due_retries(now, now + chrono::Duration::minutes(60))
+        .claim_due_retries(now, now + chrono::Duration::minutes(max_delay))
         .await
     {
         Ok(due) => due,

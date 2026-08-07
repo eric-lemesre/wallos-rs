@@ -1365,6 +1365,8 @@ export interface components {
             id: string;
             /**
              * @description Code de diagnostic du dernier échec (`http-status`, `timeout`, `connection-failed`, …).
+             *     `in-flight` : livraison ouverte dont l'envoi initial n'a pas encore conclu (revue F5 —
+             *     visible seulement si le processus s'est interrompu en plein envoi).
              * @example connection-failed
              */
             last_code: string;
@@ -1591,7 +1593,8 @@ export interface components {
              */
             emitted: number;
             /**
-             * @description Livraisons en échec **réessayées** pendant cette exécution (REQ-NOT-007).
+             * @description Livraisons en échec dont le réessai a été **tenté** pendant cette exécution (REQ-NOT-007).
+             *     Un réessai qui échoue en atteignant la borne compte aussi dans `abandoned` (revue F4).
              * @example 0
              */
             retried: number;
