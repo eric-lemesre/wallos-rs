@@ -35,7 +35,8 @@ test.describe("Agrégation multi-devises — mode dégradé", { tag: ["@design",
     expect(await app.aggregateIncompleteVisible()).toBe(true);
     // La part convertible reste affichée : le total n'est pas silencieusement amputé/nul.
     const total = await app.readAggregateTotal();
+    // Montant localisé (REQ-CUR-006) : symbole de la devise cible, valeur intacte.
     expect(total).toContain("20");
-    expect(total).toContain("USD");
+    expect(total).toContain("$");
   });
 });
