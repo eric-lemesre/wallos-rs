@@ -297,7 +297,7 @@ requirements:
 - id: REQ-NOT-004
   title: Canaux de messagerie tiers
   domain: notifications
-  status: draft
+  status: verified
   criticality: medium
   layer:
   - api

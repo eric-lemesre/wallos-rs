@@ -81,7 +81,7 @@ depends_on: [REQ-NOT-001, REQ-I18N-001]
 id: REQ-NOT-004
 title: Canaux de messagerie tiers
 domain: notifications
-status: draft
+status: verified
 criticality: medium
 layer: [api, ui]
 e2e: optional
