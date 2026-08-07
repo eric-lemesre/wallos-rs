@@ -1691,3 +1691,103 @@ async fn cleartext_legacy_config_still_sends(pool: PgPool) {
     assert_eq!(body_json(resp).await["emitted"], 1);
     assert_eq!(captured.lock().unwrap().len(), 1);
 }
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SEC-004, case = "l'envoi de test déchiffre un canal réellement chiffré (revue F4)")]
+async fn test_endpoint_decrypts_encrypted_channel(pool: PgPool) {
+    let web = account(&pool, "sec004-testep@example.com").await;
+    let (base, captured) = spawn_capture_receiver().await;
+    let created = body_json(
+        create_channel(
+            &pool,
+            &web,
+            "telegram",
+            json!({ "bot_token": "123:s3cr3t-token", "chat_id": "42" }),
+        )
+        .await,
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_string();
+    // Ajout d'api_base par FUSION jsonb : le bot_token reste la valeur CHIFFRÉE d'origine.
+    sqlx::query(
+        "update notification_channels set config = config || jsonb_build_object('api_base', $2::text) where id = $1",
+    )
+    .bind(Uuid::parse_str(&id).unwrap())
+    .bind(&base)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let resp = test_channel(&pool, Some(&web), &id).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(body_json(resp).await["ok"], true);
+    // Le chemin Telegram reçu contient le jeton EN CLAIR : /test a bien déchiffré.
+    let requests = captured.lock().unwrap().clone();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].path, "/bot123:s3cr3t-token/sendMessage");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SEC-004, case = "clé changée : le canal chiffré est ignoré, aucun envoi, échec fermé (revue F6)")]
+async fn changed_key_ignores_encrypted_channel(pool: PgPool) {
+    let web = account(&pool, "sec004-rotate@example.com").await;
+    assert_eq!(
+        send(
+            &pool,
+            "POST",
+            "/api/v1/subscriptions",
+            Some(&web),
+            Some(json!({
+                "name": "Netflix", "amount": "9.99", "currency": "EUR",
+                "cycle": { "unit": "month", "interval": 1 }, "first_payment": "2026-08-07",
+                "active": true
+            })),
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+    let (base, captured) = spawn_capture_receiver().await;
+    let created = body_json(
+        create_channel(
+            &pool,
+            &web,
+            "telegram",
+            json!({ "bot_token": "123:abc", "chat_id": "42" }),
+        )
+        .await,
+    )
+    .await;
+    sqlx::query(
+        "update notification_channels set config = config || jsonb_build_object('api_base', $2::text) where id = $1",
+    )
+    .bind(Uuid::parse_str(created["id"].as_str().unwrap()).unwrap())
+    .bind(&base)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Le cron tourne avec une AUTRE clé : le secret est indéchiffrable -> canal ignoré,
+    // aucun blob chiffré n'est jamais envoyé comme s'il était le jeton.
+    let cron = app_with_db_cron_key(
+        Db::from_pool(pool.clone()),
+        CronToken(Some(CRON_SECRET.to_string())),
+        wallos_server::EncryptionKey(wallos_core::secrets::derive_key("autre-clef")),
+    );
+    let resp = cron
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/internal/run-reminders?as_of=2026-08-06")
+                .header("x-cron-token", CRON_SECRET)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(body_json(resp).await["emitted"], 1);
+    assert!(
+        captured.lock().unwrap().is_empty(),
+        "aucun envoi avec une clé changée"
+    );
+}

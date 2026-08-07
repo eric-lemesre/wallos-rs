@@ -131,13 +131,28 @@ pub(crate) fn channel_from_row(
     // chiffrée sans clé (ou avec une mauvaise clé) rend le canal inconstructible -> `None`
     // (ignoré par le cron, `unreadable-config` au réessai) — jamais un secret chiffré envoyé
     // comme s'il était le vrai jeton.
-    let secret = |key: &str| -> Option<String> {
-        let value = get(key)?;
-        if wallos_core::secrets::is_encrypted(value) {
-            wallos_core::secrets::decrypt(&encryption?, value)
-        } else {
-            Some(value.to_string())
+    let secret = |field: &str| -> Option<String> {
+        let value = get(field)?;
+        if !wallos_core::secrets::is_encrypted(value) {
+            return Some(value.to_string());
         }
+        let aad = wallos_core::secrets::channel_secret_aad(
+            &row.household_id.to_string(),
+            &row.kind,
+            field,
+        );
+        let Some(key) = encryption else {
+            // Diagnostic opérateur (revue SEC-004 F5) : jamais le secret, le chiffré ni la clé.
+            tracing::warn!(channel_id = %row.id, field, reason = "missing-key",
+                "secret chiffré illisible : canal ignoré");
+            return None;
+        };
+        let plain = wallos_core::secrets::decrypt(&key, value, &aad);
+        if plain.is_none() {
+            tracing::warn!(channel_id = %row.id, field, reason = "decrypt-failed",
+                "secret chiffré illisible (clé changée ou valeur altérée) : canal ignoré");
+        }
+        plain
     };
     match row.kind.as_str() {
         "webhook" => Some(Channel::Webhook(Webhook::new(get("url")?))),

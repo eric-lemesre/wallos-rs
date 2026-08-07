@@ -303,7 +303,19 @@ pub async fn create_notification_channel(
         };
         for secret in SECRET_KEYS {
             if let Some(value) = config.get(secret).and_then(|v| v.as_str()) {
-                match wallos_core::secrets::encrypt(&key, value) {
+                // Une valeur déjà préfixée serait re-chiffrée puis indéchiffrable à l'envoi
+                // (revue SEC-004 F3) : refus explicite.
+                if wallos_core::secrets::is_encrypted(value) {
+                    return invalid("config: une valeur déjà chiffrée n'est pas un secret valide");
+                }
+                // AAD = (foyer, type, champ) : un texte chiffré est inutilisable hors de son
+                // contexte (revue SEC-004 F2).
+                let aad = wallos_core::secrets::channel_secret_aad(
+                    &actor.household_id().to_string(),
+                    kind,
+                    secret,
+                );
+                match wallos_core::secrets::encrypt(&key, value, &aad) {
                     Some(sealed) => config[secret] = serde_json::Value::String(sealed),
                     None => return internal_error(),
                 }
