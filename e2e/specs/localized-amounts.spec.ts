@@ -28,7 +28,8 @@ test.describe("Formatage localisé des montants", { tag: ["@design", "@REQ-CUR-0
     await app.createSubscription({
       name, amount: "1234.5", currency: "EUR", unit: "month", interval: "1", firstPayment: future,
     });
-    await page.reload();
+    // Barrière de persistance : la création committée ET relue avant toute assertion (OQ-012).
+    await app.awaitSubscriptions([name]);
 
     // Anglais (défaut du navigateur de test) : symbole avant, point décimal, virgule de milliers.
     await app.setLanguage("en");

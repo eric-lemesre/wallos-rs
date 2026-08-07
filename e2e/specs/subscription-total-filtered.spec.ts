@@ -20,7 +20,7 @@ test.describe("Total et filtre actif", { tag: ["@design", "@REQ-STA-007"] }, () 
     await app.createSubscription({
       name: "Netflix", amount: "9.99", currency: "EUR", unit: "month", interval: "1", firstPayment: "2030-01-31",
     });
-    await app.refreshSubscriptions();
+    await app.awaitSubscriptions(["Netflix"]);
 
     // Sans filtre : aucune indication de filtre sur le total.
     expect(await app.totalIndicatesFiltered()).toBe(false);

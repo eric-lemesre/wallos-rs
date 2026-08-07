@@ -26,8 +26,8 @@ test.describe("Période d'essai gratuit", { tag: ["@design", "@REQ-SUB-010"] }, 
       firstPayment: "2030-01-15", trialEnd,
     });
 
-    // Recharge la liste et vérifie le badge d'essai sur la ligne.
-    await app.searchSubscriptions("");
+    // Barrière de persistance puis vérifie le badge d'essai sur la ligne (OQ-012).
+    await app.awaitSubscriptions([`EnEssai ${stamp}`]);
     const row = page.getByTestId("subscription-row").filter({ hasText: `EnEssai ${stamp}` });
     await expect(row.getByTestId("subscription-trial")).toBeVisible();
 

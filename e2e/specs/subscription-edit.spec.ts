@@ -20,11 +20,17 @@ test.describe("Modification d'abonnement", { tag: ["@design", "@REQ-SUB-004"] },
     await app.createSubscription({
       name: "Netflix", amount: "9.99", currency: "EUR", unit: "month", interval: "1", firstPayment: "2030-01-31",
     });
-    await app.refreshSubscriptions();
+    await app.awaitSubscriptions(["Netflix"]);
     expect(await app.subscriptionAmount("Netflix")).toContain("9.99");
 
     // Modification en place : le nouveau montant est persisté et réaffiché après recalcul serveur.
     await app.editSubscriptionAmount("Netflix", "19.99");
-    expect(await app.subscriptionAmount("Netflix")).toContain("19.99");
+    // Poll AVEC re-rafraîchissement : la mise à jour doit être committée ET relue (OQ-012).
+    await expect
+      .poll(async () => {
+        await app.refreshSubscriptions();
+        return app.subscriptionAmount("Netflix");
+      })
+      .toContain("19.99");
   });
 });

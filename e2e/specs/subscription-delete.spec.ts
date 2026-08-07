@@ -26,14 +26,18 @@ test.describe("Suppression d'abonnement", { tag: ["@design", "@REQ-SUB-005"] }, 
       name: "Netflix", amount: "9.99", currency: "EUR", unit: "month", interval: "1",
       firstPayment: "2030-01-15",
     });
-    // Le formulaire et la liste sont indépendants : on déclenche un rechargement (« Appliquer ») pour
-    // que la liste reflète la création.
-    await app.searchSubscriptions("");
-    await expect.poll(() => app.subscriptionNames()).toContain("Netflix");
+    // Barrière de persistance : la création committée ET relue (OQ-012).
+    await app.awaitSubscriptions(["Netflix"]);
 
-    // Supprime : l'abonnement disparaît de la liste...
+    // Supprime : l'abonnement disparaît de la liste (poll AVEC re-rafraîchissement : la
+    // suppression doit être committée ET relue)...
     await app.deleteSubscription("Netflix");
-    await expect.poll(() => app.subscriptionNames()).not.toContain("Netflix");
+    await expect
+      .poll(async () => {
+        await app.refreshSubscriptions();
+        return app.subscriptionNames();
+      })
+      .not.toContain("Netflix");
 
     // ...et la suppression est exposée comme pierre tombale à la synchronisation.
     await expect.poll(() => app.tombstonedEntityTypes()).toContain("subscription");

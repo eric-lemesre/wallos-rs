@@ -25,14 +25,16 @@ test.describe("Liste et filtres d'abonnements", { tag: ["@design", "@REQ-SUB-006
     });
 
     // La liste affiche les deux abonnements et un total qui les agrège (9.99 + 5.99 = 15.98 EUR).
-    await app.refreshSubscriptions();
+    // Barrière de persistance : les deux créations doivent être committées ET relues (OQ-012).
+    await app.awaitSubscriptions(["Netflix", "Spotify"]);
     expect(await app.subscriptionListed("Netflix")).toBe(true);
     expect(await app.subscriptionListed("Spotify")).toBe(true);
     expect(await app.subscriptionsTotal()).toContain("15.98");
 
     // Un filtre catégorie ne correspondant à aucun abonnement vide la liste : le total suit (nul).
+    // Poll : le fetch filtré doit avoir répondu avant lecture (OQ-012).
     await app.filterSubscriptionsByCategory("99999999-9999-9999-9999-999999999999");
-    expect(await app.subscriptionsEmpty()).toBe(true);
-    expect(await app.subscriptionsTotal()).not.toContain("15.98");
+    await expect.poll(() => app.subscriptionsEmpty()).toBe(true);
+    await expect.poll(() => app.subscriptionsTotal()).not.toContain("15.98");
   });
 });

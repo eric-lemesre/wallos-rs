@@ -212,4 +212,16 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   exécuté sur chaque PR (signal visible) mais **non bloquant** tant qu'il n'est pas fiabilisé.
 - **Suite à traiter** : stabiliser `e2e` (retries Playwright ciblés, `expect.poll` sur les lectures qui
   courent après le rendu, attente d'états déterministes) **puis** rétablir `e2e` en check requis.
-- **Statut** : open
+- **Résolution (2026-08-07, demande Eric)** : campagne de stabilisation menée en deux temps.
+  (1) Au fil de la session : 7 flakes corrigés en CI (reminder-idempotence, language, import-export,
+  exchange, monthly/yearly-cost, localized-dates ICU). (2) Campagne dédiée : la **famille de courses**
+  identifiée — un rafraîchissement/fetch unique peut précéder le commit d'une création/mutation
+  partie de l'UI — est traitée par une **barrière de persistance centrale**
+  (`TargetDriver.awaitSubscriptions(names)` : poll AVEC re-rafraîchissement) appliquée à 13 specs,
+  et par des polls avec re-fetch sur toutes les lectures post-mutation. Découverte annexe : le rate
+  limiting AUT-008 par IP pollue les runs locaux répétés sur base persistante (purger
+  `login_attempts` entre les runs ; sans objet en CI, base fraîche). Validation : suites complètes
+  locales (94 tests, chromium+webkit, parallélisme max, **zéro retry** — la CI en a un) : 3 runs
+  verts sur 4, flake résiduel ~1/380 exécutions sans retry. `e2e` **rétabli en check requis**
+  (`ci`+`frontend`+`e2e`) après merge vert de la PR de stabilisation.
+- **Statut** : resolved

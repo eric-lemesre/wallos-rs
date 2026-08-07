@@ -29,18 +29,40 @@ test.describe("Recherche et tri des abonnements", { tag: ["@design", "@REQ-SUB-0
       name: "Gamma", amount: "5.00", currency: "EUR", unit: "month", interval: "1", firstPayment: "2030-01-15",
     });
 
+    // Barrière de persistance : les trois créations committées ET relues avant le tri — le tri ne
+    // re-rafraîchit pas en boucle, un poll aval ne rattraperait pas une liste incomplète (OQ-012).
+    await app.awaitSubscriptions(["Alpha", "Beta", "Gamma"]);
+
     // Tri par montant décroissant : Alpha (30) > Beta (10/mois) ≈ Gamma (5) → Alpha, Beta, Gamma.
     // `expect.poll` réessaie la lecture jusqu'à ce que la liste rechargée reflète l'ordre attendu.
     await app.sortSubscriptionsBy("amount");
-    await expect.poll(() => app.subscriptionNames()).toEqual(["Alpha", "Beta", "Gamma"]);
+    // Polls AVEC re-rafraîchissement (OQ-012) : le changement de critère ne déclenche le fetch
+    // qu'une fois — si ce fetch court-circuite sous charge, relire le même DOM ne suffit pas ;
+    // le bouton « appliquer » ré-exécute la requête avec les critères courants.
+    await expect
+      .poll(async () => {
+        await app.refreshSubscriptions();
+        return app.subscriptionNames();
+      })
+      .toEqual(["Alpha", "Beta", "Gamma"]);
 
     // Recherche sur le nom, insensible à la casse : « alpha » ne ramène qu'Alpha.
     await app.searchSubscriptions("alpha");
-    await expect.poll(() => app.subscriptionNames()).toEqual(["Alpha"]);
+    await expect
+      .poll(async () => {
+        await app.refreshSubscriptions();
+        return app.subscriptionNames();
+      })
+      .toEqual(["Alpha"]);
 
     // Recherche vidée : les trois réapparaissent, triés par nom (défaut).
     await app.searchSubscriptions("");
     await app.sortSubscriptionsBy("name");
-    await expect.poll(() => app.subscriptionNames()).toEqual(["Alpha", "Beta", "Gamma"]);
+    await expect
+      .poll(async () => {
+        await app.refreshSubscriptions();
+        return app.subscriptionNames();
+      })
+      .toEqual(["Alpha", "Beta", "Gamma"]);
   });
 });

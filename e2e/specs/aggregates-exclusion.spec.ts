@@ -22,16 +22,27 @@ test.describe("Exclusion transverse des agrégats", { tag: ["@design", "@REQ-STA
     await app.createSubscription({
       name: "Spotify", amount: "9.99", currency: "EUR", unit: "month", interval: "1", firstPayment: "2030-01-31",
     });
-    await app.refreshSubscriptions();
+    await app.awaitSubscriptions(["Spotify"]);
     expect(await app.subscriptionsTotal()).toContain("9.99");
 
-    // Désactivation : l'abonnement reste listé mais sort du total.
+    // Désactivation : l'abonnement reste listé mais sort du total. Polls AVEC re-rafraîchissement :
+    // la bascule doit être committée ET relue (OQ-012).
     await app.deactivateSubscription("Spotify");
     expect(await app.subscriptionListed("Spotify")).toBe(true);
-    await expect.poll(() => app.subscriptionsTotal()).not.toContain("9.99");
+    await expect
+      .poll(async () => {
+        await app.refreshSubscriptions();
+        return app.subscriptionsTotal();
+      })
+      .not.toContain("9.99");
 
     // Réactivation : réintégré immédiatement, le total le reflète de nouveau (critère #2).
     await app.reactivateSubscription("Spotify");
-    await expect.poll(() => app.subscriptionsTotal()).toContain("9.99");
+    await expect
+      .poll(async () => {
+        await app.refreshSubscriptions();
+        return app.subscriptionsTotal();
+      })
+      .toContain("9.99");
   });
 });

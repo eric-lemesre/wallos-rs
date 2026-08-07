@@ -28,7 +28,14 @@ test.describe("Date de fin d'abonnement", { tag: ["@design", "@REQ-SUB-009"] }, 
       firstPayment: "2020-01-15", endDate: "2020-12-31",
     });
 
-    await app.refreshSubscriptions();
+    // Poll AVEC re-rafraîchissement jusqu'à présence des deux lignes (le premier refresh peut
+    // précéder le commit de la dernière création — flake observé en suite parallèle webkit).
+    await expect
+      .poll(async () => {
+        await app.refreshSubscriptions();
+        return app.subscriptionNames();
+      })
+      .toEqual(expect.arrayContaining(["EnCours", "Termine"]));
     expect(await app.subscriptionEnded("Termine")).toBe(true);
     // Le total ne compte que l'abonnement en cours (10.00), pas le terminé.
     expect(await app.subscriptionsTotal()).toContain("10.00");
