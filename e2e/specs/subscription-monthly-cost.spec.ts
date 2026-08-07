@@ -53,8 +53,15 @@ test.describe("Coût mensuel normalisé", { tag: ["@legacy", "@REQ-STA-001"] }, 
         firstPayment: "2030-01-31",
       });
     }
-    // La liste ne se rafraîchit pas seule : on la recharge avant de lire (comme subscriptions-list).
-    await app.refreshSubscriptions();
+    // La liste ne se rafraîchit pas seule ; et le rafraîchissement peut précéder le commit de la
+    // DERNIÈRE création (course UI -> serveur, flake observé en CI) : poll AVEC re-rafraîchissement
+    // jusqu'à ce que toutes les lignes soient présentes.
+    await expect
+      .poll(async () => {
+        await app.refreshSubscriptions();
+        return app.subscriptionNames();
+      })
+      .toEqual(expect.arrayContaining(names));
     for (const [i, v] of sample.entries()) {
       // Le coût mensuel affiché correspond EXACTEMENT à la valeur de l'oracle (facteur capturé + arrondi EUR).
       expect(await app.subscriptionMonthlyCost(names[i])).toContain(v.displayed_eur);

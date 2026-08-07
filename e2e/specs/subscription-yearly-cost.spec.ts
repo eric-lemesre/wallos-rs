@@ -46,7 +46,14 @@ test.describe("Coût annuel normalisé", { tag: ["@legacy", "@REQ-STA-002"] }, (
         firstPayment: "2030-01-31",
       });
     }
-    await app.refreshSubscriptions();
+    // Poll AVEC re-rafraîchissement : le premier refresh peut précéder le commit de la dernière
+    // création (course UI -> serveur, même flake que le spec de coût mensuel).
+    await expect
+      .poll(async () => {
+        await app.refreshSubscriptions();
+        return app.subscriptionNames();
+      })
+      .toEqual(expect.arrayContaining(names));
     for (const [i, v] of sample.entries()) {
       expect(await app.subscriptionYearlyCost(names[i])).toContain(v.displayed_eur);
     }
