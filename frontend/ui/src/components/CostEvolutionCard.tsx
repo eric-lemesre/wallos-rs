@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
-import { formatAmount } from "../lib/format";
+import { formatAmount, formatMonth } from "../lib/format";
 import type { components } from "../api/client";
 
 type CostEvolutionResponse = components["schemas"]["CostEvolutionResponse"];
@@ -66,7 +66,7 @@ export function CostEvolutionCard() {
             const ratio = max > 0 ? Math.round((Number(p.total) / max) * 100) : 0;
             return (
               <li key={p.month} data-testid="evolution-point">
-                <span data-testid="evolution-month">{p.month}</span>
+                <span data-testid="evolution-month">{formatMonth(p.month, i18n.language)}</span>
                 <span data-testid="evolution-total">
                   {formatAmount(p.total, result.currency, i18n.language)}
                 </span>

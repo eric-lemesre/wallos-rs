@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
-import { formatAmount } from "../lib/format";
+import { formatAmount, formatDate } from "../lib/format";
 import type { components } from "../api/client";
 
 type UpcomingPaymentsResponse = components["schemas"]["UpcomingPaymentsResponse"];
@@ -61,7 +61,7 @@ export function UpcomingPaymentsCard() {
           <ul data-testid="upcoming-list">
             {result.payments.map((p, index) => (
               <li key={`${p.subscription_id}-${p.date}-${index}`} data-testid="upcoming-row">
-                <span data-testid="upcoming-date">{p.date}</span>
+                <span data-testid="upcoming-date">{formatDate(p.date, i18n.language)}</span>
                 <span data-testid="upcoming-name">{p.name}</span>
                 <span data-testid="upcoming-amount">
                   {formatAmount(p.amount, p.currency, i18n.language)}

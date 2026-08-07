@@ -40,7 +40,7 @@ describe("SubscriptionForm", () => {
     renderForm();
     await user.type(screen.getByTestId("sub-name"), "Netflix");
     await user.click(screen.getByTestId("sub-submit"));
-    expect(await screen.findByTestId("sub-success")).toHaveTextContent("2030-01-31");
+    expect(await screen.findByTestId("sub-success")).toHaveTextContent("Jan 31, 2030");
   });
 
   it("affiche l'erreur de validation par champ", async () => {
