@@ -25,7 +25,8 @@ export default defineConfig({
       cwd: "..",
       // e2e servi en HTTP : on désactive l'attribut Secure du cookie (webkit ne stocke pas un
       // cookie Secure sur http://localhost). En production (HTTPS) il reste actif par défaut.
-      env: { DATABASE_URL, SESSION_COOKIE_SECURE: "false" },
+      // CRON_TOKEN : active l'endpoint d'opérateur /internal/run-reminders (REQ-NOT-002).
+      env: { DATABASE_URL, SESSION_COOKIE_SECURE: "false", CRON_TOKEN: "e2e-cron-token" },
       url: "http://localhost:3000/api/v1/health",
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,

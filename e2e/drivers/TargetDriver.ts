@@ -625,6 +625,26 @@ export class TargetDriver implements AppDriver, Harness {
       .allInnerTexts();
   }
 
+  // --- Ordonnanceur de rappels (REQ-NOT-002) ---
+
+  /**
+   * Déclenche l'ordonnanceur de rappels (endpoint d'opérateur, secret injecté par la config e2e)
+   * et renvoie le nombre de rappels émis. `asOf` : date de référence YYYY-MM-DD.
+   */
+  async runReminders(asOf: string, cronToken: string): Promise<number> {
+    return this.page.evaluate(
+      async ({ asOf, cronToken }) => {
+        const res = await fetch(`/api/v1/internal/run-reminders?as_of=${asOf}`, {
+          method: "POST",
+          headers: { "x-cron-token": cronToken },
+        });
+        const body = (await res.json()) as { emitted: number };
+        return body.emitted;
+      },
+      { asOf, cronToken },
+    );
+  }
+
   // --- Canaux de notification (REQ-NOT-005/006) ---
 
   /** Ajoute un canal webhook depuis la carte des canaux de notification. */

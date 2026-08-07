@@ -304,7 +304,7 @@ pub struct RunRemindersQuery {
     post,
     path = "/internal/run-reminders",
     operation_id = "runReminders",
-    extensions(("x-requirements" = json!(["REQ-NOT-001"]))),
+    extensions(("x-requirements" = json!(["REQ-NOT-001", "REQ-NOT-002"]))),
     params(("as_of" = Option<String>, Query, description = "Date de référence YYYY-MM-DD (tests)")),
     responses(
         (status = 200, description = "Rappels émis", body = RunRemindersResponse, content_type = "application/json"),
@@ -314,6 +314,7 @@ pub struct RunRemindersQuery {
     )
 )]
 #[requirement(REQ-NOT-001)]
+#[requirement(REQ-NOT-002)]
 pub async fn run_reminders(
     State(db): State<Db>,
     Extension(CronToken(cron_token)): Extension<CronToken>,

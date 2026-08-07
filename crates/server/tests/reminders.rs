@@ -357,3 +357,122 @@ async fn authz_anon_run_reminders(pool: PgPool) {
     let r = run_cron(&pool, None, "2026-08-06").await;
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 }
+
+// --- Idempotence de l'ordonnanceur (REQ-NOT-002) ---
+
+/// Récepteur HTTP local comptant les charges utiles POST reçues sur `/hook` (prouve qu'un envoi
+/// sortant a eu lieu — ou non — au-delà du compteur `emitted` de la réponse du cron).
+async fn spawn_counting_receiver() -> (String, std::sync::Arc<std::sync::Mutex<usize>>) {
+    use axum::extract::State;
+    use axum::routing::post;
+    let count: std::sync::Arc<std::sync::Mutex<usize>> =
+        std::sync::Arc::new(std::sync::Mutex::new(0));
+    let state = count.clone();
+    let router = Router::new()
+        .route(
+            "/hook",
+            post(
+                |State(s): State<std::sync::Arc<std::sync::Mutex<usize>>>| async move {
+                    *s.lock().unwrap() += 1;
+                    StatusCode::OK
+                },
+            ),
+        )
+        .with_state(state);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, router).await;
+    });
+    (format!("http://{addr}/hook"), count)
+}
+
+/// Crée un canal webhook pour le foyer et le repointe vers `url` (SQL direct : la garde SSRF
+/// interdit d'enregistrer une adresse de bouclage via l'API).
+async fn webhook_to(pool: &PgPool, cookie: &str, url: &str) {
+    let r = with_cookie(
+        pool,
+        "POST",
+        "/api/v1/notifications/channels",
+        cookie,
+        Some(json!({ "kind": "webhook", "config": { "url": "https://hooks.example.com/x" } })),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::CREATED);
+    let id = body_json(r).await["id"].as_str().unwrap().to_string();
+    sqlx::query("update notification_channels set config = $2 where id = $1")
+        .bind(uuid::Uuid::parse_str(&id).unwrap())
+        .bind(json!({ "url": url }))
+        .execute(pool)
+        .await
+        .unwrap();
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-002, case = "ré-exécution après redémarrage : l'occurrence déjà émise ne repart pas")]
+async fn restart_does_not_resend_emitted_occurrence(pool: PgPool) {
+    let cookie = account(&pool, "not002-restart@example.com").await;
+    let tomorrow = (Utc::now().date_naive() + Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    let today = Utc::now().date_naive().format("%Y-%m-%d").to_string();
+    create_sub(&pool, &cookie, "Netflix", &tomorrow).await;
+    let (url, count) = spawn_counting_receiver().await;
+    webhook_to(&pool, &cookie, &url).await;
+
+    // Première exécution : le rappel part.
+    let first = body_json(run_cron(&pool, Some(CRON_SECRET), &today).await).await;
+    assert_eq!(first["emitted"], 1);
+
+    // « Redémarrage » : chaque appel construit une NOUVELLE application (aucun état en mémoire
+    // partagé) — seule la table `reminder_log` persiste. Aucun second envoi.
+    let second = body_json(run_cron(&pool, Some(CRON_SECRET), &today).await).await;
+    assert_eq!(second["emitted"], 0);
+    assert_eq!(*count.lock().unwrap(), 1, "exactement un envoi sortant");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-002, case = "instances concurrentes : exactement un envoi par occurrence")]
+async fn concurrent_schedulers_emit_exactly_once(pool: PgPool) {
+    let cookie = account(&pool, "not002-concurrent@example.com").await;
+    let tomorrow = (Utc::now().date_naive() + Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    let today = Utc::now().date_naive().format("%Y-%m-%d").to_string();
+    create_sub(&pool, &cookie, "Netflix", &tomorrow).await;
+    let (url, count) = spawn_counting_receiver().await;
+    webhook_to(&pool, &cookie, &url).await;
+
+    // Deux « instances » (deux applications indépendantes sur le même pool) exécutent
+    // l'ordonnanceur simultanément : l'unicité de `reminder_log` sérialise — un seul insert
+    // gagne, donc un seul envoi, quel que soit l'entrelacement.
+    let (a, b) = tokio::join!(
+        run_cron(&pool, Some(CRON_SECRET), &today),
+        run_cron(&pool, Some(CRON_SECRET), &today),
+    );
+    let (a, b) = (body_json(a).await, body_json(b).await);
+    let total = a["emitted"].as_u64().unwrap() + b["emitted"].as_u64().unwrap();
+    assert_eq!(total, 1, "exactement une émission au total: {a} / {b}");
+    assert_eq!(*count.lock().unwrap(), 1, "exactement un envoi sortant");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-002, case = "échéance déjà passée au premier démarrage : aucun rappel rétroactif")]
+async fn first_run_emits_nothing_retroactively(pool: PgPool) {
+    let cookie = account(&pool, "not002-retro@example.com").await;
+    // Rappel qui AURAIT été dû il y a 2 jours (échéance hier, délai 1) : « premier démarrage »
+    // (reminder_log vide), fenêtre passée -> rien ne part, ni aujourd'hui ni rétroactivement.
+    let yesterday = (Utc::now().date_naive() - Duration::days(1))
+        .format("%Y-%m-%d")
+        .to_string();
+    let today = Utc::now().date_naive().format("%Y-%m-%d").to_string();
+    create_sub(&pool, &cookie, "Netflix", &yesterday).await;
+    let (url, count) = spawn_counting_receiver().await;
+    webhook_to(&pool, &cookie, &url).await;
+
+    let resp = body_json(run_cron(&pool, Some(CRON_SECRET), &today).await).await;
+    // L'abonnement mensuel a sa PROCHAINE échéance dans ~1 mois : le rappel d'hier n'est pas
+    // rattrapé (déclenchement exact, garde anti-rétroactif structurelle).
+    assert_eq!(resp["emitted"], 0);
+    assert_eq!(*count.lock().unwrap(), 0, "aucun envoi sortant");
+}
