@@ -443,12 +443,16 @@ async fn concurrent_schedulers_emit_exactly_once(pool: PgPool) {
     let (url, count) = spawn_counting_receiver().await;
     webhook_to(&pool, &cookie, &url).await;
 
-    // Deux « instances » (deux applications indépendantes sur le même pool) exécutent
-    // l'ordonnanceur simultanément : l'unicité de `reminder_log` sérialise — un seul insert
-    // gagne, donc un seul envoi, quel que soit l'entrelacement.
+    // Deux « instances » sur deux POOLS distincts (revue NOT-002 F6 : un pool partagé pourrait
+    // sérialiser les requêtes avant PostgreSQL — deux pools garantissent que la course se joue
+    // dans la contrainte d'unicité elle-même) exécutent l'ordonnanceur simultanément : un seul
+    // insert gagne, donc un seul envoi, quel que soit l'entrelacement.
+    let pool2 = sqlx::PgPool::connect_with((*pool.connect_options()).clone())
+        .await
+        .unwrap();
     let (a, b) = tokio::join!(
         run_cron(&pool, Some(CRON_SECRET), &today),
-        run_cron(&pool, Some(CRON_SECRET), &today),
+        run_cron(&pool2, Some(CRON_SECRET), &today),
     );
     let (a, b) = (body_json(a).await, body_json(b).await);
     let total = a["emitted"].as_u64().unwrap() + b["emitted"].as_u64().unwrap();

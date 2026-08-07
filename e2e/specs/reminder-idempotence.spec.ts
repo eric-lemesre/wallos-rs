@@ -29,7 +29,7 @@ test.describe("Idempotence de l'ordonnanceur", { tag: ["@design", "@REQ-NOT-002"
     // on ancre l'abonnement sur une date FICTIVE éloignée dont le jour du mois diffère
     // toujours de celui de « demain » réel — aucune occurrence tierce ne tombe dans la fenêtre.
     const tomorrowDay = new Date(Date.now() + 24 * 60 * 60 * 1000).getUTCDate();
-    const fictiveDay = (tomorrowDay % 28) + 1; // toujours != tomorrowDay, borné 2..29
+    const fictiveDay = (tomorrowDay % 28) + 1; // toujours != tomorrowDay, borné 1..28 (revue F5)
     const due = `2033-06-${String(fictiveDay).padStart(2, "0")}`;
     const asOf = new Date(new Date(`${due}T00:00:00Z`).getTime() - 24 * 60 * 60 * 1000)
       .toISOString()
@@ -50,5 +50,9 @@ test.describe("Idempotence de l'ordonnanceur", { tag: ["@design", "@REQ-NOT-002"
     // Ré-exécution (même fenêtre) : rien ne repart — le journal a retenu chaque occurrence.
     const second = await app.runReminders(asOf, CRON_TOKEN);
     expect(second).toBe(0);
+    // Preuve relative (revue F3) : un troisième run immédiat, sans aucune création entre les
+    // deux, reste à zéro — l'idempotence ne dépend pas d'un hasard de planification.
+    const third = await app.runReminders(asOf, CRON_TOKEN);
+    expect(third).toBe(0);
   });
 });
