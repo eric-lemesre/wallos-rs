@@ -22,8 +22,8 @@ use wallos_proto::{
     RenamePaymentMethodRequest, RepartitionEntryDto, RepartitionResponse, RunRemindersResponse,
     SetLanguageRequest, SetReminderSettingRequest, SubscriptionDto, SubscriptionListResponse,
     SyncChangeDto, SyncChangesResponse, SyncOperationInput, SyncOperationResult, SyncPushRequest,
-    SyncPushResponse, TombstoneDto, TombstonesResponse, WebhookReminderItem,
-    WebhookReminderPayload, problem,
+    SyncPushResponse, TestNotificationChannelResponse, TombstoneDto, TombstonesResponse,
+    WebhookReminderItem, WebhookReminderPayload, problem,
 };
 use wallos_storage::Db;
 
@@ -102,7 +102,8 @@ pub mod sync;
         reminders::run_reminders,
         notifications::create_notification_channel,
         notifications::list_notification_channels,
-        notifications::delete_notification_channel
+        notifications::delete_notification_channel,
+        notifications::test_notification_channel
     ),
     components(schemas(
         HealthResponse,
@@ -161,6 +162,7 @@ pub mod sync;
         NotificationChannelDto,
         CreateNotificationChannelRequest,
         NotificationChannelsResponse,
+        TestNotificationChannelResponse,
         WebhookReminderItem,
         WebhookReminderPayload
     ))
@@ -301,6 +303,7 @@ pub fn app_with_db_and_cron(db: Db, cron: CronToken) -> Router {
             notifications::list_notification_channels
         ))
         .routes(routes!(notifications::delete_notification_channel))
+        .routes(routes!(notifications::test_notification_channel))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))

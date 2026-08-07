@@ -298,6 +298,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications/channels/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Envoie un message de **test** sur un canal enregistré du foyer (REQ-NOT-006) et renvoie un
+         *     diagnostic exploitable : `sent`, ou un code d'échec stable (`http-status` + code, `timeout`,
+         *     `connection-failed`, `smtp-failed`, `send-failed`) — jamais le texte brut de l'erreur (il peut
+         *     refléter l'URL cible, donc un jeton). Un canal **désactivé** reste testable : le test sert
+         *     précisément à valider une configuration avant de l'activer.
+         */
+        post: operations["testNotificationChannel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/password": {
         parameters: {
             query?: never;
@@ -1699,6 +1722,30 @@ export interface components {
             /** @description Résultats, alignés sur les opérations de la requête. */
             results: components["schemas"]["SyncOperationResult"][];
         };
+        /**
+         * @description Résultat d'un **envoi de test** sur un canal de notification (REQ-NOT-006). Le diagnostic est un
+         *     **code stable** (localisé côté client) — jamais le texte brut de l'erreur, qui pourrait refléter
+         *     l'URL cible (donc un jeton) ou des détails SMTP.
+         */
+        TestNotificationChannelResponse: {
+            /**
+             * @description Code de diagnostic : `sent`, `http-status`, `timeout`, `connection-failed`, `smtp-failed`,
+             *     `send-failed`.
+             * @example sent
+             */
+            code: string;
+            /**
+             * Format: int32
+             * @description Statut HTTP renvoyé par la cible quand `code = http-status`.
+             * @example 404
+             */
+            http_status?: number | null;
+            /**
+             * @description Vrai si le message de test a été accepté par la cible.
+             * @example true
+             */
+            ok: boolean;
+        };
         /** @description Une pierre tombale : la suppression d'une entité répliquée (REQ-SYN-002). */
         TombstoneDto: {
             /**
@@ -2542,6 +2589,65 @@ export interface operations {
             };
             /** @description Canal inconnu ou hors du foyer */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    testNotificationChannel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identifiant (UUID) du canal */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Test exécuté (voir `ok` et `code`) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestNotificationChannelResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Canal inconnu ou hors du foyer */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Configuration stockée illisible pour ce type de canal */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

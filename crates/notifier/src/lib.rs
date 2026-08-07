@@ -126,11 +126,25 @@ fn http_client() -> reqwest::Result<reqwest::Client> {
         .build()
 }
 
-/// Vérifie qu'une réponse HTTP est un succès `2xx`, sinon erreur avec le statut (jamais le corps —
+/// Statut HTTP non favorable renvoyé par la cible d'un canal. Erreur **typée** (downcastable depuis
+/// `anyhow`) pour qu'un appelant — l'envoi de test REQ-NOT-006 — produise un diagnostic exploitable
+/// (le code de statut) sans jamais refléter l'URL ni le corps de la réponse (secrets possibles).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnexpectedStatus(pub u16);
+
+impl fmt::Display for UnexpectedStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "statut HTTP inattendu: {}", self.0)
+    }
+}
+
+impl std::error::Error for UnexpectedStatus {}
+
+/// Vérifie qu'une réponse HTTP est un succès `2xx`, sinon [`UnexpectedStatus`] (jamais le corps —
 /// il pourrait refléter des éléments de configuration).
 fn ensure_success(response: &reqwest::Response) -> anyhow::Result<()> {
     if !response.status().is_success() {
-        anyhow::bail!("statut HTTP inattendu: {}", response.status());
+        return Err(UnexpectedStatus(response.status().as_u16()).into());
     }
     Ok(())
 }
@@ -474,6 +488,36 @@ impl Pushover {
         let response = http_client()?.post(url).form(&form).send().await?;
         ensure_success(&response)
     }
+}
+
+/// Classe l'échec d'un envoi en **code de diagnostic stable** + statut HTTP éventuel
+/// (REQ-NOT-006 : « diagnostic exploitable en cas d'échec »). Ne reflète **jamais** le texte brut
+/// de l'erreur : il peut contenir l'URL cible (donc un jeton pour Telegram) ou des détails SMTP.
+///
+/// Codes : `http-status` (statut non 2xx, avec le code), `timeout`, `connection-failed`,
+/// `smtp-failed`, `send-failed` (défaut).
+#[must_use]
+pub fn diagnose_send_error(err: &anyhow::Error) -> (&'static str, Option<u16>) {
+    if let Some(UnexpectedStatus(status)) = err.downcast_ref::<UnexpectedStatus>() {
+        return ("http-status", Some(*status));
+    }
+    if let Some(e) = err.downcast_ref::<reqwest::Error>() {
+        if e.is_timeout() {
+            return ("timeout", None);
+        }
+        if e.is_connect() {
+            return ("connection-failed", None);
+        }
+        return ("send-failed", None);
+    }
+    if err
+        .downcast_ref::<lettre::transport::smtp::Error>()
+        .is_some()
+        || err.downcast_ref::<lettre::error::Error>().is_some()
+    {
+        return ("smtp-failed", None);
+    }
+    ("send-failed", None)
 }
 
 /// Message texte localisé d'un lot de rappels, **commun aux canaux de messagerie** (REQ-NOT-004 :
