@@ -17,14 +17,24 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
 use wallos_req_macros::verifies;
-use wallos_server::{CronToken, app_with_db, app_with_db_and_cron};
+use wallos_server::{CronToken, app_with_db_cron_key};
 use wallos_storage::Db;
 
 const PASSWORD: &str = "correct horse battery staple";
 const CRON_SECRET: &str = "test-cron-secret";
+/// Clé de chiffrement au repos injectée (REQ-SEC-004) : les tests créent des canaux à secrets.
+const ENC_KEY: &str = "clef-de-test-sec004";
+
+fn encryption() -> wallos_server::EncryptionKey {
+    wallos_server::EncryptionKey(wallos_core::secrets::derive_key(ENC_KEY))
+}
 
 fn app(pool: PgPool) -> Router {
-    app_with_db(Db::from_pool(pool))
+    app_with_db_cron_key(
+        Db::from_pool(pool),
+        CronToken(Some(CRON_SECRET.to_string())),
+        encryption(),
+    )
 }
 
 async fn send(
@@ -260,9 +270,10 @@ async fn cron_posts_payload_to_webhook(pool: PgPool) {
         .unwrap();
 
     // Cron déterministe : as_of 2026-08-06, échéance 2026-08-07 (à 1 jour) → un rappel émis et envoyé.
-    let cron = app_with_db_and_cron(
+    let cron = app_with_db_cron_key(
         Db::from_pool(pool.clone()),
         CronToken(Some(CRON_SECRET.to_string())),
+        encryption(),
     );
     let resp = cron
         .oneshot(
@@ -358,9 +369,10 @@ async fn webhook_send_does_not_follow_redirects(pool: PgPool) {
         .await
         .unwrap();
 
-    let cron = app_with_db_and_cron(
+    let cron = app_with_db_cron_key(
         Db::from_pool(pool.clone()),
         CronToken(Some(CRON_SECRET.to_string())),
+        encryption(),
     );
     let resp = cron
         .oneshot(
@@ -412,9 +424,10 @@ async fn disabled_channel_sends_nothing(pool: PgPool) {
         .await
         .unwrap();
 
-    let cron = app_with_db_and_cron(
+    let cron = app_with_db_cron_key(
         Db::from_pool(pool.clone()),
         CronToken(Some(CRON_SECRET.to_string())),
+        encryption(),
     );
     let resp = cron
         .oneshot(
@@ -545,9 +558,10 @@ async fn failing_email_channel_does_not_interrupt_other_channels(pool: PgPool) {
         StatusCode::CREATED
     );
 
-    let cron = app_with_db_and_cron(
+    let cron = app_with_db_cron_key(
         Db::from_pool(pool.clone()),
         CronToken(Some(CRON_SECRET.to_string())),
+        encryption(),
     );
     let resp = cron
         .oneshot(
@@ -966,9 +980,10 @@ async fn cron_sends_to_all_messaging_channels(pool: PgPool) {
             .unwrap();
     }
 
-    let cron = app_with_db_and_cron(
+    let cron = app_with_db_cron_key(
         Db::from_pool(pool.clone()),
         CronToken(Some(CRON_SECRET.to_string())),
+        encryption(),
     );
     let resp = cron
         .oneshot(
@@ -1078,9 +1093,10 @@ async fn disabled_messaging_channel_sends_nothing(pool: PgPool) {
         .await
         .unwrap();
 
-    let cron = app_with_db_and_cron(
+    let cron = app_with_db_cron_key(
         Db::from_pool(pool.clone()),
         CronToken(Some(CRON_SECRET.to_string())),
+        encryption(),
     );
     let resp = cron
         .oneshot(
@@ -1438,9 +1454,10 @@ async fn hostname_resolving_to_private_address_is_refused_at_call_time(pool: PgP
         .await
         .unwrap();
 
-    let cron = app_with_db_and_cron(
+    let cron = app_with_db_cron_key(
         Db::from_pool(pool.clone()),
         CronToken(Some(CRON_SECRET.to_string())),
+        encryption(),
     );
     let resp = cron
         .oneshot(
@@ -1460,4 +1477,217 @@ async fn hostname_resolving_to_private_address_is_refused_at_call_time(pool: PgP
         captured.lock().unwrap().is_empty(),
         "aucune connexion vers l'adresse interne résolue"
     );
+}
+
+// --- Chiffrement au repos des secrets (REQ-SEC-004) ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SEC-004, case = "le secret est illisible en base (enc:v1) ET reste utilisable à l'envoi")]
+async fn secret_is_encrypted_at_rest_and_still_usable(pool: PgPool) {
+    let web = account(&pool, "sec004-rest@example.com").await;
+    assert_eq!(
+        send(
+            &pool,
+            "POST",
+            "/api/v1/subscriptions",
+            Some(&web),
+            Some(json!({
+                "name": "Netflix", "amount": "9.99", "currency": "EUR",
+                "cycle": { "unit": "month", "interval": 1 }, "first_payment": "2026-08-07",
+                "active": true
+            })),
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+    let created = body_json(
+        create_channel(
+            &pool,
+            &web,
+            "telegram",
+            json!({ "bot_token": "123:s3cr3t-token", "chat_id": "42" }),
+        )
+        .await,
+    )
+    .await;
+    let id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+
+    // Critère #1 : l'inspection directe de la base ne livre pas le secret en clair.
+    let (config,): (serde_json::Value,) =
+        sqlx::query_as("select config from notification_channels where id = $1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let stored = config["bot_token"].as_str().unwrap();
+    assert!(stored.starts_with("enc:v1:"), "chiffré: {stored}");
+    assert!(!stored.contains("s3cr3t-token"));
+    // Le chat_id n'est pas un secret : lisible (diagnostic, affichage).
+    assert_eq!(config["chat_id"], "42");
+
+    // Le canal reste UTILISABLE : le cron déchiffre à l'envoi — le récepteur reçoit la requête
+    // Telegram au chemin construit avec le jeton EN CLAIR (preuve du déchiffrement).
+    let (base, captured) = spawn_capture_receiver().await;
+    sqlx::query(
+        "update notification_channels set config = config || jsonb_build_object('api_base', $2::text) where id = $1",
+    )
+    .bind(id)
+    .bind(&base)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let cron = app_with_db_cron_key(
+        Db::from_pool(pool.clone()),
+        CronToken(Some(CRON_SECRET.to_string())),
+        encryption(),
+    );
+    let resp = cron
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/internal/run-reminders?as_of=2026-08-06")
+                .header("x-cron-token", CRON_SECRET)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(body_json(resp).await["emitted"], 1);
+    let requests = captured.lock().unwrap().clone();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].path, "/bot123:s3cr3t-token/sendMessage");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SEC-004, case = "le secret n'est jamais retourné par l'API, même chiffré, même au propriétaire")]
+async fn secret_never_returned_even_encrypted(pool: PgPool) {
+    let web = account(&pool, "sec004-api@example.com").await;
+    let created = body_json(
+        create_channel(
+            &pool,
+            &web,
+            "pushover",
+            json!({ "user_key": "uk-s3cr3t", "token": "tok-s3cr3t" }),
+        )
+        .await,
+    )
+    .await;
+    let list = body_json(
+        send(
+            &pool,
+            "GET",
+            "/api/v1/notifications/channels",
+            Some(&web),
+            None,
+        )
+        .await,
+    )
+    .await;
+    for payload in [created.to_string(), list.to_string()] {
+        assert!(!payload.contains("uk-s3cr3t"), "clair exposé: {payload}");
+        assert!(!payload.contains("tok-s3cr3t"));
+        // Même la forme chiffrée ne sort pas (redaction totale, critère #2).
+        assert!(!payload.contains("enc:v1:"), "chiffré exposé: {payload}");
+        assert!(payload.contains("<redacted>"));
+    }
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SEC-004, case = "sans ENCRYPTION_KEY : canal à secrets refusé (422), canal sans secret accepté — jamais de clair silencieux")]
+async fn missing_key_rejects_secret_channels_only(pool: PgPool) {
+    let web = account(&pool, "sec004-nokey@example.com").await;
+    let no_key = app_with_db_cron_key(
+        Db::from_pool(pool.clone()),
+        CronToken(None),
+        wallos_server::EncryptionKey(None),
+    );
+    let request = |body: serde_json::Value, cookie: &str| {
+        Request::builder()
+            .method("POST")
+            .uri("/api/v1/notifications/channels")
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::COOKIE, cookie)
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    };
+    // Canal à secret : refusé explicitement.
+    let r = no_key
+        .clone()
+        .oneshot(request(
+            json!({ "kind": "telegram", "config": { "bot_token": "123:abc", "chat_id": "42" } }),
+            &web,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    // Canal sans secret (webhook) : accepté.
+    let r = no_key
+        .clone()
+        .oneshot(request(
+            json!({ "kind": "webhook", "config": { "url": "https://hooks.example.com/x" } }),
+            &web,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::CREATED);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SEC-004, case = "une config en clair antérieure à SEC-004 reste utilisable (compat lecture)")]
+async fn cleartext_legacy_config_still_sends(pool: PgPool) {
+    let web = account(&pool, "sec004-legacy@example.com").await;
+    assert_eq!(
+        send(
+            &pool,
+            "POST",
+            "/api/v1/subscriptions",
+            Some(&web),
+            Some(json!({
+                "name": "Netflix", "amount": "9.99", "currency": "EUR",
+                "cycle": { "unit": "month", "interval": 1 }, "first_payment": "2026-08-07",
+                "active": true
+            })),
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+    let (base, captured) = spawn_capture_receiver().await;
+    let created = body_json(
+        create_channel(
+            &pool,
+            &web,
+            "telegram",
+            json!({ "bot_token": "123:abc", "chat_id": "42" }),
+        )
+        .await,
+    )
+    .await;
+    let id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    // Config LEGACY : secrets en clair, posés par SQL (état antérieur à SEC-004).
+    sqlx::query("update notification_channels set config = $2 where id = $1")
+        .bind(id)
+        .bind(json!({ "bot_token": "123:abc", "chat_id": "42", "api_base": base }))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let cron = app_with_db_cron_key(
+        Db::from_pool(pool.clone()),
+        CronToken(Some(CRON_SECRET.to_string())),
+        encryption(),
+    );
+    let resp = cron
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/internal/run-reminders?as_of=2026-08-06")
+                .header("x-cron-token", CRON_SECRET)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(body_json(resp).await["emitted"], 1);
+    assert_eq!(captured.lock().unwrap().len(), 1);
 }

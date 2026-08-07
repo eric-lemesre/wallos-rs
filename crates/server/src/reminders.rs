@@ -118,17 +118,33 @@ fn due_with_kind(rows: &[&ReminderScanRow], as_of: NaiveDate) -> Vec<(DueReminde
 #[requirement(REQ-NOT-005)]
 #[requirement(REQ-NOT-003)]
 #[requirement(REQ-NOT-004)]
+#[requirement(REQ-SEC-004)]
 pub(crate) fn channel_from_row(
     row: &NotificationChannelRow,
     contact: Option<&(String, String)>,
+    encryption: Option<[u8; 32]>,
 ) -> Option<Channel> {
     let language = contact.map_or("en", |(_, language)| language.as_str());
     let get = |key: &str| row.config.get(key).and_then(|v| v.as_str());
+    // Déchiffrement au repos (REQ-SEC-004) : les champs secrets sont stockés `enc:v1:…`. Une
+    // valeur non préfixée est acceptée telle quelle (canaux créés avant SEC-004). Une valeur
+    // chiffrée sans clé (ou avec une mauvaise clé) rend le canal inconstructible -> `None`
+    // (ignoré par le cron, `unreadable-config` au réessai) — jamais un secret chiffré envoyé
+    // comme s'il était le vrai jeton.
+    let secret = |key: &str| -> Option<String> {
+        let value = get(key)?;
+        if wallos_core::secrets::is_encrypted(value) {
+            wallos_core::secrets::decrypt(&encryption?, value)
+        } else {
+            Some(value.to_string())
+        }
+    };
     match row.kind.as_str() {
         "webhook" => Some(Channel::Webhook(Webhook::new(get("url")?))),
         "email" => {
             let (recipient, language) = contact?;
-            let config = email_config_from(&row.config)?;
+            let mut config = email_config_from(&row.config)?;
+            config.password = secret("password")?;
             Some(Channel::Email(Email::new(
                 config,
                 recipient.clone(),
@@ -136,7 +152,7 @@ pub(crate) fn channel_from_row(
             )))
         }
         "telegram" => {
-            let mut telegram = Telegram::new(get("bot_token")?, get("chat_id")?, language);
+            let mut telegram = Telegram::new(secret("bot_token")?, get("chat_id")?, language);
             // Base d'API repointable en test uniquement (posable par SQL direct, jamais via l'API —
             // la validation à l'enregistrement jette toute clé inconnue).
             if let Some(api_base) = get("api_base") {
@@ -152,11 +168,11 @@ pub(crate) fn channel_from_row(
         ))),
         "gotify" => Some(Channel::Gotify(Gotify::new(
             get("url")?,
-            get("token")?,
+            secret("token")?,
             language,
         ))),
         "pushover" => {
-            let mut pushover = Pushover::new(get("user_key")?, get("token")?, language);
+            let mut pushover = Pushover::new(secret("user_key")?, secret("token")?, language);
             if let Some(api_base) = get("api_base") {
                 pushover = pushover.with_api_base(api_base);
             }
@@ -318,6 +334,7 @@ pub struct RunRemindersQuery {
 pub async fn run_reminders(
     State(db): State<Db>,
     Extension(CronToken(cron_token)): Extension<CronToken>,
+    Extension(encryption): Extension<crate::EncryptionKey>,
     headers: HeaderMap,
     Query(q): Query<RunRemindersQuery>,
 ) -> Response {
@@ -421,7 +438,7 @@ pub async fn run_reminders(
                 ReminderNotification::new(as_of.format("%Y-%m-%d").to_string(), fresh);
             let contact = contacts.get(&household_id);
             for row in channels {
-                let Some(channel) = channel_from_row(row, contact) else {
+                let Some(channel) = channel_from_row(row, contact, encryption.0) else {
                     continue;
                 };
                 // Suivi *outbox* (REQ-NOT-007 ; revue NOT-002 F1/F2) : la livraison est ouverte
@@ -481,7 +498,7 @@ pub async fn run_reminders(
 
     // Phase de réessai (REQ-NOT-007) : rejoue les livraisons dues, réclamées atomiquement (une
     // instance concurrente ne rejoue jamais la même — esprit REQ-NOT-002).
-    let (retried, abandoned) = retry_due_deliveries(&deliveries, &contacts).await;
+    let (retried, abandoned) = retry_due_deliveries(&deliveries, &contacts, encryption.0).await;
     // Purge au fil de l'eau (revue NOT-007 F3) : un abandon reste visible 30 jours puis disparaît
     // — la table ne croît pas indéfiniment sur un canal durablement cassé. Best-effort.
     let _ = deliveries
@@ -505,6 +522,7 @@ pub async fn run_reminders(
 async fn retry_due_deliveries(
     deliveries: &wallos_storage::NotificationDeliveryRepository<'_>,
     contacts: &BTreeMap<Uuid, (String, String)>,
+    encryption: Option<[u8; 32]>,
 ) -> (usize, usize) {
     let now = Utc::now();
     // Échéance provisoire posée au claim, recalée après le résultat. CONSERVATRICE (revue NOT-007
@@ -532,7 +550,7 @@ async fn retry_due_deliveries(
             enabled: true,
         };
         let contact = contacts.get(&delivery.household_id);
-        let Some(channel) = channel_from_row(&channel_row, contact) else {
+        let Some(channel) = channel_from_row(&channel_row, contact, encryption) else {
             // Config devenue illisible : abandon immédiat, visible (plutôt qu'un réessai éternel).
             let _ = deliveries
                 .record_retry_failure(delivery.id, "unreadable-config", None)
