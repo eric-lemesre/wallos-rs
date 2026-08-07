@@ -20,15 +20,31 @@ test.describe("Rattrapage des échéances passées", { tag: ["@legacy", "@REQ-SU
     await app.login({ email, password: PASSWORD });
     expect(await app.currentUserVisible()).toBe(true);
 
-    // Ancrage mensuel ~5 mois dans le passé : 5 occurrences dépassées d'un coup.
-    const anchor = new Date(Date.now() - 150 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    // Ancrage mensuel ~5 mois dans le passé : 5 occurrences dépassées d'un coup. Jour 15 :
+    // aucun clamp de fin de mois en jeu, la génération des candidats (setMonth) reste exacte.
+    const anchorMonth = new Date(Date.now() - 150 * 24 * 60 * 60 * 1000).toISOString().slice(0, 7);
+    const anchor = `${anchorMonth}-15`;
     const today = new Date().toISOString().slice(0, 10);
     await app.computeNextDue(anchor, "month", "1", today);
 
     const result = (await app.readNextDue()).trim();
-    const shown = result.match(/\d{4}-\d{2}-\d{2}/)?.[0];
-    expect(shown, `date attendue dans « ${result} »`).toBeTruthy();
-    // Strictement postérieure à aujourd'hui : le rattrapage a sauté toutes les occurrences passées.
-    expect(shown! > today).toBe(true);
+    // La date est affichée LOCALISÉE (REQ-I18N-003, langue en par défaut du navigateur de test) :
+    // on reconstruit le format attendu pour chaque jour candidat futur (le jour d'ancrage du mois
+    // courant ou du suivant) et on vérifie que l'un d'eux est affiché.
+    const anchorDate = new Date(`${anchor}T00:00:00`);
+    const format = (d: Date) =>
+      new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(d);
+    const candidates: string[] = [];
+    for (let offset = 0; offset <= 12; offset += 1) {
+      const c = new Date(anchorDate);
+      c.setMonth(c.getMonth() + offset);
+      if (c.toISOString().slice(0, 10) > today) {
+        candidates.push(format(c));
+      }
+    }
+    expect(
+      candidates.some((c) => result.includes(c)),
+      `« ${result} » devrait contenir une occurrence future parmi ${candidates.join(" | ")}`,
+    ).toBe(true);
   });
 });

@@ -31,7 +31,7 @@ describe("NextDueCard", () => {
     const user = userEvent.setup();
     renderCard();
     await user.click(screen.getByTestId("nextdue-compute"));
-    expect(await screen.findByTestId("nextdue-result")).toHaveTextContent("2025-02-28");
+    expect(await screen.findByTestId("nextdue-result")).toHaveTextContent("Feb 28, 2025");
     await waitFor(() =>
       expect(post).toHaveBeenCalledWith("/schedule/next-due", {
         body: { first_payment: "2025-01-31", cycle: { unit: "month", interval: 1 }, after: "2025-01-31" },

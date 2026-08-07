@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
-import { formatAmount } from "../lib/format";
+import { formatAmount, formatDate } from "../lib/format";
 import type { components } from "../api/client";
 
 type ConvertedTotalResponse = components["schemas"]["ConvertedTotalResponse"];
@@ -111,7 +111,7 @@ export function ConvertedTotalCard() {
             {t("exchange.excluded")}: {result.excluded}
           </p>
           {result.as_of && (
-            <p data-testid="exchange-asof">{t("exchange.asOf", { date: result.as_of })}</p>
+            <p data-testid="exchange-asof">{t("exchange.asOf", { date: formatDate(result.as_of ?? "", i18n.language) })}</p>
           )}
           {!result.complete && (
             <p data-testid="exchange-incomplete" role="status">

@@ -46,7 +46,7 @@ describe("CostEvolutionCard", () => {
 
     const points = await screen.findAllByTestId("evolution-point");
     expect(points).toHaveLength(2);
-    expect(screen.getAllByTestId("evolution-month")[0]).toHaveTextContent("2026-05");
+    expect(screen.getAllByTestId("evolution-month")[0]).toHaveTextContent("May 2026");
     expect(screen.getAllByTestId("evolution-total")[1]).toHaveTextContent("€15.00");
   });
 

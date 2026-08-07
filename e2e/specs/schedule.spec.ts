@@ -20,6 +20,6 @@ test.describe("Prochaine échéance mensuelle", { tag: ["@design", "@REQ-SUB-012
     // Abonnement mensuel démarré le 31 janvier : la prochaine échéance est le 28 février (clampée),
     // jamais un débordement au 3 mars (le bug PHP de Wallos, rejeté par ADR 0022).
     await app.computeNextDue("2025-01-31", "month", "1", "2025-01-31");
-    expect(await app.readNextDue()).toContain("2025-02-28");
+    expect(await app.readNextDue()).toContain("Feb 28, 2025");
   });
 });

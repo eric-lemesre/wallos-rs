@@ -40,7 +40,7 @@ test.describe("Suppression de catégorie référencée", { tag: ["@design", "@RE
       firstPayment: "2030-01-15",
       category: catName,
     });
-    expect(await app.subscriptionNextPayment()).toContain("2030-01-15");
+    expect(await app.subscriptionNextPayment()).toContain("Jan 15, 2030");
 
     // Tente la suppression : refusée (catégorie référencée), et la catégorie reste présente.
     await app.deleteCategory(catName);
