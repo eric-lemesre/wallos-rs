@@ -126,11 +126,18 @@ impl Channel {
 /// Échec de construction du client TLS.
 #[requirement(REQ-SEC-005)]
 fn http_client() -> reqwest::Result<reqwest::Client> {
-    reqwest::Client::builder()
+    // Client UNIQUE réutilisé (revue SEC-005 F4) : pool de connexions et cache DNS partagés —
+    // reconstruire un client par envoi jetait les deux à chaque rappel.
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Ok(client.clone());
+    }
+    let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .redirect(reqwest::redirect::Policy::none())
         .dns_resolver(std::sync::Arc::new(PublicOnlyResolver))
-        .build()
+        .build()?;
+    Ok(CLIENT.get_or_init(|| client).clone())
 }
 
 /// Un nom d'hôte n'a résolu vers **aucune adresse publique** (REQ-SEC-005). Erreur typée du
@@ -158,8 +165,9 @@ impl reqwest::dns::Resolve for PublicOnlyResolver {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         let host = name.as_str().to_string();
         Box::pin(async move {
-            // Résolveur système (mêmes sources que l'OS) ; le port est remplacé par reqwest.
-            let addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host((host.as_str(), 0))
+            // Résolveur système (mêmes sources que l'OS) ; port neutre documenté — reqwest le
+            // remplace de toute façon par celui de l'URL (revue SEC-005 F3).
+            let addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host((host.as_str(), 443))
                 .await?
                 .filter(|addr| ip_is_public(addr.ip()))
                 .collect();
@@ -747,13 +755,24 @@ fn v4_is_public(ip: Ipv4Addr) -> bool {
 /// Plages IPv6 refusées : bouclage, non spécifiée, unique-local `fc00::/7`, link-local `fe80::/10`,
 /// et IPv4 mappée pointant vers une IPv4 interne (`::ffff:a.b.c.d`).
 fn v6_is_public(ip: Ipv6Addr) -> bool {
-    let seg0 = ip.segments()[0];
-    let is_unique_local = (seg0 & 0xfe00) == 0xfc00;
-    let is_link_local = (seg0 & 0xffc0) == 0xfe80;
-    if let Some(v4) = ip.to_ipv4_mapped() {
+    let segments = ip.segments();
+    let is_unique_local = (segments[0] & 0xfe00) == 0xfc00;
+    let is_link_local = (segments[0] & 0xffc0) == 0xfe80;
+    let is_multicast = (segments[0] & 0xff00) == 0xff00;
+    // Documentation 2001:db8::/32 (l'équivalent v4 est déjà filtré par `v4_is_public`).
+    let is_documentation = segments[0] == 0x2001 && segments[1] == 0xdb8;
+    // `to_ipv4` couvre les adresses IPv4-MAPPÉES (`::ffff:a.b.c.d`) ET IPv4-COMPATIBLES
+    // (`::a.b.c.d`, revue SEC-005 F1) — `to_ipv4_mapped` laissait passer les secondes.
+    // `::1`/`::` deviennent 0.0.0.1/0.0.0.0, refusées par le filtre v4 (« ce réseau »).
+    if let Some(v4) = ip.to_ipv4() {
         return v4_is_public(v4);
     }
-    !(ip.is_loopback() || ip.is_unspecified() || is_unique_local || is_link_local)
+    !(ip.is_loopback()
+        || ip.is_unspecified()
+        || is_unique_local
+        || is_link_local
+        || is_multicast
+        || is_documentation)
 }
 
 #[cfg(test)]
@@ -790,6 +809,11 @@ mod tests {
         assert!(!webhook_url_is_safe("http://[fc00::1]/hook")); // ULA
         assert!(!webhook_url_is_safe("http://[fe80::1]/hook")); // link-local v6
         assert!(!webhook_url_is_safe("http://[::ffff:10.0.0.1]/hook")); // v4 mappée privée
+        // Revue SEC-005 F1/F2 : v4-COMPATIBLE, multicast et documentation v6.
+        assert!(!webhook_url_is_safe("http://[::127.0.0.1]/hook")); // v4 compatible bouclage
+        assert!(!webhook_url_is_safe("http://[::10.0.0.5]/hook")); // v4 compatible privée
+        assert!(!webhook_url_is_safe("http://[ff02::1]/hook")); // multicast v6
+        assert!(!webhook_url_is_safe("http://[2001:db8::1]/hook")); // documentation v6
     }
 
     #[test]
