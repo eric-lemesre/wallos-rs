@@ -1081,3 +1081,181 @@ async fn disabled_messaging_channel_sends_nothing(pool: PgPool) {
     assert_eq!(body_json(resp).await["emitted"], 1);
     assert!(captured.lock().unwrap().is_empty());
 }
+
+// --- Envoi de test d'un canal (REQ-NOT-006) ---
+
+/// Récepteur HTTP local qui répond un statut fixe à tout POST (cas d'échec `http-status`).
+async fn spawn_failing_receiver(status: StatusCode) -> String {
+    let router = Router::new().fallback(move || async move { status });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, router).await;
+    });
+    format!("http://{addr}/hook")
+}
+
+/// Déclenche l'envoi de test d'un canal.
+async fn test_channel(pool: &PgPool, cookie: Option<&str>, id: &str) -> axum::http::Response<Body> {
+    send(
+        pool,
+        "POST",
+        &format!("/api/v1/notifications/channels/{id}/test"),
+        cookie,
+        None,
+    )
+    .await
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-006, case = "le test d'un canal de messagerie envoie un message factice et rapporte `sent`")]
+async fn test_channel_sends_and_reports_sent(pool: PgPool) {
+    let web = account(&pool, "not006-sent@example.com").await;
+    // Canal Telegram repointé vers un récepteur local : le test passe par le même adaptateur que le cron.
+    let (base, captured) = spawn_capture_receiver().await;
+    let created = body_json(
+        create_channel(
+            &pool,
+            &web,
+            "telegram",
+            json!({ "bot_token": "123:abc", "chat_id": "42" }),
+        )
+        .await,
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_string();
+    sqlx::query("update notification_channels set config = $2 where id = $1")
+        .bind(Uuid::parse_str(&id).unwrap())
+        .bind(json!({ "bot_token": "123:abc", "chat_id": "42", "api_base": base }))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let resp = test_channel(&pool, Some(&web), &id).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_json(resp).await;
+    assert_eq!(body["ok"], true);
+    assert_eq!(body["code"], "sent");
+
+    // Le message factice est bien parti, au format Telegram, avec l'abonnement de test.
+    let requests = captured.lock().unwrap().clone();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].path, "/bot123:abc/sendMessage");
+    let payload: Value = serde_json::from_str(&requests[0].body).unwrap();
+    assert!(
+        payload["text"]
+            .as_str()
+            .unwrap()
+            .contains("Test subscription")
+    );
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-006, case = "échec du test : le diagnostic rapporte le statut HTTP de la cible, jamais l'erreur brute")]
+async fn test_channel_reports_http_status(pool: PgPool) {
+    let web = account(&pool, "not006-status@example.com").await;
+    let failing_url = spawn_failing_receiver(StatusCode::INTERNAL_SERVER_ERROR).await;
+    let created = body_json(create_webhook(&pool, &web, "https://hooks.example.com/x").await).await;
+    let id = created["id"].as_str().unwrap().to_string();
+    sqlx::query("update notification_channels set config = $2 where id = $1")
+        .bind(Uuid::parse_str(&id).unwrap())
+        .bind(json!({ "url": failing_url }))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let resp = test_channel(&pool, Some(&web), &id).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_json(resp).await;
+    assert_eq!(body["ok"], false);
+    assert_eq!(body["code"], "http-status");
+    assert_eq!(body["http_status"], 500);
+    // Aucune fuite : ni URL ni texte d'erreur brut dans la réponse.
+    assert!(!body.to_string().contains("127.0.0.1"));
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-006, case = "cible injoignable : le diagnostic rapporte `connection-failed`")]
+async fn test_channel_reports_connection_failure(pool: PgPool) {
+    let web = account(&pool, "not006-conn@example.com").await;
+    let created = body_json(create_webhook(&pool, &web, "https://hooks.example.com/x").await).await;
+    let id = created["id"].as_str().unwrap().to_string();
+    // Port 1 : connexion refusée immédiatement (aucune résolution DNS, déterministe).
+    sqlx::query("update notification_channels set config = $2 where id = $1")
+        .bind(Uuid::parse_str(&id).unwrap())
+        .bind(json!({ "url": "http://127.0.0.1:1/hook" }))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let resp = test_channel(&pool, Some(&web), &id).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_json(resp).await;
+    assert_eq!(body["ok"], false);
+    assert_eq!(body["code"], "connection-failed");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-006, case = "un canal désactivé reste testable (valider la configuration avant activation)")]
+async fn test_channel_works_on_disabled_channel(pool: PgPool) {
+    let web = account(&pool, "not006-disabled@example.com").await;
+    let (base, captured) = spawn_capture_receiver().await;
+    let created = body_json(
+        create_channel(
+            &pool,
+            &web,
+            "gotify",
+            json!({ "url": "https://gotify.example.com", "token": "app-token" }),
+        )
+        .await,
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_string();
+    sqlx::query("update notification_channels set config = $2, enabled = false where id = $1")
+        .bind(Uuid::parse_str(&id).unwrap())
+        .bind(json!({ "url": base, "token": "app-token" }))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let resp = test_channel(&pool, Some(&web), &id).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(body_json(resp).await["ok"], true);
+    assert_eq!(captured.lock().unwrap().len(), 1);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-006)]
+async fn authz_owner_test_notification_channel(pool: PgPool) {
+    let web = account(&pool, "not006-authz-owner@example.com").await;
+    let created = body_json(create_webhook(&pool, &web, "https://hooks.example.com/x").await).await;
+    let id = created["id"].as_str().unwrap().to_string();
+    // Cible locale fermée : l'envoi échoue proprement, mais l'ACCÈS du propriétaire est 2xx.
+    sqlx::query("update notification_channels set config = $2 where id = $1")
+        .bind(Uuid::parse_str(&id).unwrap())
+        .bind(json!({ "url": "http://127.0.0.1:1/hook" }))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let resp = test_channel(&pool, Some(&web), &id).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-006)]
+async fn authz_other_test_notification_channel(pool: PgPool) {
+    let web = account(&pool, "not006-authz-web@example.com").await;
+    let other = account(&pool, "not006-authz-other@example.com").await;
+    let created = body_json(create_webhook(&pool, &web, "https://hooks.example.com/x").await).await;
+    let id = created["id"].as_str().unwrap().to_string();
+    // Un tiers authentifié voit 404 (jamais 403) — et surtout AUCUN envoi n'est déclenché.
+    let resp = test_channel(&pool, Some(&other), &id).await;
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-006)]
+async fn authz_anon_test_notification_channel(pool: PgPool) {
+    let resp = test_channel(&pool, None, &Uuid::new_v4().to_string()).await;
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}

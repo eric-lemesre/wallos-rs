@@ -254,6 +254,14 @@
     "token": "Jeton d'application",
     "userKey": "Clé utilisateur",
     "botUsername": "Nom du bot (optionnel)",
-    "botAvatarUrl": "URL de l'avatar du bot (optionnel)"
+    "botAvatarUrl": "URL de l'avatar du bot (optionnel)",
+    "test": "Tester",
+    "testSent": "Message de test envoyé",
+    "testFailed": "Échec du test",
+    "testHttpStatus": "La cible a répondu avec le statut HTTP {{status}}",
+    "testTimeout": "La cible n'a pas répondu à temps (délai dépassé)",
+    "testConnectionFailed": "Connexion à la cible impossible",
+    "testSmtpFailed": "Envoi SMTP échoué (vérifier hôte, port et identifiants)",
+    "testSendFailed": "Échec de l'envoi"
   }
 }

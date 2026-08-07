@@ -118,7 +118,7 @@ fn due_with_kind(rows: &[&ReminderScanRow], as_of: NaiveDate) -> Vec<(DueReminde
 #[requirement(REQ-NOT-005)]
 #[requirement(REQ-NOT-003)]
 #[requirement(REQ-NOT-004)]
-fn channel_from_row(
+pub(crate) fn channel_from_row(
     row: &NotificationChannelRow,
     contact: Option<&(String, String)>,
 ) -> Option<Channel> {

@@ -254,6 +254,14 @@
     "token": "Application token",
     "userKey": "User key",
     "botUsername": "Bot name (optional)",
-    "botAvatarUrl": "Bot avatar URL (optional)"
+    "botAvatarUrl": "Bot avatar URL (optional)",
+    "test": "Test",
+    "testSent": "Test message sent",
+    "testFailed": "Test failed",
+    "testHttpStatus": "The target replied with HTTP status {{status}}",
+    "testTimeout": "The target did not reply in time (timeout)",
+    "testConnectionFailed": "Could not connect to the target",
+    "testSmtpFailed": "SMTP delivery failed (check host, port and credentials)",
+    "testSendFailed": "Sending failed"
   }
 }

@@ -127,7 +127,7 @@ depends_on: [REQ-NOT-001, REQ-SEC-005]
 id: REQ-NOT-006
 title: Test d'un canal de notification
 domain: notifications
-status: draft
+status: verified
 criticality: medium
 layer: [api, ui]
 e2e: required

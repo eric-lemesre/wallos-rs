@@ -5,8 +5,12 @@ import { api } from "../api/client";
 import type { components } from "../api/client";
 
 type NotificationChannelDto = components["schemas"]["NotificationChannelDto"];
+type TestChannelResponse = components["schemas"]["TestNotificationChannelResponse"];
 
 type ChannelKind = "webhook" | "email" | "telegram" | "discord" | "gotify" | "pushover";
+
+/** Résultat du dernier envoi de test, rattaché au canal testé. */
+type TestOutcome = { channelId: string; response: TestChannelResponse | null };
 
 /**
  * Canaux de notification du foyer : liste, ajout et suppression. Webhook générique (REQ-NOT-005),
@@ -16,9 +20,13 @@ type ChannelKind = "webhook" | "email" | "telegram" | "discord" | "gotify" | "pu
  * jetons, clé utilisateur) ne sont jamais renvoyés (redactés). Isolée par le serveur (§9). Aucune
  * chaîne d'affichage en dur (REQ-I18N-002).
  *
+ * Chaque canal offre un envoi de **test** (REQ-NOT-006) : le résultat est affiché avec un
+ * diagnostic localisé à partir d'un code stable renvoyé par le serveur (jamais l'erreur brute).
+ *
  * @implements REQ-NOT-005
  * @implements REQ-NOT-003
  * @implements REQ-NOT-004
+ * @implements REQ-NOT-006
  */
 export function NotificationChannelsCard() {
   const { t } = useTranslation();
@@ -38,6 +46,7 @@ export function NotificationChannelsCard() {
   const [userKey, setUserKey] = useState("");
   const [botUsername, setBotUsername] = useState("");
   const [botAvatarUrl, setBotAvatarUrl] = useState("");
+  const [testOutcome, setTestOutcome] = useState<TestOutcome | null>(null);
 
   const refresh = useCallback(async () => {
     const { data, response } = await api.GET("/notifications/channels");
@@ -102,6 +111,34 @@ export function NotificationChannelsCard() {
   async function remove(id: string) {
     await api.DELETE("/notifications/channels/{id}", { params: { path: { id } } });
     await refresh();
+  }
+
+  async function testChannel(id: string) {
+    const { data, response } = await api.POST("/notifications/channels/{id}/test", {
+      params: { path: { id } },
+    });
+    setTestOutcome({ channelId: id, response: response.ok && data ? data : null });
+  }
+
+  /** Message localisé du résultat d'un test (code stable → clé i18n). */
+  function testMessage(result: TestChannelResponse | null): string {
+    if (!result) {
+      return t("notificationChannels.testFailed");
+    }
+    switch (result.code) {
+      case "sent":
+        return t("notificationChannels.testSent");
+      case "http-status":
+        return t("notificationChannels.testHttpStatus", { status: result.http_status ?? "?" });
+      case "timeout":
+        return t("notificationChannels.testTimeout");
+      case "connection-failed":
+        return t("notificationChannels.testConnectionFailed");
+      case "smtp-failed":
+        return t("notificationChannels.testSmtpFailed");
+      default:
+        return t("notificationChannels.testSendFailed");
+    }
   }
 
   /**
@@ -287,11 +324,27 @@ export function NotificationChannelsCard() {
               <span data-testid="notification-channel-target">{target(channel)}</span>
               <button
                 type="button"
+                data-testid={`notification-channel-test-${channel.id}`}
+                onClick={() => void testChannel(channel.id)}
+              >
+                {t("notificationChannels.test")}
+              </button>
+              <button
+                type="button"
                 data-testid={`notification-channel-delete-${channel.id}`}
                 onClick={() => void remove(channel.id)}
               >
                 {t("notificationChannels.delete")}
               </button>
+              {testOutcome?.channelId === channel.id && (
+                <span
+                  data-testid="notification-channel-test-result"
+                  role="status"
+                  data-ok={testOutcome.response?.ok === true}
+                >
+                  {testMessage(testOutcome.response)}
+                </span>
+              )}
             </li>
           ))}
         </ul>
