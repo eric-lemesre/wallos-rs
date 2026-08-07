@@ -61,6 +61,11 @@ describe("formatDate", () => {
     expect(formatDate("pas-une-date", "fr")).toBe("pas-une-date");
     expect(formatDate("", "fr")).toBe("");
   });
+
+  it("ne corrige jamais silencieusement une date invalide (revue F9)", () => {
+    expect(formatDate("2026-02-30", "en")).toBe("2026-02-30");
+    expect(formatDate("2026-13-01", "en")).toBe("2026-13-01");
+  });
 });
 
 describe("formatMonth", () => {

@@ -28,6 +28,7 @@ test.describe("Formats de date localisés", { tag: ["@design", "@REQ-I18N-003"] 
     // Français : même jour civil, conventions françaises.
     await app.setLanguage("fr");
     await app.computeNextDue("2025-01-31", "month", "1", "2025-01-31");
-    await expect.poll(async () => await app.readNextDue()).toContain("28 févr. 2025");
+    // Regex tolérante à l'abréviation ICU de février (« févr. »/« fév. », revue I18N-003 F10).
+    await expect.poll(async () => await app.readNextDue()).toMatch(/28 févr?\.? 2025/);
   });
 });
