@@ -60,7 +60,7 @@ describe("SubscriptionsList", () => {
     renderList();
 
     expect(await screen.findAllByTestId("subscription-name")).toHaveLength(2);
-    expect(screen.getByTestId("subscriptions-total")).toHaveTextContent("15.98 EUR");
+    expect(screen.getByTestId("subscriptions-total")).toHaveTextContent("€15.98");
   });
 
   it("applique un filtre catégorie + état (query conjonctive)", async () => {

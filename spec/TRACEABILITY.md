@@ -2,7 +2,7 @@
 
 # Matrice de traçabilité des exigences
 
-Total : **73** exigences — 69 verified · 4 draft.
+Total : **73** exigences — 70 verified · 3 draft.
 
 Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et [`spec/requirements/`](requirements/). Régénérer avec `cargo xtask trace --write`.
 
@@ -39,7 +39,7 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 | `REQ-CUR-003` | Récupération des taux de change | high | ✅ verified |
 | `REQ-CUR-004` | Mode dégradé en cas d'échec du fournisseur de taux | high | ✅ verified |
 | `REQ-CUR-005` | Règle d'arrondi | high | ✅ verified |
-| `REQ-CUR-006` | Formatage localisé des montants | medium | ⚪ draft |
+| `REQ-CUR-006` | Formatage localisé des montants | medium | ✅ verified |
 | `REQ-CUR-007` | Référentiel des devises supportées | medium | ✅ verified |
 
 ## i18n

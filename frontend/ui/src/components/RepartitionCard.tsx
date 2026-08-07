@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
+import { formatAmount } from "../lib/format";
 import type { components } from "../api/client";
 
 type RepartitionResponse = components["schemas"]["RepartitionResponse"];
@@ -18,7 +19,7 @@ type RepartitionEntry = components["schemas"]["RepartitionEntryDto"];
  * @implements REQ-STA-004
  */
 export function RepartitionCard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [result, setResult] = useState<RepartitionResponse | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -59,12 +60,12 @@ export function RepartitionCard() {
                 >
                   <span data-testid="repartition-label">{label}</span>
                   <span data-testid="repartition-total">
-                    {e.total} {result?.currency}
+                    {formatAmount(e.total, result?.currency ?? "", i18n.language)}
                   </span>
                   <span
                     data-testid="repartition-bar"
                     role="img"
-                    aria-label={`${label}: ${e.total} ${result?.currency}`}
+                    aria-label={`${label}: ${formatAmount(e.total, result?.currency ?? "", i18n.language)}`}
                     style={{ display: "inline-block", width: `${ratio}%` }}
                   />
                 </li>
@@ -98,7 +99,7 @@ export function RepartitionCard() {
       {result && (
         <>
           <p data-testid="repartition-grand-total">
-            {t("repartition.total")}: {result.total} {result.currency}
+            {t("repartition.total")}: {formatAmount(result.total, result.currency, i18n.language)}
           </p>
           {renderAxis("category", t("repartition.byCategory"), result.by_category)}
           {renderAxis("payer", t("repartition.byPayer"), result.by_payer)}

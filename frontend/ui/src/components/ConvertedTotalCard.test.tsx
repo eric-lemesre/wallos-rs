@@ -46,7 +46,7 @@ describe("ConvertedTotalCard", () => {
     await user.type(screen.getByTestId("exchange-currency-0"), "EUR");
     await user.click(screen.getByTestId("exchange-submit"));
 
-    expect(await screen.findByTestId("exchange-total")).toHaveTextContent("16.00 USD");
+    expect(await screen.findByTestId("exchange-total")).toHaveTextContent("$16.00");
     // Fraîcheur affichée (mode dégradé : on indique la date du taux utilisé).
     expect(screen.getByTestId("exchange-asof")).toHaveTextContent(
       i18n.t("exchange.asOf", { date: "2026-07-20" }),
@@ -82,7 +82,7 @@ describe("ConvertedTotalCard", () => {
       i18n.t("exchange.incomplete"),
     );
     expect(screen.getByTestId("exchange-excluded")).toHaveTextContent("1");
-    expect(screen.getByTestId("exchange-total")).toHaveTextContent("20 USD");
+    expect(screen.getByTestId("exchange-total")).toHaveTextContent("$20.00");
     // Pas de date de fraîcheur quand aucun taux daté n'a servi.
     expect(screen.queryByTestId("exchange-asof")).toBeNull();
   });
