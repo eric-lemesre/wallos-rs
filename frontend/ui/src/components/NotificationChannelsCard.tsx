@@ -47,6 +47,7 @@ export function NotificationChannelsCard() {
   const [botUsername, setBotUsername] = useState("");
   const [botAvatarUrl, setBotAvatarUrl] = useState("");
   const [testOutcome, setTestOutcome] = useState<TestOutcome | null>(null);
+  const [testing, setTesting] = useState(false);
 
   const refresh = useCallback(async () => {
     const { data, response } = await api.GET("/notifications/channels");
@@ -114,10 +115,19 @@ export function NotificationChannelsCard() {
   }
 
   async function testChannel(id: string) {
-    const { data, response } = await api.POST("/notifications/channels/{id}/test", {
-      params: { path: { id } },
-    });
-    setTestOutcome({ channelId: id, response: response.ok && data ? data : null });
+    // Un seul test à la fois : l'envoi est une requête sortante côté serveur (revue NOT-006 F2).
+    if (testing) {
+      return;
+    }
+    setTesting(true);
+    try {
+      const { data, response } = await api.POST("/notifications/channels/{id}/test", {
+        params: { path: { id } },
+      });
+      setTestOutcome({ channelId: id, response: response.ok && data ? data : null });
+    } finally {
+      setTesting(false);
+    }
   }
 
   /** Message localisé du résultat d'un test (code stable → clé i18n). */
@@ -325,6 +335,7 @@ export function NotificationChannelsCard() {
               <button
                 type="button"
                 data-testid={`notification-channel-test-${channel.id}`}
+                disabled={testing}
                 onClick={() => void testChannel(channel.id)}
               >
                 {t("notificationChannels.test")}
