@@ -18,9 +18,18 @@
  * la forme brute `montant CODE` (jamais de crash d'affichage).
  */
 export function formatAmount(amount: string, currency: string, locale: string): string {
-  const value = Number(amount);
-  // `Number("") === 0` : un champ vide ne doit jamais devenir « €0.00 ».
-  if (amount.trim() === "" || !Number.isFinite(value)) {
+  const trimmed = amount.trim();
+  if (trimmed === "") {
+    // Champ absent : rien à afficher (revue CUR-006 F8 — ni « €0.00 », ni un code orphelin).
+    return "";
+  }
+  // Seule la forme décimale canonique R4 est formatée (revue F7 : pas de `0x10`/`1e2` silencieux),
+  // et seulement si elle tient sans perte dans un double (revue F6 : ≤ 15 chiffres significatifs —
+  // au-delà, la forme brute préserve la valeur exacte).
+  const canonical = /^-?\d+(\.\d+)?$/.test(trimmed);
+  const digits = trimmed.replace(/[^0-9]/g, "").replace(/^0+/, "").length;
+  const value = Number(trimmed);
+  if (!canonical || digits > 15 || !Number.isFinite(value)) {
     return `${amount} ${currency}`.trim();
   }
   try {
