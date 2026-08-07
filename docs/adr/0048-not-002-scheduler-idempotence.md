@@ -29,7 +29,20 @@ Deux instances concurrentes tentent le même insert ; PostgreSQL en sérialise u
 `rows_affected = 0` et n'envoie pas. **Aucun verrou applicatif** (advisory lock, leader election) :
 un verrou protégerait l'exécution, pas l'occurrence — c'est l'occurrence qui doit être unique, et
 la contrainte le garantit au niveau exact où la course existe. Test d'intégration : deux
-applications sur le même pool, `tokio::join!`, somme des émissions = 1, un seul POST reçu.
+applications sur **deux pools distincts** (revue F6 : la course se joue bien dans PostgreSQL),
+`tokio::join!`, somme des émissions = 1, un seul POST reçu.
+
+### Risques résiduels (revue kimi F1/F2, amendement 2026-08-07)
+
+Pris isolément, ce mécanisme garantit **au plus un** envoi par occurrence — « exactement un »
+suppose l'absence de crash dans la fenêtre entre `record_emitted` et `Channel::send` : un arrêt
+brutal à cet instant laisserait une occurrence journalisée jamais transmise (perte silencieuse).
+Cette fenêtre est **fermée par REQ-NOT-007** (ADR 0049, pattern *outbox*) : le suivi de livraison
+est ouvert **avant** l'envoi et refermé au succès — après un crash, la ligne `pending` subsiste et
+la phase de réessai transmet le lot. Le résidu devient l'inverse : un crash entre l'envoi et la
+fermeture du suivi peut produire un **doublon** au réessai — pour un rappel, un doublon rare est
+préférable à une perte silencieuse (exactly-once strict exigerait une transactionnalité de bout en
+bout que les canaux tiers n'offrent pas).
 
 ### (3) Anti-rétroactif : le déclenchement exact vaut garde
 
