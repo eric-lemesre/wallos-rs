@@ -23,6 +23,7 @@ use lettre::message::header::ContentType;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use serde::{Deserialize, Serialize};
+use wallos_core::requirement;
 
 /// Un rappel individuel à notifier (élément de la charge utile). `Deserialize` : une livraison en
 /// échec stocke la charge utile pour la rejouer à l'identique au réessai (REQ-NOT-007).
@@ -114,17 +115,62 @@ impl Channel {
     }
 }
 
-/// Client HTTP **durci** partagé par les canaux sortants : délai borné (10 s) et suivi de
-/// redirection **désactivé** (anti-SSRF, même politique que le webhook NOT-005 — une `3xx`
-/// est un échec).
+/// Client HTTP **durci** partagé par les canaux sortants (REQ-SEC-005) : délai borné (10 s),
+/// suivi de redirection **désactivé** (une `3xx` est un échec — refuser une redirection est plus
+/// sûr que la suivre en re-validant chaque saut, critère #2 trivialement satisfait : zéro saut),
+/// et résolution DNS **publique seulement** ([`PublicOnlyResolver`]) : un nom d'hôte résolvant —
+/// ou re-résolvant, *rebinding* — vers une adresse interne est refusé **au moment de l'appel**
+/// (critère #1), en complément de la garde d'enregistrement [`webhook_url_is_safe`].
 ///
 /// # Errors
 /// Échec de construction du client TLS.
+#[requirement(REQ-SEC-005)]
 fn http_client() -> reqwest::Result<reqwest::Client> {
     reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .redirect(reqwest::redirect::Policy::none())
+        .dns_resolver(std::sync::Arc::new(PublicOnlyResolver))
         .build()
+}
+
+/// Un nom d'hôte n'a résolu vers **aucune adresse publique** (REQ-SEC-005). Erreur typée du
+/// résolveur ; son message ne reflète que le nom d'hôte (jamais un jeton).
+#[derive(Debug, Clone)]
+pub struct NonPublicAddress(String);
+
+impl fmt::Display for NonPublicAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "hôte «{}» sans adresse publique (SSRF refusée)", self.0)
+    }
+}
+
+impl std::error::Error for NonPublicAddress {}
+
+/// Résolveur DNS n'acceptant que des adresses **publiques** (REQ-SEC-005). La garde
+/// d'enregistrement valide l'URL *saisie* ; ce résolveur valide les adresses *résolues* à chaque
+/// connexion — reqwest ne se connecte qu'aux adresses retournées ici, il n'y a pas de fenêtre
+/// entre validation et connexion (anti-TOCTOU/rebinding). Une URL en adresse IP littérale ne
+/// passe pas par le résolveur : elle est déjà filtrée à l'enregistrement (et une IP posée par SQL
+/// direct — voie de test — suppose une base déjà compromise, cf. ADR 0046).
+struct PublicOnlyResolver;
+
+impl reqwest::dns::Resolve for PublicOnlyResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let host = name.as_str().to_string();
+        Box::pin(async move {
+            // Résolveur système (mêmes sources que l'OS) ; le port est remplacé par reqwest.
+            let addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host((host.as_str(), 0))
+                .await?
+                .filter(|addr| ip_is_public(addr.ip()))
+                .collect();
+            if addrs.is_empty() {
+                return Err(
+                    Box::new(NonPublicAddress(host)) as Box<dyn std::error::Error + Send + Sync>
+                );
+            }
+            Ok(Box::new(addrs.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
 }
 
 /// Statut HTTP non favorable renvoyé par la cible d'un canal. Erreur **typée** (downcastable depuis
@@ -650,6 +696,7 @@ pub fn compose_email(
 /// ni non spécifié, ni CGNAT, ni le nom `localhost`. Un nom d'hôte DNS non réservé est accepté (sa
 /// résolution vers une IP interne relève de REQ-SEC-005).
 #[must_use]
+#[requirement(REQ-SEC-005)]
 pub fn webhook_url_is_safe(raw: &str) -> bool {
     let Ok(url) = reqwest::Url::parse(raw) else {
         return false;
