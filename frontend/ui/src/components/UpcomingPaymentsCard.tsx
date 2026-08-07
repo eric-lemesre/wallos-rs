@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
+import { formatAmount } from "../lib/format";
 import type { components } from "../api/client";
 
 type UpcomingPaymentsResponse = components["schemas"]["UpcomingPaymentsResponse"];
@@ -14,7 +15,7 @@ type UpcomingPaymentsResponse = components["schemas"]["UpcomingPaymentsResponse"
  * @implements REQ-STA-005
  */
 export function UpcomingPaymentsCard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [days, setDays] = useState("30");
   const [result, setResult] = useState<UpcomingPaymentsResponse | null>(null);
   const [failed, setFailed] = useState(false);
@@ -63,7 +64,7 @@ export function UpcomingPaymentsCard() {
                 <span data-testid="upcoming-date">{p.date}</span>
                 <span data-testid="upcoming-name">{p.name}</span>
                 <span data-testid="upcoming-amount">
-                  {p.amount} {p.currency}
+                  {formatAmount(p.amount, p.currency, i18n.language)}
                 </span>
               </li>
             ))}

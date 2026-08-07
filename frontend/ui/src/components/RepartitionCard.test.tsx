@@ -57,11 +57,11 @@ describe("RepartitionCard", () => {
     );
     renderCard();
 
-    expect(await screen.findByTestId("repartition-grand-total")).toHaveTextContent("25.00 EUR");
+    expect(await screen.findByTestId("repartition-grand-total")).toHaveTextContent("€25.00");
     const catEntries = screen.getAllByTestId("repartition-entry-category");
     expect(catEntries).toHaveLength(2);
     expect(catEntries[0]).toHaveTextContent("Streaming");
-    expect(catEntries[0]).toHaveTextContent("20.00 EUR");
+    expect(catEntries[0]).toHaveTextContent("€20.00");
     const payerEntries = screen.getAllByTestId("repartition-entry-payer");
     expect(payerEntries).toHaveLength(2);
     expect(payerEntries[0]).toHaveTextContent("Alex");

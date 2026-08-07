@@ -47,7 +47,7 @@ describe("CostEvolutionCard", () => {
     const points = await screen.findAllByTestId("evolution-point");
     expect(points).toHaveLength(2);
     expect(screen.getAllByTestId("evolution-month")[0]).toHaveTextContent("2026-05");
-    expect(screen.getAllByTestId("evolution-total")[1]).toHaveTextContent("15.00 EUR");
+    expect(screen.getAllByTestId("evolution-total")[1]).toHaveTextContent("€15.00");
   });
 
   it("interroge l'endpoint d'évolution du coût", async () => {

@@ -127,7 +127,7 @@ depends_on: [REQ-CUR-002]
 id: REQ-CUR-006
 title: Formatage localisé des montants
 domain: currencies
-status: draft
+status: verified
 criticality: medium
 layer: [ui]
 e2e: required

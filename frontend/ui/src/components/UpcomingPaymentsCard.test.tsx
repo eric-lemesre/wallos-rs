@@ -46,7 +46,7 @@ describe("UpcomingPaymentsCard", () => {
     expect(rows).toHaveLength(3);
     expect(rows[0]).toHaveTextContent("2025-01-15");
     expect(rows[0]).toHaveTextContent("Netflix");
-    expect(rows[0]).toHaveTextContent("9.99 EUR");
+    expect(rows[0]).toHaveTextContent("€9.99");
     // La fenêtre (jours) est transmise en paramètre de requête.
     await waitFor(() =>
       expect(get).toHaveBeenCalledWith("/schedule/upcoming", {

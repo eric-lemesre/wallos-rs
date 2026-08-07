@@ -40,7 +40,7 @@ test.describe("Répartition par catégorie et par payeur", { tag: ["@design", "@
     await app.reloadRepartition();
 
     // Total général = 10 + 5 = 15 € (somme des parts, sans écart d'arrondi, critère #1).
-    await expect.poll(() => app.repartitionGrandTotal()).toContain("15.00 EUR");
+    await expect.poll(() => app.repartitionGrandTotal()).toContain("€15.00");
 
     // Axe catégorie : « Streaming » présent, et l'entrée « (aucun) » pour l'abonnement sans catégorie
     // (critère #2 : jamais omise). Locale par défaut de l'app de test = en -> « (none) ».
