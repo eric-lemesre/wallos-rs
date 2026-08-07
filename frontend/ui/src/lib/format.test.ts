@@ -28,6 +28,19 @@ describe("formatAmount", () => {
     expect(formatAmount("9.99", "???", "en")).toBe("9.99 ???");
     expect(formatAmount("abc", "EUR", "en")).toBe("abc EUR");
   });
+
+  it("refuse les formes non canoniques et préserve les montants hors précision double (revue F6/F7)", () => {
+    // Non canonique : jamais interprété silencieusement.
+    expect(formatAmount("0x10", "EUR", "en")).toBe("0x10 EUR");
+    expect(formatAmount("1e2", "EUR", "en")).toBe("1e2 EUR");
+    // Plus de 15 chiffres significatifs : la forme brute préserve la valeur exacte (R4).
+    expect(formatAmount("123456789012345678.90", "EUR", "en")).toBe("123456789012345678.90 EUR");
+  });
+
+  it("n'affiche rien pour un champ vide (revue F8)", () => {
+    expect(formatAmount("", "EUR", "en")).toBe("");
+    expect(formatAmount("   ", "EUR", "en")).toBe("");
+  });
 });
 
 describe("formatDate", () => {
