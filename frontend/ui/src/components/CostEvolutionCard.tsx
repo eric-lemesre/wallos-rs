@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
+import { formatAmount } from "../lib/format";
 import type { components } from "../api/client";
 
 type CostEvolutionResponse = components["schemas"]["CostEvolutionResponse"];
@@ -15,7 +16,7 @@ type CostEvolutionResponse = components["schemas"]["CostEvolutionResponse"];
  * @implements REQ-STA-006
  */
 export function CostEvolutionCard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [result, setResult] = useState<CostEvolutionResponse | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -67,12 +68,12 @@ export function CostEvolutionCard() {
               <li key={p.month} data-testid="evolution-point">
                 <span data-testid="evolution-month">{p.month}</span>
                 <span data-testid="evolution-total">
-                  {p.total} {result.currency}
+                  {formatAmount(p.total, result.currency, i18n.language)}
                 </span>
                 <span
                   data-testid="evolution-bar"
                   role="img"
-                  aria-label={`${p.total} ${result.currency}`}
+                  aria-label={`${formatAmount(p.total, result.currency, i18n.language)}`}
                   style={{ display: "inline-block", width: `${ratio}%` }}
                 />
               </li>

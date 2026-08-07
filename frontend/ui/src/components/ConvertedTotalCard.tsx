@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
+import { formatAmount } from "../lib/format";
 import type { components } from "../api/client";
 
 type ConvertedTotalResponse = components["schemas"]["ConvertedTotalResponse"];
@@ -18,7 +19,7 @@ type MoneyInput = components["schemas"]["MoneyInput"];
  * @implements REQ-CUR-004
  */
 export function ConvertedTotalCard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [target, setTarget] = useState("EUR");
   const [rows, setRows] = useState<MoneyInput[]>([{ amount: "", currency: "" }]);
   const [result, setResult] = useState<ConvertedTotalResponse | null>(null);
@@ -101,7 +102,7 @@ export function ConvertedTotalCard() {
       {result && (
         <div data-testid="exchange-result">
           <p data-testid="exchange-total">
-            {t("exchange.total")}: {result.total} {result.currency}
+            {t("exchange.total")}: {formatAmount(result.total, result.currency, i18n.language)}
           </p>
           <p data-testid="exchange-converted">
             {t("exchange.converted")}: {result.converted}

@@ -1,0 +1,62 @@
+import { describe, expect, it } from "vitest";
+
+import { formatAmount, formatDate, formatMonth } from "./format";
+
+/** @implements REQ-CUR-006 */
+/** @implements REQ-I18N-003 */
+
+describe("formatAmount", () => {
+  it("suit la locale : séparateurs et position du symbole diffèrent, la valeur non", () => {
+    const fr = formatAmount("1234.5", "EUR", "fr");
+    const en = formatAmount("1234.5", "EUR", "en");
+    // fr : « 1 234,50 € » (séparateur d'espace, virgule, symbole après).
+    expect(fr).toMatch(/1\s234,50\s*€/u);
+    // en : « €1,234.50 » (virgule de milliers, point, symbole avant).
+    expect(en).toBe("€1,234.50");
+  });
+
+  it("n'affiche aucune décimale pour une devise sans sous-unité", () => {
+    expect(formatAmount("1500", "JPY", "en")).toBe("¥1,500");
+    expect(formatAmount("1500", "JPY", "fr")).not.toContain(",00");
+  });
+
+  it("normalise les décimales de la devise (padding)", () => {
+    expect(formatAmount("20", "USD", "en")).toBe("$20.00");
+  });
+
+  it("retombe sur la forme brute pour une devise inconnue ou un montant illisible", () => {
+    expect(formatAmount("9.99", "???", "en")).toBe("9.99 ???");
+    expect(formatAmount("abc", "EUR", "en")).toBe("abc EUR");
+  });
+});
+
+describe("formatDate", () => {
+  it("suit la locale active, jamais un format codé en dur", () => {
+    expect(formatDate("2026-08-07", "en")).toBe("Aug 7, 2026");
+    expect(formatDate("2026-08-07", "fr")).toBe("7 août 2026");
+  });
+
+  it("affiche le jour civil attendu quel que soit le fuseau (pas de décalage d'un jour)", () => {
+    // La date est reconstruite en LOCAL : même dans un fuseau à l'ouest de Greenwich
+    // (interprétation UTC → veille), le jour affiché reste le 1er janvier.
+    expect(formatDate("2026-01-01", "en")).toContain("1");
+    expect(formatDate("2026-01-01", "en")).toContain("Jan");
+    expect(formatDate("2026-12-31", "fr")).toContain("31");
+  });
+
+  it("renvoie telle quelle une chaîne non conforme", () => {
+    expect(formatDate("pas-une-date", "fr")).toBe("pas-une-date");
+    expect(formatDate("", "fr")).toBe("");
+  });
+});
+
+describe("formatMonth", () => {
+  it("localise un mois civil YYYY-MM", () => {
+    expect(formatMonth("2026-05", "en")).toBe("May 2026");
+    expect(formatMonth("2026-05", "fr")).toBe("mai 2026");
+  });
+
+  it("renvoie telle quelle une chaîne non conforme", () => {
+    expect(formatMonth("2026", "en")).toBe("2026");
+  });
+});

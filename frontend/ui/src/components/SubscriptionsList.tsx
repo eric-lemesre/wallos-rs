@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
+import { formatAmount } from "../lib/format";
 import type { components } from "../api/client";
 import { SubscriptionLogo } from "./SubscriptionLogo";
 
@@ -30,7 +31,7 @@ const SORTS = ["name", "amount", "next_due"] as const;
  * @implements REQ-STA-007
  */
 export function SubscriptionsList() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [category, setCategory] = useState("");
   const [payer, setPayer] = useState("");
   const [state, setState] = useState<StateFilter>("all");
@@ -236,7 +237,7 @@ export function SubscriptionsList() {
 
       {data && (
         <div data-testid="subscriptions-total">
-          {t("subscriptions.total")}: {data.total.total} {data.total.currency}
+          {t("subscriptions.total")}: {formatAmount(data.total.total, data.total.currency, i18n.language)}
           {filtered && (
             <span data-testid="subscriptions-total-filtered">
               {" "}
@@ -266,7 +267,7 @@ function SubscriptionRow({
   ) => Promise<boolean>;
   onDelete: (sub: SubscriptionDto) => Promise<boolean>;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [amount, setAmount] = useState(sub.amount);
   const [unit, setUnit] = useState(sub.cycle.unit);
@@ -291,13 +292,13 @@ function SubscriptionRow({
       <SubscriptionLogo name={sub.name} logo={sub.logo} />
       <span data-testid="subscription-name">{sub.name}</span>
       <span data-testid="subscription-amount">
-        {sub.amount} {sub.currency}
+        {formatAmount(sub.amount, sub.currency, i18n.language)}
       </span>
       <span data-testid="subscription-monthly">
-        {t("subscriptions.monthlyCost")}: {sub.monthly_cost} {sub.currency}
+        {t("subscriptions.monthlyCost")}: {formatAmount(sub.monthly_cost ?? "", sub.currency, i18n.language)}
       </span>
       <span data-testid="subscription-yearly">
-        {t("subscriptions.yearlyCost")}: {sub.yearly_cost} {sub.currency}
+        {t("subscriptions.yearlyCost")}: {formatAmount(sub.yearly_cost ?? "", sub.currency, i18n.language)}
       </span>
       {sub.in_trial && (
         <span data-testid="subscription-trial">{t("subscriptions.trial")}</span>
