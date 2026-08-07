@@ -10,6 +10,7 @@ import { NotificationChannelsCard } from "./NotificationChannelsCard";
 /** @implements REQ-NOT-005 */
 /** @implements REQ-NOT-004 */
 /** @implements REQ-NOT-006 */
+/** @implements REQ-NOT-007 */
 
 const CHANNEL = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -51,11 +52,17 @@ describe("NotificationChannelsCard", () => {
   });
 
   it("ajoute un webhook puis rafraîchit", async () => {
-    const get = vi
-      .spyOn(api, "GET")
-      .mockResolvedValueOnce(ok({ channels: [] }))
-      .mockResolvedValueOnce(ok({ channels: [CHANNEL] }));
-    const post = vi.spyOn(api, "POST").mockResolvedValue(ok(CHANNEL, 201));
+    // Le rafraîchissement charge les canaux ET les livraisons en difficulté (REQ-NOT-007) :
+    // mock par chemin, avec une liste de canaux vide avant l'ajout puis remplie après.
+    let added = false;
+    const get = vi.spyOn(api, "GET").mockImplementation(((path: string) =>
+      path === "/notifications/deliveries"
+        ? Promise.resolve(ok({ deliveries: [] }))
+        : Promise.resolve(ok({ channels: added ? [CHANNEL] : [] }))) as never);
+    const post = vi.spyOn(api, "POST").mockImplementation((() => {
+      added = true;
+      return Promise.resolve(ok(CHANNEL, 201));
+    }) as never);
     const user = userEvent.setup();
     renderCard();
 
@@ -69,7 +76,7 @@ describe("NotificationChannelsCard", () => {
         body: { kind: "webhook", config: { url: "https://hooks.example.com/abc" } },
       }),
     );
-    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(4)); // 2 rafraîchissements × (canaux + livraisons)
     expect(await screen.findByTestId("notification-channel-target")).toBeInTheDocument();
   });
 
@@ -241,6 +248,33 @@ describe("NotificationChannelsCard", () => {
     const result = await screen.findByTestId("notification-channel-test-result");
     expect(result).toHaveAttribute("data-ok", "false");
     expect(result).toHaveTextContent("500");
+  });
+
+  it("affiche un abandon de livraison (REQ-NOT-007 : visible, pas seulement journalisé)", async () => {
+    vi.spyOn(api, "GET").mockImplementation(((path: string) =>
+      path === "/notifications/deliveries"
+        ? Promise.resolve(
+            ok({
+              deliveries: [
+                {
+                  id: "22222222-2222-2222-2222-222222222222",
+                  channel_id: CHANNEL.id,
+                  channel_kind: "webhook",
+                  as_of: "2026-08-07",
+                  attempts: 5,
+                  status: "abandoned",
+                  last_code: "connection-failed",
+                },
+              ],
+            }),
+          )
+        : Promise.resolve(ok({ channels: [CHANNEL] }))) as never);
+    renderCard();
+
+    const row = await screen.findByTestId("notification-delivery-row");
+    expect(row).toHaveAttribute("data-status", "abandoned");
+    expect(screen.getByTestId("notification-delivery-status")).toHaveTextContent("5");
+    expect(screen.getByTestId("notification-delivery-kind")).toHaveTextContent("webhook");
   });
 
   it("signale une erreur de chargement", async () => {

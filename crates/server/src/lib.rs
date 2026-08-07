@@ -16,14 +16,15 @@ use wallos_proto::{
     CreatePaymentMethodRequest, CreateSessionRequest, CreateSubscriptionRequest, CurrencyDto,
     CurrentUser, DataBundle, DeviceSummary, DeviceToken, HealthResponse, ImportCounts,
     ImportReport, LanguageResponse, MoneyInput, MonthlyCostPointDto, NextDueRequest,
-    NextDueResponse, NotificationChannelDto, NotificationChannelsResponse, PayerDto,
-    PaymentMethodDto, Problem, ReferenceCurrencyDto, RejectedRow, ReminderDto,
-    ReminderSettingResponse, RemindersResponse, RenameCategoryRequest, RenamePayerRequest,
-    RenamePaymentMethodRequest, RepartitionEntryDto, RepartitionResponse, RunRemindersResponse,
-    SetLanguageRequest, SetReminderSettingRequest, SubscriptionDto, SubscriptionListResponse,
-    SyncChangeDto, SyncChangesResponse, SyncOperationInput, SyncOperationResult, SyncPushRequest,
-    SyncPushResponse, TestNotificationChannelResponse, TombstoneDto, TombstonesResponse,
-    WebhookReminderItem, WebhookReminderPayload, problem,
+    NextDueResponse, NotificationChannelDto, NotificationChannelsResponse,
+    NotificationDeliveriesResponse, NotificationDeliveryDto, PayerDto, PaymentMethodDto, Problem,
+    ReferenceCurrencyDto, RejectedRow, ReminderDto, ReminderSettingResponse, RemindersResponse,
+    RenameCategoryRequest, RenamePayerRequest, RenamePaymentMethodRequest, RepartitionEntryDto,
+    RepartitionResponse, RunRemindersResponse, SetLanguageRequest, SetReminderSettingRequest,
+    SubscriptionDto, SubscriptionListResponse, SyncChangeDto, SyncChangesResponse,
+    SyncOperationInput, SyncOperationResult, SyncPushRequest, SyncPushResponse,
+    TestNotificationChannelResponse, TombstoneDto, TombstonesResponse, WebhookReminderItem,
+    WebhookReminderPayload, problem,
 };
 use wallos_storage::Db;
 
@@ -103,7 +104,8 @@ pub mod sync;
         notifications::create_notification_channel,
         notifications::list_notification_channels,
         notifications::delete_notification_channel,
-        notifications::test_notification_channel
+        notifications::test_notification_channel,
+        notifications::list_notification_deliveries
     ),
     components(schemas(
         HealthResponse,
@@ -162,6 +164,8 @@ pub mod sync;
         NotificationChannelDto,
         CreateNotificationChannelRequest,
         NotificationChannelsResponse,
+        NotificationDeliveryDto,
+        NotificationDeliveriesResponse,
         TestNotificationChannelResponse,
         WebhookReminderItem,
         WebhookReminderPayload
@@ -304,6 +308,7 @@ pub fn app_with_db_and_cron(db: Db, cron: CronToken) -> Router {
         ))
         .routes(routes!(notifications::delete_notification_channel))
         .routes(routes!(notifications::test_notification_channel))
+        .routes(routes!(notifications::list_notification_deliveries))
         .split_for_parts();
     Router::new()
         .nest("/api/v1", router.with_state(db))

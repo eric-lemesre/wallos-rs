@@ -358,6 +358,7 @@ pub async fn run_reminders(
 
     // Canaux **actifs** par foyer (REQ-NOT-005), chargés une fois pour tout le balayage.
     let channel_repo = NotificationChannelRepository::new(db.pool());
+    let deliveries = wallos_storage::NotificationDeliveryRepository::new(db.pool());
     let channels_by_household = match channel_repo.list_enabled_by_household().await {
         Ok(map) => map,
         Err(_) => return internal_error(),
@@ -411,8 +412,8 @@ pub async fn run_reminders(
             accounts_notified += 1;
         }
         // Émission sortante best-effort (REQ-NOT-005) : envoie le lot nouvellement émis aux canaux
-        // actifs du foyer. Un échec est journalisé sans interrompre les autres canaux ni le cron
-        // (esprit REQ-NOT-003 ; réessai = REQ-NOT-007, différé).
+        // actifs du foyer. Un échec est journalisé sans interrompre les autres canaux ni le cron,
+        // et ouvre un suivi de livraison pour réessai à intervalle croissant (REQ-NOT-007).
         if !fresh.is_empty()
             && let Some(channels) = channels_by_household.get(&household_id)
         {
@@ -423,27 +424,149 @@ pub async fn run_reminders(
                 let Some(channel) = channel_from_row(row, contact) else {
                     continue;
                 };
-                // Best-effort : on ne journalise PAS l'erreur brute (elle peut contenir l'URL du canal,
-                // potentiellement porteuse d'un secret) — seulement le type de canal, le foyer et un
-                // code de diagnostic redacté (revue NOT-004 F6). Le réessai relèvera de REQ-NOT-007.
-                if let Err(err) = channel.send(&notification).await {
-                    let (code, http_status) = wallos_notifier::diagnose_send_error(&err);
-                    tracing::warn!(
-                        household_id = %household_id,
-                        channel = channel.kind(),
-                        code,
-                        http_status,
-                        "échec d'envoi d'un canal de notification"
-                    );
+                // Suivi *outbox* (REQ-NOT-007 ; revue NOT-002 F1/F2) : la livraison est ouverte
+                // AVANT l'envoi — un crash entre journalisation et envoi laisse une ligne `pending`
+                // que la phase de réessai finira par transmettre (pas de perte silencieuse).
+                // Best-effort : si l'ouverture échoue, on envoie quand même (comportement d'avant).
+                let delivery_id = match (
+                    wallos_core::retry_delay_minutes(1),
+                    serde_json::to_value(&notification),
+                ) {
+                    (Some(delay), Ok(payload)) => deliveries
+                        .open(
+                            household_id,
+                            row.id,
+                            as_of,
+                            &payload,
+                            Utc::now() + chrono::Duration::minutes(delay),
+                        )
+                        .await
+                        .ok(),
+                    _ => None,
+                };
+                match channel.send(&notification).await {
+                    Ok(()) => {
+                        // Nominal : le suivi disparaît aussitôt.
+                        if let Some(id) = delivery_id {
+                            let _ = deliveries.resolve(id).await;
+                        }
+                    }
+                    Err(err) => {
+                        // On ne journalise PAS l'erreur brute (elle peut contenir l'URL du canal,
+                        // potentiellement porteuse d'un secret) — seulement un diagnostic redacté
+                        // (revue NOT-004 F6). L'échéance de réessai est déjà posée par l'ouverture.
+                        let (code, http_status) = wallos_notifier::diagnose_send_error(&err);
+                        tracing::warn!(
+                            household_id = %household_id,
+                            channel = channel.kind(),
+                            code,
+                            http_status,
+                            "échec d'envoi d'un canal de notification"
+                        );
+                        if let Some(id) = delivery_id {
+                            let _ = deliveries
+                                .record_retry_failure(
+                                    id,
+                                    code,
+                                    wallos_core::retry_delay_minutes(1)
+                                        .map(|d| Utc::now() + chrono::Duration::minutes(d)),
+                                )
+                                .await;
+                        }
+                    }
                 }
             }
         }
     }
 
+    // Phase de réessai (REQ-NOT-007) : rejoue les livraisons dues, réclamées atomiquement (une
+    // instance concurrente ne rejoue jamais la même — esprit REQ-NOT-002).
+    let (retried, abandoned) = retry_due_deliveries(&deliveries, &contacts).await;
+
     Json(RunRemindersResponse {
         as_of: as_of.format("%Y-%m-%d").to_string(),
         emitted,
         accounts_notified,
+        retried,
+        abandoned,
     })
     .into_response()
+}
+
+/// Rejoue les livraisons en échec dont l'échéance de réessai est atteinte (REQ-NOT-007) : succès →
+/// le suivi disparaît ; échec → diagnostic rafraîchi, et **abandon** une fois la borne de tentatives
+/// atteinte ([`wallos_core::MAX_DELIVERY_ATTEMPTS`]). Renvoie `(réessayées, abandonnées)`.
+#[requirement(REQ-NOT-007)]
+async fn retry_due_deliveries(
+    deliveries: &wallos_storage::NotificationDeliveryRepository<'_>,
+    contacts: &BTreeMap<Uuid, (String, String)>,
+) -> (usize, usize) {
+    let now = Utc::now();
+    // Échéance provisoire posée au claim ; corrigée après le résultat (inutile en cas de succès ou
+    // d'abandon). Politique pure : délai de la tentative qui vient d'être réclamée.
+    let due = match deliveries
+        .claim_due_retries(now, now + chrono::Duration::minutes(60))
+        .await
+    {
+        Ok(due) => due,
+        Err(_) => return (0, 0),
+    };
+    let mut retried = 0usize;
+    let mut abandoned = 0usize;
+    for delivery in due {
+        // `attempts` renvoyé par le claim inclut la tentative en cours.
+        let attempt = u32::try_from(delivery.attempts).unwrap_or(u32::MAX);
+        let channel_row = NotificationChannelRow {
+            id: delivery.channel_id,
+            household_id: delivery.household_id,
+            kind: delivery.kind.clone(),
+            config: delivery.config.clone(),
+            enabled: true,
+        };
+        let contact = contacts.get(&delivery.household_id);
+        let Some(channel) = channel_from_row(&channel_row, contact) else {
+            // Config devenue illisible : abandon immédiat, visible (plutôt qu'un réessai éternel).
+            let _ = deliveries
+                .record_retry_failure(delivery.id, "unreadable-config", None)
+                .await;
+            abandoned += 1;
+            continue;
+        };
+        let Ok(notification) =
+            serde_json::from_value::<ReminderNotification>(delivery.payload.clone())
+        else {
+            let _ = deliveries
+                .record_retry_failure(delivery.id, "unreadable-payload", None)
+                .await;
+            abandoned += 1;
+            continue;
+        };
+        retried += 1;
+        match channel.send(&notification).await {
+            Ok(()) => {
+                let _ = deliveries.resolve(delivery.id).await;
+            }
+            Err(err) => {
+                let (code, http_status) = wallos_notifier::diagnose_send_error(&err);
+                let next = wallos_core::retry_delay_minutes(attempt)
+                    .map(|delay| Utc::now() + chrono::Duration::minutes(delay));
+                tracing::warn!(
+                    household_id = %delivery.household_id,
+                    channel = channel.kind(),
+                    code,
+                    http_status,
+                    attempt,
+                    abandon = next.is_none(),
+                    "échec du réessai d'une livraison de notification"
+                );
+                if next.is_none() {
+                    abandoned += 1;
+                }
+                let _ = deliveries
+                    .record_retry_failure(delivery.id, code, next)
+                    .await;
+            }
+        }
+    }
+    (retried, abandoned)
 }

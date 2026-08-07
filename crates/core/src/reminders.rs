@@ -79,6 +79,26 @@ pub fn due_reminders(candidates: &[ReminderCandidate], today: NaiveDate) -> Vec<
     due
 }
 
+/// Nombre maximal de tentatives d'envoi d'une notification : 1 initiale + 4 réessais
+/// (REQ-NOT-007 : « s'arrête après un nombre borné de tentatives »).
+pub const MAX_DELIVERY_ATTEMPTS: u32 = 5;
+
+/// Délai, en minutes, avant le réessai suivant après la `attempt`-ième tentative **échouée**
+/// (1-indexée) : intervalle **croissant** (1 h, 4 h, 12 h, 24 h), `None` = borne atteinte, la
+/// livraison est **abandonnée** (REQ-NOT-007). Fonction pure : la cadence effective dépend du
+/// déclenchement de l'ordonnanceur externe (ADR 0040) — le délai est un plancher, pas une promesse.
+#[must_use]
+#[requirement(REQ-NOT-007)]
+pub const fn retry_delay_minutes(attempt: u32) -> Option<i64> {
+    match attempt {
+        0 | 1 => Some(60),
+        2 => Some(240),
+        3 => Some(720),
+        4 => Some(1440),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -146,5 +166,20 @@ mod tests {
         assert_eq!(due.len(), 2);
         assert_eq!(due[0].subscription_id, Uuid::from_u128(1));
         assert_eq!(due[1].subscription_id, Uuid::from_u128(2));
+    }
+
+    #[test]
+    #[verifies(REQ-NOT-007, case = "réessai à intervalle croissant, borné puis abandon")]
+    fn retry_delays_grow_then_stop() {
+        let delays: Vec<Option<i64>> = (1..=6).map(retry_delay_minutes).collect();
+        assert_eq!(
+            delays,
+            [Some(60), Some(240), Some(720), Some(1440), None, None]
+        );
+        // Strictement croissant sur les tentatives réessayées.
+        for pair in delays.iter().flatten().collect::<Vec<_>>().windows(2) {
+            assert!(pair[0] < pair[1]);
+        }
+        assert_eq!(retry_delay_minutes(MAX_DELIVERY_ATTEMPTS), None);
     }
 }

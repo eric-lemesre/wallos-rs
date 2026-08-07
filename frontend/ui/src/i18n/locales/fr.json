@@ -262,6 +262,9 @@
     "testTimeout": "La cible n'a pas répondu à temps (délai dépassé)",
     "testConnectionFailed": "Connexion à la cible impossible",
     "testSmtpFailed": "Envoi SMTP échoué (vérifier hôte, port et identifiants)",
-    "testSendFailed": "Échec de l'envoi"
+    "testSendFailed": "Échec de l'envoi",
+    "deliveriesTitle": "Envois en difficulté",
+    "deliveryPending": "Réessai planifié (tentative {{attempts}})",
+    "deliveryAbandoned": "Abandonné après {{attempts}} tentatives"
   }
 }
