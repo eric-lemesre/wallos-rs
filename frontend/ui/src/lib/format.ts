@@ -51,6 +51,15 @@ export function formatDate(iso: string, locale: string): string {
     return iso;
   }
   const civil = new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]));
+  // Une date invalide (2026-02-30) serait AUTOCORRIGÉE par Date (→ 2 mars) : la reconstruction
+  // doit rendre exactement les composants extraits, sinon forme brute (revue I18N-003 F9).
+  if (
+    civil.getFullYear() !== Number(parts[1]) ||
+    civil.getMonth() !== Number(parts[2]) - 1 ||
+    civil.getDate() !== Number(parts[3])
+  ) {
+    return iso;
+  }
   try {
     return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(civil);
   } catch {

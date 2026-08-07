@@ -73,7 +73,7 @@ export function CostEvolutionCard() {
                 <span
                   data-testid="evolution-bar"
                   role="img"
-                  aria-label={`${formatAmount(p.total, result.currency, i18n.language)}`}
+                  aria-label={`${formatMonth(p.month, i18n.language)}: ${formatAmount(p.total, result.currency, i18n.language)}`}
                   style={{ display: "inline-block", width: `${ratio}%` }}
                 />
               </li>

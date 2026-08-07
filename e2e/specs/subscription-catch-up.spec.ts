@@ -34,11 +34,15 @@ test.describe("Rattrapage des échéances passées", { tag: ["@legacy", "@REQ-SU
     const anchorDate = new Date(`${anchor}T00:00:00`);
     const format = (d: Date) =>
       new Intl.DateTimeFormat("en", { dateStyle: "medium" }).format(d);
+    // Comparaison en composantes LOCALES (revue I18N-003 F11) : toISOString convertit en UTC
+    // et pourrait décaler d'un jour selon le fuseau du navigateur de test.
+    const localIso = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const candidates: string[] = [];
     for (let offset = 0; offset <= 12; offset += 1) {
       const c = new Date(anchorDate);
       c.setMonth(c.getMonth() + offset);
-      if (c.toISOString().slice(0, 10) > today) {
+      if (localIso(c) > today) {
         candidates.push(format(c));
       }
     }
