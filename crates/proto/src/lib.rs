@@ -651,6 +651,24 @@ pub struct WebhookReminderPayload {
     pub reminders: Vec<WebhookReminderItem>,
 }
 
+/// Résultat d'un **envoi de test** sur un canal de notification (REQ-NOT-006). Le diagnostic est un
+/// **code stable** (localisé côté client) — jamais le texte brut de l'erreur, qui pourrait refléter
+/// l'URL cible (donc un jeton) ou des détails SMTP.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct TestNotificationChannelResponse {
+    /// Vrai si le message de test a été accepté par la cible.
+    #[schema(example = true)]
+    pub ok: bool,
+    /// Code de diagnostic : `sent`, `http-status`, `timeout`, `connection-failed`, `smtp-failed`,
+    /// `send-failed`.
+    #[schema(example = "sent")]
+    pub code: String,
+    /// Statut HTTP renvoyé par la cible quand `code = http-status`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(example = 404)]
+    pub http_status: Option<u16>,
+}
+
 /// Une catégorie d'abonnements exposée à l'interface (REQ-CAT-001).
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct CategoryDto {

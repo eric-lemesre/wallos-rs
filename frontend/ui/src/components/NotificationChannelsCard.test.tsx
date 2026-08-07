@@ -9,6 +9,7 @@ import { NotificationChannelsCard } from "./NotificationChannelsCard";
 
 /** @implements REQ-NOT-005 */
 /** @implements REQ-NOT-004 */
+/** @implements REQ-NOT-006 */
 
 const CHANNEL = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -210,6 +211,36 @@ describe("NotificationChannelsCard", () => {
     );
     await user.click(screen.getByTestId("notification-channel-add"));
     expect(await screen.findByTestId("notification-channel-rejected")).toBeInTheDocument();
+  });
+
+  it("teste un canal et affiche le succès", async () => {
+    vi.spyOn(api, "GET").mockResolvedValue(ok({ channels: [CHANNEL] }));
+    const post = vi.spyOn(api, "POST").mockResolvedValue(ok({ ok: true, code: "sent" }));
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(await screen.findByTestId(`notification-channel-test-${CHANNEL.id}`));
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith("/notifications/channels/{id}/test", {
+        params: { path: { id: CHANNEL.id } },
+      }),
+    );
+    const result = await screen.findByTestId("notification-channel-test-result");
+    expect(result).toHaveAttribute("data-ok", "true");
+  });
+
+  it("affiche le diagnostic d'un test en échec (statut HTTP de la cible)", async () => {
+    vi.spyOn(api, "GET").mockResolvedValue(ok({ channels: [CHANNEL] }));
+    vi.spyOn(api, "POST").mockResolvedValue(
+      ok({ ok: false, code: "http-status", http_status: 500 }),
+    );
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(await screen.findByTestId(`notification-channel-test-${CHANNEL.id}`));
+    const result = await screen.findByTestId("notification-channel-test-result");
+    expect(result).toHaveAttribute("data-ok", "false");
+    expect(result).toHaveTextContent("500");
   });
 
   it("signale une erreur de chargement", async () => {

@@ -84,6 +84,48 @@ impl<'a> NotificationChannelRepository<'a> {
         Ok(rows)
     }
 
+    /// Lit un canal **du foyer de l'appelant**. `None` s'il n'existe pas ou appartient à un autre
+    /// foyer (→ 404, jamais 403, §9). Sert à l'envoi de test (REQ-NOT-006).
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-NOT-006)]
+    pub async fn get(
+        &self,
+        actor: &Actor,
+        id: Uuid,
+    ) -> Result<Option<NotificationChannelRow>, StorageError> {
+        let row = sqlx::query_as::<_, NotificationChannelRow>(
+            "select id, household_id, kind, config, enabled from notification_channels \
+             where id = $1 and household_id = $2",
+        )
+        .bind(id)
+        .bind(actor.household_id())
+        .fetch_optional(self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    /// Contact du titulaire d'**un** foyer : `(email, langue)` de l'utilisateur le plus ancien
+    /// (même règle que [`Self::owner_contacts`], pour un envoi ciblé — test de canal, REQ-NOT-006).
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-NOT-006)]
+    pub async fn owner_contact(
+        &self,
+        household_id: Uuid,
+    ) -> Result<Option<(String, String)>, StorageError> {
+        let row: Option<(String, String)> = sqlx::query_as(
+            "select email::text, coalesce(language, 'en') from users \
+             where household_id = $1 order by created_at asc, id asc limit 1",
+        )
+        .bind(household_id)
+        .fetch_optional(self.pool)
+        .await?;
+        Ok(row)
+    }
+
     /// Supprime un canal **du foyer de l'appelant**. Renvoie `true` si supprimé, `false` s'il n'existe
     /// pas ou appartient à un autre foyer (→ 404, jamais 403, §9).
     ///

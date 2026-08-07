@@ -625,6 +625,36 @@ export class TargetDriver implements AppDriver, Harness {
       .allInnerTexts();
   }
 
+  // --- Canaux de notification (REQ-NOT-005/006) ---
+
+  /** Ajoute un canal webhook depuis la carte des canaux de notification. */
+  async addWebhookChannel(url: string): Promise<void> {
+    await this.page.getByTestId("notification-channel-type").selectOption("webhook");
+    await this.page.getByTestId("notification-channel-url").fill(url);
+    await this.page.getByTestId("notification-channel-add").click();
+  }
+
+  /** Déclenche l'envoi de test du premier canal listé. */
+  async testFirstChannel(): Promise<void> {
+    await this.page
+      .getByTestId("notification-channel-row")
+      .first()
+      .locator('button[data-testid^="notification-channel-test-"]')
+      .click();
+  }
+
+  /** Résultat du dernier test de canal : `{ ok, message }`, ou `null` si non affiché. */
+  async channelTestResult(): Promise<{ ok: boolean; message: string } | null> {
+    const result = this.page.getByTestId("notification-channel-test-result");
+    if ((await result.count()) === 0) {
+      return null;
+    }
+    return {
+      ok: (await result.getAttribute("data-ok")) === "true",
+      message: (await result.innerText()).trim(),
+    };
+  }
+
   // --- Appairage et synchronisation initiale (REQ-SYN-008) ---
 
   /**

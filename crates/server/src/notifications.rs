@@ -13,9 +13,12 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use uuid::Uuid;
 use wallos_core::requirement;
-use wallos_notifier::webhook_url_is_safe;
+use wallos_notifier::{
+    ReminderItem, ReminderNotification, diagnose_send_error, webhook_url_is_safe,
+};
 use wallos_proto::{
-    CreateNotificationChannelRequest, NotificationChannelDto, NotificationChannelsResponse, problem,
+    CreateNotificationChannelRequest, NotificationChannelDto, NotificationChannelsResponse,
+    TestNotificationChannelResponse, problem,
 };
 use wallos_storage::{Db, NotificationChannelRepository, NotificationChannelRow};
 
@@ -338,4 +341,86 @@ pub async fn delete_notification_channel(
         Ok(false) => channel_not_found(),
         Err(_) => internal_error(),
     }
+}
+
+/// Notification **factice** pour l'envoi de test (REQ-NOT-006) : un abonnement fictif échéant dans
+/// 5 jours (esprit de la « fake subscription » du legacy). Passe par le même chemin d'envoi et les
+/// mêmes gabarits localisés que le cron — tester, c'est exercer exactement ce qui sera émis.
+#[requirement(REQ-NOT-006)]
+fn test_notification(as_of: chrono::NaiveDate) -> ReminderNotification {
+    let due = as_of
+        .checked_add_days(chrono::Days::new(5))
+        .unwrap_or(as_of);
+    ReminderNotification::new(
+        as_of.to_string(),
+        vec![ReminderItem {
+            subscription_id: Uuid::nil().to_string(),
+            name: "Test subscription".to_string(),
+            due_date: due.to_string(),
+            days_until: 5,
+            kind: "payment".to_string(),
+        }],
+    )
+}
+
+/// Envoie un message de **test** sur un canal enregistré du foyer (REQ-NOT-006) et renvoie un
+/// diagnostic exploitable : `sent`, ou un code d'échec stable (`http-status` + code, `timeout`,
+/// `connection-failed`, `smtp-failed`, `send-failed`) — jamais le texte brut de l'erreur (il peut
+/// refléter l'URL cible, donc un jeton). Un canal **désactivé** reste testable : le test sert
+/// précisément à valider une configuration avant de l'activer.
+#[utoipa::path(
+    post,
+    path = "/notifications/channels/{id}/test",
+    operation_id = "testNotificationChannel",
+    params(("id" = String, Path, description = "Identifiant (UUID) du canal")),
+    extensions(("x-requirements" = json!(["REQ-NOT-006"]))),
+    responses(
+        (status = 200, description = "Test exécuté (voir `ok` et `code`)", body = TestNotificationChannelResponse, content_type = "application/json"),
+        (status = 401, description = "Non authentifié", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 404, description = "Canal inconnu ou hors du foyer", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 422, description = "Configuration stockée illisible pour ce type de canal", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 500, description = "Erreur interne", body = wallos_proto::Problem, content_type = "application/problem+json")
+    )
+)]
+#[requirement(REQ-NOT-006)]
+pub async fn test_notification_channel(
+    AuthActor(actor): AuthActor,
+    State(db): State<Db>,
+    Path(id): Path<String>,
+) -> Response {
+    let Ok(channel_id) = Uuid::parse_str(&id) else {
+        return channel_not_found();
+    };
+    let repo = NotificationChannelRepository::new(db.pool());
+    let row = match repo.get(&actor, channel_id).await {
+        Ok(Some(row)) => row,
+        Ok(None) => return channel_not_found(),
+        Err(_) => return internal_error(),
+    };
+    // Contact du titulaire : destinataire du canal e-mail, langue des messages (repli anglais).
+    let contact = match repo.owner_contact(row.household_id).await {
+        Ok(contact) => contact,
+        Err(_) => return internal_error(),
+    };
+    let Some(channel) = crate::reminders::channel_from_row(&row, contact.as_ref()) else {
+        // Config stockée illisible pour ce type (ne devrait pas arriver : validée à la création).
+        return invalid("config: configuration stockée illisible pour ce canal");
+    };
+    let notification = test_notification(chrono::Utc::now().date_naive());
+    let response = match channel.send(&notification).await {
+        Ok(()) => TestNotificationChannelResponse {
+            ok: true,
+            code: "sent".to_string(),
+            http_status: None,
+        },
+        Err(err) => {
+            let (code, http_status) = diagnose_send_error(&err);
+            TestNotificationChannelResponse {
+                ok: false,
+                code: code.to_string(),
+                http_status,
+            }
+        }
+    };
+    Json(response).into_response()
 }
