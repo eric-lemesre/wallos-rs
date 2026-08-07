@@ -31,7 +31,7 @@ depends_on: [REQ-SUB-012]
 id: REQ-NOT-002
 title: Idempotence de l'ordonnanceur
 domain: notifications
-status: draft
+status: verified
 criticality: high
 layer: [core, api]
 e2e: required

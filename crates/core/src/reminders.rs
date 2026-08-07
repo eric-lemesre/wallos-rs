@@ -47,8 +47,13 @@ pub struct DueReminder {
 /// n'est pas passée (`next_due >= today`). Résultat déterministe, ordonné par `(due_date, id)`.
 ///
 /// Fonction **pure** : `today` est fourni (testable sans horloge, REQ-STA-008).
+///
+/// Le déclenchement **exact** vaut garde anti-rétroactif (REQ-NOT-002 critère #3) : une occurrence
+/// dont la date de rappel est passée n'est jamais « rattrapée » — au premier démarrage comme après
+/// une interruption, seuls les rappels du jour partent.
 #[must_use]
 #[requirement(REQ-NOT-001)]
+#[requirement(REQ-NOT-002)]
 pub fn due_reminders(candidates: &[ReminderCandidate], today: NaiveDate) -> Vec<DueReminder> {
     let mut due: Vec<DueReminder> = candidates
         .iter()
