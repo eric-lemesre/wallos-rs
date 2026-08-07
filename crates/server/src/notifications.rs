@@ -149,12 +149,14 @@ fn validate_email_config(config: &serde_json::Value) -> Result<serde_json::Value
 }
 
 /// Extrait une chaîne **non vide** de la configuration (aide aux validateurs NOT-004) :
-/// clé absente, mal typée ou vide → `None`.
+/// clé absente, mal typée, vide ou blanche → `None`. La valeur est **trimmée** avant stockage
+/// (revue NOT-004 F7 : `" "` ne doit pas passer pour un jeton).
 #[requirement(REQ-NOT-004)]
 fn non_empty_string<'a>(config: &'a serde_json::Value, key: &str) -> Option<&'a str> {
     config
         .get(key)
         .and_then(|v| v.as_str())
+        .map(str::trim)
         .filter(|s| !s.is_empty())
 }
 
@@ -165,6 +167,11 @@ fn non_empty_string<'a>(config: &'a serde_json::Value, key: &str) -> Option<&'a 
 fn validate_telegram_config(config: &serde_json::Value) -> Result<serde_json::Value, &'static str> {
     let bot_token = non_empty_string(config, "bot_token")
         .ok_or("config.bot_token: requis (chaîne non vide)")?;
+    // Le jeton est interpolé dans le chemin de l'URL de l'API Bot : format strict exigé
+    // (revue NOT-004 F2).
+    if !wallos_notifier::telegram_bot_token_is_valid(bot_token) {
+        return Err("config.bot_token: format de jeton de bot invalide (attendu <id>:<jeton>)");
+    }
     let chat_id =
         non_empty_string(config, "chat_id").ok_or("config.chat_id: requis (chaîne non vide)")?;
     Ok(serde_json::json!({ "bot_token": bot_token, "chat_id": chat_id }))
@@ -187,6 +194,11 @@ fn validate_discord_config(config: &serde_json::Value) -> Result<serde_json::Val
         normalized["username"] = serde_json::Value::String(username.to_string());
     }
     if let Some(avatar_url) = non_empty_string(config, "avatar_url") {
+        // Transmise telle quelle à Discord : au moins une URL http(s) analysable
+        // (revue NOT-004 F8 — pas de `javascript:`/`file:` relayé).
+        if !wallos_notifier::is_http_url(avatar_url) {
+            return Err("config.avatar_url: URL http(s) invalide");
+        }
         normalized["avatar_url"] = serde_json::Value::String(avatar_url.to_string());
     }
     Ok(normalized)

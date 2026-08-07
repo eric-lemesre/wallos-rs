@@ -327,13 +327,25 @@ impl Telegram {
 
 /// Messagerie Discord (REQ-NOT-004) : envoi du message texte localisé à un webhook entrant
 /// (`{content, username?, avatar_url?}`, oracle legacy). L'URL est validée anti-SSRF à
-/// l'enregistrement ([`webhook_url_is_safe`]), comme le webhook générique.
-#[derive(Debug, Clone)]
+/// l'enregistrement ([`webhook_url_is_safe`]), comme le webhook générique. `Debug` **redacte**
+/// l'URL : un webhook Discord embarque son jeton dans le chemin (revue NOT-004 F1).
+#[derive(Clone)]
 pub struct Discord {
     url: String,
     username: Option<String>,
     avatar_url: Option<String>,
     language: String,
+}
+
+impl fmt::Debug for Discord {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Discord")
+            .field("url", &"<redacted>")
+            .field("username", &self.username)
+            .field("avatar_url", &self.avatar_url)
+            .field("language", &self.language)
+            .finish()
+    }
 }
 
 impl Discord {
@@ -358,8 +370,11 @@ impl Discord {
     /// # Errors
     /// Construction du client, erreur réseau/délai, ou statut HTTP non 2xx.
     pub async fn send(&self, notification: &ReminderNotification) -> anyhow::Result<()> {
+        // `allowed_mentions` vide : un nom d'abonnement contenant `@everyone`/`@here` ne doit
+        // jamais déclencher de mention massive sur le serveur cible (revue NOT-004 F5).
         let mut body = serde_json::json!({
             "content": message_text(&self.language, notification),
+            "allowed_mentions": { "parse": [] },
         });
         if let Some(username) = &self.username {
             body["username"] = serde_json::Value::String(username.clone());
@@ -488,6 +503,33 @@ impl Pushover {
         let response = http_client()?.post(url).form(&form).send().await?;
         ensure_success(&response)
     }
+}
+
+/// Vrai si la chaîne est une URL `http(s)` analysable. Validation **de forme** seulement (pas de
+/// garde SSRF) : sert aux URLs transmises à un tiers sans être contactées par nos soins — l'avatar
+/// de bot Discord (revue NOT-004 F8).
+#[must_use]
+pub fn is_http_url(raw: &str) -> bool {
+    reqwest::Url::parse(raw)
+        .map(|u| matches!(u.scheme(), "http" | "https"))
+        .unwrap_or(false)
+}
+
+/// Vrai si le jeton a le format d'un jeton de bot Telegram (`<id numérique>:<suffixe [A-Za-z0-9_-]>`).
+/// Validé à l'enregistrement (REQ-NOT-004) : le jeton est interpolé dans le **chemin** de l'URL de
+/// l'API Bot — un caractère hors format (`/`, `?`, `#`, espace) altérerait la requête émise
+/// (revue NOT-004 F2).
+#[must_use]
+pub fn telegram_bot_token_is_valid(token: &str) -> bool {
+    let Some((id, suffix)) = token.split_once(':') else {
+        return false;
+    };
+    !id.is_empty()
+        && id.bytes().all(|b| b.is_ascii_digit())
+        && !suffix.is_empty()
+        && suffix
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
 /// Classe l'échec d'un envoi en **code de diagnostic stable** + statut HTTP éventuel
@@ -703,6 +745,16 @@ mod tests {
     }
 
     #[test]
+    fn ipv6_zone_identifiers_are_rejected() {
+        // Revue NOT-004 F3 : un identifiant de zone (`%eth0`) empêcherait le parse en `IpAddr` et
+        // ferait passer une adresse link-local pour un nom d'hôte public. Le parseur d'URL (whatwg)
+        // rejette ces hôtes ; ce test fige ce comportement contre une régression de dépendance.
+        assert!(!webhook_url_is_safe("http://[fe80::1%25eth0]/hook"));
+        assert!(!webhook_url_is_safe("http://[fe80::1%eth0]/hook"));
+        assert!(!webhook_url_is_safe("http://fe80::1%25eth0/hook"));
+    }
+
+    #[test]
     fn non_http_schemes_and_garbage_are_rejected() {
         assert!(!webhook_url_is_safe("ftp://example.com/x"));
         assert!(!webhook_url_is_safe("file:///etc/passwd"));
@@ -830,6 +882,44 @@ mod tests {
         assert!(!debug.contains("uk-s3cr3t"));
         assert!(!debug.contains("tok-s3cr3t"));
         assert!(debug.contains("<redacted>"));
+    }
+
+    #[test]
+    fn discord_debug_redacts_webhook_url() {
+        // Revue NOT-004 F1 : l'URL d'un webhook Discord porte son jeton dans le chemin.
+        let d = Discord::new(
+            "https://discord.com/api/webhooks/1/s3cr3t-token",
+            Some("Wallos".into()),
+            None,
+            "en",
+        );
+        let debug = format!("{d:?}");
+        assert!(!debug.contains("s3cr3t-token"));
+        assert!(debug.contains("<redacted>"));
+        assert!(debug.contains("Wallos"));
+    }
+
+    #[test]
+    fn telegram_bot_tokens_are_validated_strictly() {
+        // Revue NOT-004 F2 : le jeton est interpolé dans le chemin de l'URL de l'API Bot.
+        assert!(telegram_bot_token_is_valid("123456:AAH-abc_XYZ09"));
+        assert!(!telegram_bot_token_is_valid("123456"));
+        assert!(!telegram_bot_token_is_valid(":abc"));
+        assert!(!telegram_bot_token_is_valid("123:"));
+        assert!(!telegram_bot_token_is_valid("abc:def"));
+        assert!(!telegram_bot_token_is_valid("123:abc/def"));
+        assert!(!telegram_bot_token_is_valid("123:abc?x=1"));
+        assert!(!telegram_bot_token_is_valid("123:abc def"));
+    }
+
+    #[test]
+    fn http_url_form_is_validated() {
+        // Revue NOT-004 F8 : validation de forme (pas de garde SSRF — l'URL n'est pas contactée).
+        assert!(is_http_url("https://cdn.example.com/avatar.png"));
+        assert!(is_http_url("http://cdn.example.com/a"));
+        assert!(!is_http_url("javascript:alert(1)"));
+        assert!(!is_http_url("file:///etc/passwd"));
+        assert!(!is_http_url("pas une url"));
     }
 
     #[test]

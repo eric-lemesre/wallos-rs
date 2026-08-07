@@ -823,6 +823,22 @@ async fn messaging_invalid_configs_are_rejected(pool: PgPool) {
         ("gotify", json!({ "token": "abc" })),
         ("pushover", json!({ "user_key": "uk" })),
         ("pushover", json!({ "token": "tok" })),
+        // Jeton Telegram mal formé (interpolé dans le chemin de l'URL de l'API Bot, revue F2).
+        (
+            "telegram",
+            json!({ "bot_token": "123:abc/def", "chat_id": "42" }),
+        ),
+        (
+            "telegram",
+            json!({ "bot_token": "pas-un-jeton", "chat_id": "42" }),
+        ),
+        // Champs blancs refusés (revue F7).
+        ("pushover", json!({ "user_key": "   ", "token": "tok" })),
+        // Avatar Discord : URL http(s) analysable exigée (revue F8).
+        (
+            "discord",
+            json!({ "url": "https://discord.com/api/webhooks/1/x", "avatar_url": "javascript:alert(1)" }),
+        ),
         // URL utilisateur interne/bouclage refusée (même garde SSRF que le webhook).
         ("discord", json!({ "url": "http://127.0.0.1/hook" })),
         ("discord", json!({ "url": "http://169.254.169.254/latest" })),
