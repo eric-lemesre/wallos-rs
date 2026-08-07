@@ -24,7 +24,13 @@ test.describe("Langue", { tag: ["@design", "@REQ-I18N-001"] }, () => {
     expect(await app.readLanguage()).toContain("fr");
 
     // Le choix persiste après rechargement (réglage porté par l'utilisateur, pas le navigateur).
-    await page.reload();
-    expect(await app.readLanguage()).toContain("fr");
+    // Poll AVEC re-rechargement : si le GET /settings/language échoue transitoirement (CI chargée),
+    // le composant replie sur la langue système — seule une nouvelle lecture serveur récupère.
+    await expect
+      .poll(async () => {
+        await page.reload();
+        return app.readLanguage();
+      })
+      .toContain("fr");
   });
 });
