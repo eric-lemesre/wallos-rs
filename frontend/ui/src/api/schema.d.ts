@@ -262,11 +262,17 @@ export interface paths {
         get: operations["listNotificationChannels"];
         put?: never;
         /**
-         * Crée un canal de notification dans le foyer de l'appelant (REQ-NOT-005 webhook, REQ-NOT-003 e-mail).
+         * Crée un canal de notification dans le foyer de l'appelant (REQ-NOT-005 webhook, REQ-NOT-003
+         *     e-mail, REQ-NOT-004 messageries Telegram/Discord/Gotify/Pushover).
          * @description - **webhook** : `config.url` doit être une URL `http(s)` **publique** ; les adresses internes, de
          *       bouclage, privées ou `localhost` sont refusées (422) pour prévenir la SSRF (NOT-005 critère #2).
          *     - **email** : `config` doit porter `host`, `port`, `username`, `password`, `from` (adresse valide) ;
          *       `starttls` optionnel (défaut vrai).
+         *     - **telegram** : `config.bot_token` et `config.chat_id` requis (API Bot Telegram).
+         *     - **discord** : `config.url` (webhook Discord, même garde SSRF) ; `username` et `avatar_url`
+         *       optionnels.
+         *     - **gotify** : `config.url` (serveur Gotify, même garde SSRF) et `config.token` requis.
+         *     - **pushover** : `config.user_key` et `config.token` requis.
          */
         post: operations["createNotificationChannel"];
         delete?: never;

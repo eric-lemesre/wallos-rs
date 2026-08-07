@@ -4,9 +4,9 @@
 //!
 //! Abstraction **fermée** d'un canal d'envoi ([`Channel`], dispatch par `enum` plutôt que `dyn` —
 //! l'ensemble des canaux est connu, cf. Wallos : webhook, e-mail, messageries) partageant une **charge
-//! utile unique** ([`ReminderNotification`], critère NOT-004 « même trait d'envoi »). La première
-//! implémentation est le **webhook générique** (POST JSON, REQ-NOT-005) ; l'e-mail (NOT-003) et les
-//! messageries (NOT-004) s'y ajouteront comme variantes.
+//! utile unique** ([`ReminderNotification`], critère NOT-004 « même trait d'envoi ») : webhook
+//! générique (POST JSON, REQ-NOT-005), e-mail SMTP (REQ-NOT-003), et messageries Telegram, Discord,
+//! Gotify, Pushover (REQ-NOT-004 — même message texte localisé, seul le transport diffère).
 //!
 //! La validation **anti-SSRF** d'une URL de webhook ([`webhook_url_is_safe`]) est appliquée à
 //! l'**enregistrement** (REQ-NOT-005 critère #2 ; socle de REQ-SEC-005) : refus des adresses de
@@ -63,14 +63,23 @@ impl ReminderNotification {
     }
 }
 
-/// Canal d'envoi (ensemble **fermé**). Le webhook est la première variante ; e-mail/messageries
-/// s'ajouteront ici sans changer le point d'appel (`Channel::send`).
+/// Canal d'envoi (ensemble **fermé**). Toutes les variantes partagent la même charge utile
+/// ([`ReminderNotification`]) et le même point d'appel (`Channel::send`) — critère REQ-NOT-004
+/// « même trait d'envoi, seul l'adaptateur diffère ».
 #[derive(Debug, Clone)]
 pub enum Channel {
     /// Webhook générique : POST JSON vers une URL configurée (REQ-NOT-005).
     Webhook(Webhook),
     /// Canal e-mail : envoi SMTP, dans la langue du compte (REQ-NOT-003).
     Email(Email),
+    /// Messagerie Telegram : message texte via l'API Bot (REQ-NOT-004).
+    Telegram(Telegram),
+    /// Messagerie Discord : message texte via un webhook entrant (REQ-NOT-004).
+    Discord(Discord),
+    /// Serveur Gotify auto-hébergé : message texte via son API (REQ-NOT-004).
+    Gotify(Gotify),
+    /// Service Pushover : message texte via son API (REQ-NOT-004).
+    Pushover(Pushover),
 }
 
 impl Channel {
@@ -83,6 +92,10 @@ impl Channel {
         match self {
             Self::Webhook(w) => w.send(notification).await,
             Self::Email(e) => e.send(notification).await,
+            Self::Telegram(t) => t.send(notification).await,
+            Self::Discord(d) => d.send(notification).await,
+            Self::Gotify(g) => g.send(notification).await,
+            Self::Pushover(p) => p.send(notification).await,
         }
     }
 
@@ -92,8 +105,34 @@ impl Channel {
         match self {
             Self::Webhook(_) => "webhook",
             Self::Email(_) => "email",
+            Self::Telegram(_) => "telegram",
+            Self::Discord(_) => "discord",
+            Self::Gotify(_) => "gotify",
+            Self::Pushover(_) => "pushover",
         }
     }
+}
+
+/// Client HTTP **durci** partagé par les canaux sortants : délai borné (10 s) et suivi de
+/// redirection **désactivé** (anti-SSRF, même politique que le webhook NOT-005 — une `3xx`
+/// est un échec).
+///
+/// # Errors
+/// Échec de construction du client TLS.
+fn http_client() -> reqwest::Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+}
+
+/// Vérifie qu'une réponse HTTP est un succès `2xx`, sinon erreur avec le statut (jamais le corps —
+/// il pourrait refléter des éléments de configuration).
+fn ensure_success(response: &reqwest::Response) -> anyhow::Result<()> {
+    if !response.status().is_success() {
+        anyhow::bail!("statut HTTP inattendu: {}", response.status());
+    }
+    Ok(())
 }
 
 /// Webhook générique (REQ-NOT-005) : POST de la charge utile JSON vers l'URL configurée.
@@ -120,15 +159,12 @@ impl Webhook {
     /// # Errors
     /// Construction du client, erreur réseau/délai, ou statut HTTP non 2xx (redirection incluse).
     pub async fn send(&self, notification: &ReminderNotification) -> anyhow::Result<()> {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(10))
-            .redirect(reqwest::redirect::Policy::none())
-            .build()?;
-        let response = client.post(&self.url).json(notification).send().await?;
-        if !response.status().is_success() {
-            anyhow::bail!("statut HTTP inattendu: {}", response.status());
-        }
-        Ok(())
+        let response = http_client()?
+            .post(&self.url)
+            .json(notification)
+            .send()
+            .await?;
+        ensure_success(&response)
     }
 }
 
@@ -213,6 +249,240 @@ impl Email {
         mailer.send(message).await?;
         Ok(())
     }
+}
+
+/// Messagerie Telegram (REQ-NOT-004) : envoi du message texte localisé via l'API Bot
+/// (`POST /bot{token}/sendMessage`). `Debug` **redacte** le jeton du bot.
+#[derive(Clone)]
+pub struct Telegram {
+    bot_token: String,
+    chat_id: String,
+    language: String,
+    api_base: String,
+}
+
+impl fmt::Debug for Telegram {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Telegram")
+            .field("bot_token", &"<redacted>")
+            .field("chat_id", &self.chat_id)
+            .field("language", &self.language)
+            .field("api_base", &self.api_base)
+            .finish()
+    }
+}
+
+impl Telegram {
+    /// Construit un canal Telegram pour un bot, une conversation et une langue de compte donnés.
+    #[must_use]
+    pub fn new(
+        bot_token: impl Into<String>,
+        chat_id: impl Into<String>,
+        language: impl Into<String>,
+    ) -> Self {
+        Self {
+            bot_token: bot_token.into(),
+            chat_id: chat_id.into(),
+            language: language.into(),
+            api_base: "https://api.telegram.org".to_string(),
+        }
+    }
+
+    /// Remplace la base de l'API (tests uniquement — l'API publique de Telegram est fixe et ce
+    /// champ n'est **pas** exposé à l'enregistrement d'un canal).
+    #[must_use]
+    pub fn with_api_base(mut self, api_base: impl Into<String>) -> Self {
+        self.api_base = api_base.into();
+        self
+    }
+
+    /// POST le message texte localisé à l'API Bot (`{chat_id, text}`, oracle legacy).
+    ///
+    /// # Errors
+    /// Construction du client, erreur réseau/délai, ou statut HTTP non 2xx.
+    pub async fn send(&self, notification: &ReminderNotification) -> anyhow::Result<()> {
+        let url = format!("{}/bot{}/sendMessage", self.api_base, self.bot_token);
+        let body = serde_json::json!({
+            "chat_id": self.chat_id,
+            "text": message_text(&self.language, notification),
+        });
+        let response = http_client()?.post(url).json(&body).send().await?;
+        ensure_success(&response)
+    }
+}
+
+/// Messagerie Discord (REQ-NOT-004) : envoi du message texte localisé à un webhook entrant
+/// (`{content, username?, avatar_url?}`, oracle legacy). L'URL est validée anti-SSRF à
+/// l'enregistrement ([`webhook_url_is_safe`]), comme le webhook générique.
+#[derive(Debug, Clone)]
+pub struct Discord {
+    url: String,
+    username: Option<String>,
+    avatar_url: Option<String>,
+    language: String,
+}
+
+impl Discord {
+    /// Construit un canal Discord (nom et avatar du bot optionnels, repris du legacy).
+    #[must_use]
+    pub fn new(
+        url: impl Into<String>,
+        username: Option<String>,
+        avatar_url: Option<String>,
+        language: impl Into<String>,
+    ) -> Self {
+        Self {
+            url: url.into(),
+            username,
+            avatar_url,
+            language: language.into(),
+        }
+    }
+
+    /// POST le message texte localisé au webhook Discord.
+    ///
+    /// # Errors
+    /// Construction du client, erreur réseau/délai, ou statut HTTP non 2xx.
+    pub async fn send(&self, notification: &ReminderNotification) -> anyhow::Result<()> {
+        let mut body = serde_json::json!({
+            "content": message_text(&self.language, notification),
+        });
+        if let Some(username) = &self.username {
+            body["username"] = serde_json::Value::String(username.clone());
+        }
+        if let Some(avatar_url) = &self.avatar_url {
+            body["avatar_url"] = serde_json::Value::String(avatar_url.clone());
+        }
+        let response = http_client()?.post(&self.url).json(&body).send().await?;
+        ensure_success(&response)
+    }
+}
+
+/// Serveur Gotify auto-hébergé (REQ-NOT-004) : envoi du message texte localisé à
+/// `POST {url}/message` (`{message, priority}`, oracle legacy). Le jeton d'application passe par
+/// l'en-tête `X-Gotify-Key` (jamais dans l'URL — il fuiterait dans les journaux d'accès).
+/// `Debug` **redacte** le jeton. L'URL du serveur est validée anti-SSRF à l'enregistrement.
+#[derive(Clone)]
+pub struct Gotify {
+    url: String,
+    token: String,
+    language: String,
+}
+
+impl fmt::Debug for Gotify {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Gotify")
+            .field("url", &self.url)
+            .field("token", &"<redacted>")
+            .field("language", &self.language)
+            .finish()
+    }
+}
+
+impl Gotify {
+    /// Construit un canal Gotify pour un serveur, un jeton d'application et une langue donnés.
+    #[must_use]
+    pub fn new(
+        url: impl Into<String>,
+        token: impl Into<String>,
+        language: impl Into<String>,
+    ) -> Self {
+        Self {
+            url: url.into(),
+            token: token.into(),
+            language: language.into(),
+        }
+    }
+
+    /// POST le message texte localisé au serveur Gotify (priorité 5, valeur legacy).
+    ///
+    /// # Errors
+    /// Construction du client, erreur réseau/délai, ou statut HTTP non 2xx.
+    pub async fn send(&self, notification: &ReminderNotification) -> anyhow::Result<()> {
+        let url = format!("{}/message", self.url.trim_end_matches('/'));
+        let body = serde_json::json!({
+            "message": message_text(&self.language, notification),
+            "priority": 5,
+        });
+        let response = http_client()?
+            .post(url)
+            .header("X-Gotify-Key", &self.token)
+            .json(&body)
+            .send()
+            .await?;
+        ensure_success(&response)
+    }
+}
+
+/// Service Pushover (REQ-NOT-004) : envoi du message texte localisé à
+/// `POST /1/messages.json` (formulaire `token`/`user`/`message`, oracle legacy).
+/// `Debug` **redacte** le jeton d'application et la clé utilisateur.
+#[derive(Clone)]
+pub struct Pushover {
+    user_key: String,
+    token: String,
+    language: String,
+    api_base: String,
+}
+
+impl fmt::Debug for Pushover {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Pushover")
+            .field("user_key", &"<redacted>")
+            .field("token", &"<redacted>")
+            .field("language", &self.language)
+            .field("api_base", &self.api_base)
+            .finish()
+    }
+}
+
+impl Pushover {
+    /// Construit un canal Pushover pour une clé utilisateur, un jeton d'application et une langue.
+    #[must_use]
+    pub fn new(
+        user_key: impl Into<String>,
+        token: impl Into<String>,
+        language: impl Into<String>,
+    ) -> Self {
+        Self {
+            user_key: user_key.into(),
+            token: token.into(),
+            language: language.into(),
+            api_base: "https://api.pushover.net".to_string(),
+        }
+    }
+
+    /// Remplace la base de l'API (tests uniquement — l'API publique de Pushover est fixe et ce
+    /// champ n'est **pas** exposé à l'enregistrement d'un canal).
+    #[must_use]
+    pub fn with_api_base(mut self, api_base: impl Into<String>) -> Self {
+        self.api_base = api_base.into();
+        self
+    }
+
+    /// POST le message texte localisé à l'API Pushover (formulaire URL-encodé, oracle legacy).
+    ///
+    /// # Errors
+    /// Construction du client, erreur réseau/délai, ou statut HTTP non 2xx.
+    pub async fn send(&self, notification: &ReminderNotification) -> anyhow::Result<()> {
+        let url = format!("{}/1/messages.json", self.api_base);
+        let form = [
+            ("token", self.token.as_str()),
+            ("user", self.user_key.as_str()),
+            ("message", &message_text(&self.language, notification)),
+        ];
+        let response = http_client()?.post(url).form(&form).send().await?;
+        ensure_success(&response)
+    }
+}
+
+/// Message texte localisé d'un lot de rappels, **commun aux canaux de messagerie** (REQ-NOT-004 :
+/// les adaptateurs ne diffèrent que par le transport, jamais par le contenu). Réutilise les
+/// gabarits de l'e-mail ([`email_content`]) : corps seul, le sujet n'a pas d'équivalent en
+/// messagerie. Fonction **pure** ; langue inconnue → repli anglais (REQ-I18N-004).
+#[must_use]
+pub fn message_text(language: &str, notification: &ReminderNotification) -> String {
+    email_content(language, notification).1
 }
 
 /// Contenu textuel (sujet, corps) d'un e-mail de rappel **dans la langue du compte** (REQ-NOT-003),
@@ -479,6 +749,66 @@ mod tests {
         assert!(!debug.contains("alice"));
         assert!(debug.contains("<redacted>"));
         assert!(debug.contains("smtp.example.com"));
+    }
+
+    #[test]
+    fn message_text_is_localized_email_body() {
+        let n = sample_notification();
+        let fr = message_text("fr", &n);
+        assert!(fr.contains("Vous avez des échéances d'abonnement à venir :"));
+        assert!(fr.contains("Netflix : échéance le 2026-08-07 (dans 1 jour(s))"));
+        // Langue inconnue -> repli anglais (REQ-I18N-004), identique au corps d'e-mail.
+        assert_eq!(message_text("xx", &n), email_content("en", &n).1);
+    }
+
+    #[test]
+    fn telegram_debug_redacts_bot_token() {
+        let t = Telegram::new("123:s3cr3t-token", "42", "fr");
+        let debug = format!("{t:?}");
+        assert!(!debug.contains("s3cr3t-token"));
+        assert!(debug.contains("<redacted>"));
+        assert!(debug.contains("42")); // chat_id non secret, conservé pour le diagnostic
+    }
+
+    #[test]
+    fn gotify_debug_redacts_token() {
+        let g = Gotify::new("https://gotify.example.com", "app-s3cr3t", "en");
+        let debug = format!("{g:?}");
+        assert!(!debug.contains("app-s3cr3t"));
+        assert!(debug.contains("<redacted>"));
+        assert!(debug.contains("gotify.example.com"));
+    }
+
+    #[test]
+    fn pushover_debug_redacts_user_key_and_token() {
+        let p = Pushover::new("uk-s3cr3t", "tok-s3cr3t", "en");
+        let debug = format!("{p:?}");
+        assert!(!debug.contains("uk-s3cr3t"));
+        assert!(!debug.contains("tok-s3cr3t"));
+        assert!(debug.contains("<redacted>"));
+    }
+
+    #[test]
+    fn channel_kinds_are_stable_labels() {
+        let channels = [
+            (
+                Channel::Webhook(Webhook::new("https://x.example.com")),
+                "webhook",
+            ),
+            (Channel::Telegram(Telegram::new("t", "c", "en")), "telegram"),
+            (
+                Channel::Discord(Discord::new("https://x.example.com", None, None, "en")),
+                "discord",
+            ),
+            (
+                Channel::Gotify(Gotify::new("https://x.example.com", "t", "en")),
+                "gotify",
+            ),
+            (Channel::Pushover(Pushover::new("u", "t", "en")), "pushover"),
+        ];
+        for (channel, expected) in channels {
+            assert_eq!(channel.kind(), expected);
+        }
     }
 
     #[test]

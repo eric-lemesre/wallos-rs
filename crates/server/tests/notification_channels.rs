@@ -703,3 +703,381 @@ async fn authz_anon_delete_notification_channel(pool: PgPool) {
     .await;
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 }
+
+// --- Canaux de messagerie tiers (REQ-NOT-004) ---
+
+/// Crée un canal d'un type donné avec sa configuration.
+async fn create_channel(
+    pool: &PgPool,
+    cookie: &str,
+    kind: &str,
+    config: Value,
+) -> axum::http::Response<Body> {
+    send(
+        pool,
+        "POST",
+        "/api/v1/notifications/channels",
+        Some(cookie),
+        Some(json!({ "kind": kind, "config": config })),
+    )
+    .await
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-004, case = "création des canaux telegram/discord/gotify/pushover ; secrets redactés en réponse et en liste")]
+async fn messaging_channels_crud_redacts_secrets(pool: PgPool) {
+    let web = account(&pool, "not004-crud@example.com").await;
+
+    let telegram = body_json(
+        create_channel(
+            &pool,
+            &web,
+            "telegram",
+            json!({ "bot_token": "123:s3cr3t", "chat_id": "42" }),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(telegram["kind"], "telegram");
+    assert_eq!(telegram["config"]["bot_token"], "<redacted>");
+    assert_eq!(telegram["config"]["chat_id"], "42");
+
+    let discord = body_json(
+        create_channel(
+            &pool,
+            &web,
+            "discord",
+            json!({ "url": "https://discord.com/api/webhooks/1/x", "username": "Wallos" }),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(discord["kind"], "discord");
+    assert_eq!(
+        discord["config"]["url"],
+        "https://discord.com/api/webhooks/1/x"
+    );
+    assert_eq!(discord["config"]["username"], "Wallos");
+
+    let gotify = body_json(
+        create_channel(
+            &pool,
+            &web,
+            "gotify",
+            json!({ "url": "https://gotify.example.com", "token": "app-s3cr3t" }),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(gotify["kind"], "gotify");
+    assert_eq!(gotify["config"]["token"], "<redacted>");
+
+    let pushover = body_json(
+        create_channel(
+            &pool,
+            &web,
+            "pushover",
+            json!({ "user_key": "uk-s3cr3t", "token": "tok-s3cr3t" }),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(pushover["kind"], "pushover");
+    assert_eq!(pushover["config"]["user_key"], "<redacted>");
+    assert_eq!(pushover["config"]["token"], "<redacted>");
+
+    // La liste redacte de la même façon (aucun secret ne sort jamais).
+    let list = body_json(
+        send(
+            &pool,
+            "GET",
+            "/api/v1/notifications/channels",
+            Some(&web),
+            None,
+        )
+        .await,
+    )
+    .await;
+    let channels = list["channels"].as_array().unwrap();
+    assert_eq!(channels.len(), 4);
+    let listed = serde_json::to_string(&list).unwrap();
+    for secret in ["s3cr3t", "uk-s3cr3t", "tok-s3cr3t", "app-s3cr3t"] {
+        assert!(
+            !listed.contains(secret),
+            "le secret {secret} ne doit jamais être renvoyé"
+        );
+    }
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-004, case = "configuration incomplète ou URL interne (SSRF) -> 422 pour chaque messagerie")]
+async fn messaging_invalid_configs_are_rejected(pool: PgPool) {
+    let web = account(&pool, "not004-bad@example.com").await;
+    let cases: Vec<(&str, Value)> = vec![
+        // Champs requis manquants ou vides (oracle legacy : « fill mandatory fields »).
+        ("telegram", json!({ "chat_id": "42" })),
+        ("telegram", json!({ "bot_token": "", "chat_id": "42" })),
+        ("telegram", json!({ "bot_token": "123:abc" })),
+        ("discord", json!({})),
+        ("gotify", json!({ "url": "https://gotify.example.com" })),
+        ("gotify", json!({ "token": "abc" })),
+        ("pushover", json!({ "user_key": "uk" })),
+        ("pushover", json!({ "token": "tok" })),
+        // URL utilisateur interne/bouclage refusée (même garde SSRF que le webhook).
+        ("discord", json!({ "url": "http://127.0.0.1/hook" })),
+        ("discord", json!({ "url": "http://169.254.169.254/latest" })),
+        (
+            "gotify",
+            json!({ "url": "http://localhost:8080", "token": "abc" }),
+        ),
+        (
+            "gotify",
+            json!({ "url": "http://10.0.0.5", "token": "abc" }),
+        ),
+    ];
+    for (kind, config) in cases {
+        let r = create_channel(&pool, &web, kind, config.clone()).await;
+        assert_eq!(
+            r.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "devrait refuser kind={kind} config={config}"
+        );
+    }
+}
+
+/// Requête sortante capturée par le récepteur multi-canaux.
+#[derive(Debug, Clone)]
+struct CapturedRequest {
+    path: String,
+    content_type: String,
+    gotify_key: Option<String>,
+    body: String,
+}
+
+/// Récepteur HTTP local qui capture **toute** requête POST (chemin, type de contenu, en-tête
+/// `X-Gotify-Key`, corps brut) — sert à vérifier les formats propres à chaque messagerie.
+async fn spawn_capture_receiver() -> (String, Arc<Mutex<Vec<CapturedRequest>>>) {
+    async fn capture(
+        State(s): State<Arc<Mutex<Vec<CapturedRequest>>>>,
+        req: axum::extract::Request,
+    ) -> StatusCode {
+        let path = req.uri().path().to_string();
+        let content_type = req
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        let gotify_key = req
+            .headers()
+            .get("x-gotify-key")
+            .and_then(|v| v.to_str().ok())
+            .map(String::from);
+        let bytes = to_bytes(req.into_body(), usize::MAX).await.unwrap();
+        s.lock().unwrap().push(CapturedRequest {
+            path,
+            content_type,
+            gotify_key,
+            body: String::from_utf8_lossy(&bytes).into_owned(),
+        });
+        StatusCode::OK
+    }
+    let captured: Arc<Mutex<Vec<CapturedRequest>>> = Arc::new(Mutex::new(Vec::new()));
+    let state = captured.clone();
+    let router = Router::new().fallback(capture).with_state(state);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, router).await;
+    });
+    (format!("http://{addr}"), captured)
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-004, case = "les quatre messageries reçoivent le même message via leur adaptateur propre")]
+async fn cron_sends_to_all_messaging_channels(pool: PgPool) {
+    let web = account(&pool, "not004-send@example.com").await;
+    assert_eq!(
+        send(
+            &pool,
+            "POST",
+            "/api/v1/subscriptions",
+            Some(&web),
+            Some(json!({
+                "name": "Netflix", "amount": "9.99", "currency": "EUR",
+                "cycle": { "unit": "month", "interval": 1 }, "first_payment": "2026-08-07",
+                "active": true
+            })),
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+
+    // Un récepteur unique ; chaque canal est repointé vers lui par SQL direct (la garde SSRF interdit
+    // 127.0.0.1 à l'enregistrement ; `api_base` n'est posable QUE par SQL, jamais via l'API).
+    let (base, captured) = spawn_capture_receiver().await;
+    let reroutes: Vec<(&str, Value, Value)> = vec![
+        (
+            "telegram",
+            json!({ "bot_token": "123:abc", "chat_id": "42" }),
+            json!({ "bot_token": "123:abc", "chat_id": "42", "api_base": base }),
+        ),
+        (
+            "discord",
+            json!({ "url": "https://discord.com/api/webhooks/1/x", "username": "Wallos" }),
+            json!({ "url": format!("{base}/discord-hook"), "username": "Wallos" }),
+        ),
+        (
+            "gotify",
+            json!({ "url": "https://gotify.example.com", "token": "app-token" }),
+            json!({ "url": base, "token": "app-token" }),
+        ),
+        (
+            "pushover",
+            json!({ "user_key": "uk", "token": "tok" }),
+            json!({ "user_key": "uk", "token": "tok", "api_base": base }),
+        ),
+    ];
+    for (kind, config, rerouted) in reroutes {
+        let created = body_json(create_channel(&pool, &web, kind, config).await);
+        let id = Uuid::parse_str(created.await["id"].as_str().unwrap()).unwrap();
+        sqlx::query("update notification_channels set config = $2 where id = $1")
+            .bind(id)
+            .bind(rerouted)
+            .execute(&pool)
+            .await
+            .unwrap();
+    }
+
+    let cron = app_with_db_and_cron(
+        Db::from_pool(pool.clone()),
+        CronToken(Some(CRON_SECRET.to_string())),
+    );
+    let resp = cron
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/internal/run-reminders?as_of=2026-08-06")
+                .header("x-cron-token", CRON_SECRET)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(body_json(resp).await["emitted"], 1);
+
+    let requests = captured.lock().unwrap().clone();
+    assert_eq!(
+        requests.len(),
+        4,
+        "une requête par messagerie: {requests:?}"
+    );
+
+    // Telegram : POST /bot{token}/sendMessage, JSON {chat_id, text} (oracle legacy).
+    let telegram = requests
+        .iter()
+        .find(|r| r.path == "/bot123:abc/sendMessage")
+        .expect("requête Telegram");
+    let body: Value = serde_json::from_str(&telegram.body).unwrap();
+    assert_eq!(body["chat_id"], "42");
+    let text = body["text"].as_str().unwrap();
+    assert!(text.contains("Netflix"), "message localisé attendu: {text}");
+
+    // Discord : POST vers le webhook, JSON {content, username} (oracle legacy).
+    let discord = requests
+        .iter()
+        .find(|r| r.path == "/discord-hook")
+        .expect("requête Discord");
+    let body: Value = serde_json::from_str(&discord.body).unwrap();
+    assert!(body["content"].as_str().unwrap().contains("Netflix"));
+    assert_eq!(body["username"], "Wallos");
+
+    // Gotify : POST /message, jeton dans l'en-tête X-Gotify-Key (jamais dans l'URL), priorité 5.
+    let gotify = requests
+        .iter()
+        .find(|r| r.path == "/message")
+        .expect("requête Gotify");
+    assert_eq!(gotify.gotify_key.as_deref(), Some("app-token"));
+    let body: Value = serde_json::from_str(&gotify.body).unwrap();
+    assert!(body["message"].as_str().unwrap().contains("Netflix"));
+    assert_eq!(body["priority"], 5);
+
+    // Pushover : POST /1/messages.json en formulaire URL-encodé token/user/message (oracle legacy).
+    let pushover = requests
+        .iter()
+        .find(|r| r.path == "/1/messages.json")
+        .expect("requête Pushover");
+    assert!(
+        pushover
+            .content_type
+            .starts_with("application/x-www-form-urlencoded")
+    );
+    assert!(pushover.body.contains("token=tok"));
+    assert!(pushover.body.contains("user=uk"));
+    assert!(pushover.body.contains("message="));
+
+    // Le même contenu textuel sur tous les canaux (critère « seul l'adaptateur diffère »).
+    let discord_body: Value = serde_json::from_str(&discord.body).unwrap();
+    assert_eq!(body["message"], discord_body["content"]);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-004, case = "un canal de messagerie désactivé n'émet aucune requête sortante")]
+async fn disabled_messaging_channel_sends_nothing(pool: PgPool) {
+    let web = account(&pool, "not004-disabled@example.com").await;
+    assert_eq!(
+        send(
+            &pool,
+            "POST",
+            "/api/v1/subscriptions",
+            Some(&web),
+            Some(json!({
+                "name": "Netflix", "amount": "9.99", "currency": "EUR",
+                "cycle": { "unit": "month", "interval": 1 }, "first_payment": "2026-08-07",
+                "active": true
+            })),
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+    let (base, captured) = spawn_capture_receiver().await;
+    // Canal Telegram repointé puis DÉSACTIVÉ : aucune requête ne doit le concerner (critère #2).
+    let created = body_json(
+        create_channel(
+            &pool,
+            &web,
+            "telegram",
+            json!({ "bot_token": "123:abc", "chat_id": "42" }),
+        )
+        .await,
+    )
+    .await;
+    let id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    sqlx::query("update notification_channels set config = $2, enabled = false where id = $1")
+        .bind(id)
+        .bind(json!({ "bot_token": "123:abc", "chat_id": "42", "api_base": base }))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let cron = app_with_db_and_cron(
+        Db::from_pool(pool.clone()),
+        CronToken(Some(CRON_SECRET.to_string())),
+    );
+    let resp = cron
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/internal/run-reminders?as_of=2026-08-06")
+                .header("x-cron-token", CRON_SECRET)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    // Le rappel est bien émis (journalisé) mais aucun envoi sortant n'a lieu.
+    assert_eq!(body_json(resp).await["emitted"], 1);
+    assert!(captured.lock().unwrap().is_empty());
+}

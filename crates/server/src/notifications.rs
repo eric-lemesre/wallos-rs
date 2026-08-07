@@ -1,9 +1,11 @@
-//! Gestion des canaux de notification (REQ-NOT-005).
+//! Gestion des canaux de notification (REQ-NOT-005, REQ-NOT-003, REQ-NOT-004).
 //!
-//! CRUD **isolé par foyer** (§9) d'une abstraction de canal unique. La première implémentation est le
-//! **webhook générique** : à la création, l'URL est validée contre la falsification de requête côté
-//! serveur (SSRF, `wallos_notifier::webhook_url_is_safe`) — les adresses internes/bouclage sont refusées
-//! (422). Les autres types de canaux (e-mail NOT-003, messageries NOT-004) réutiliseront ce module.
+//! CRUD **isolé par foyer** (§9) d'une abstraction de canal unique : webhook générique (NOT-005),
+//! e-mail SMTP (NOT-003) et messageries Telegram/Discord/Gotify/Pushover (NOT-004). Toute URL
+//! fournie par l'utilisateur (webhook, Discord, Gotify) est validée contre la falsification de
+//! requête côté serveur (SSRF, `wallos_notifier::webhook_url_is_safe`) — les adresses
+//! internes/bouclage sont refusées (422). Les secrets stockés (mot de passe SMTP, jetons,
+//! clé utilisateur) ne sont **jamais renvoyés** au client (redaction en sortie).
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -20,8 +22,17 @@ use wallos_storage::{Db, NotificationChannelRepository, NotificationChannelRow};
 use crate::auth::AuthActor;
 use crate::problem_response;
 
-/// Seul type de canal implémenté pour l'instant (REQ-NOT-005). Les autres → 422.
+/// Type de canal webhook générique (REQ-NOT-005).
 const KIND_WEBHOOK: &str = "webhook";
+
+/// Types de canaux de messagerie tiers (REQ-NOT-004).
+const KIND_TELEGRAM: &str = "telegram";
+/// Voir [`KIND_TELEGRAM`].
+const KIND_DISCORD: &str = "discord";
+/// Voir [`KIND_TELEGRAM`].
+const KIND_GOTIFY: &str = "gotify";
+/// Voir [`KIND_TELEGRAM`].
+const KIND_PUSHOVER: &str = "pushover";
 
 /// `500` générique (défaut interne non divulgué).
 #[requirement(REQ-NOT-005)]
@@ -54,10 +65,15 @@ fn invalid(detail: &str) -> Response {
 /// SMTP d'un canal e-mail n'est jamais renvoyé au client — REQ-NOT-003 « sans exposer les identifiants »).
 #[requirement(REQ-NOT-005)]
 #[requirement(REQ-NOT-003)]
+#[requirement(REQ-NOT-004)]
 fn row_to_dto(row: NotificationChannelRow) -> NotificationChannelDto {
     let mut config = row.config;
-    if let Some(password) = config.get_mut("password") {
-        *password = serde_json::Value::String("<redacted>".to_string());
+    // Secrets par type de canal : mot de passe SMTP (email), jeton de bot (telegram), jeton
+    // d'application (gotify/pushover), clé utilisateur (pushover).
+    for secret in ["password", "bot_token", "token", "user_key"] {
+        if let Some(value) = config.get_mut(secret) {
+            *value = serde_json::Value::String("<redacted>".to_string());
+        }
     }
     NotificationChannelDto {
         id: row.id.to_string(),
@@ -129,17 +145,97 @@ fn validate_email_config(config: &serde_json::Value) -> Result<serde_json::Value
     }))
 }
 
-/// Crée un canal de notification dans le foyer de l'appelant (REQ-NOT-005 webhook, REQ-NOT-003 e-mail).
+/// Extrait une chaîne **non vide** de la configuration (aide aux validateurs NOT-004) :
+/// clé absente, mal typée ou vide → `None`.
+#[requirement(REQ-NOT-004)]
+fn non_empty_string<'a>(config: &'a serde_json::Value, key: &str) -> Option<&'a str> {
+    config
+        .get(key)
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+}
+
+/// Valide+normalise la configuration d'un canal Telegram (REQ-NOT-004) : jeton de bot et
+/// identifiant de conversation, tous deux requis (oracle legacy). L'API cible est fixe
+/// (`api.telegram.org`) — aucune URL utilisateur, donc pas de garde SSRF nécessaire.
+#[requirement(REQ-NOT-004)]
+fn validate_telegram_config(config: &serde_json::Value) -> Result<serde_json::Value, &'static str> {
+    let bot_token = non_empty_string(config, "bot_token")
+        .ok_or("config.bot_token: requis (chaîne non vide)")?;
+    let chat_id =
+        non_empty_string(config, "chat_id").ok_or("config.chat_id: requis (chaîne non vide)")?;
+    Ok(serde_json::json!({ "bot_token": bot_token, "chat_id": chat_id }))
+}
+
+/// Valide+normalise la configuration d'un canal Discord (REQ-NOT-004) : URL de webhook `http(s)`
+/// **publique** (anti-SSRF, même garde que le webhook générique) ; nom et avatar du bot optionnels
+/// (oracle legacy).
+#[requirement(REQ-NOT-004)]
+fn validate_discord_config(config: &serde_json::Value) -> Result<serde_json::Value, &'static str> {
+    let url = config
+        .get("url")
+        .and_then(|v| v.as_str())
+        .ok_or("config.url: requis (chaîne)")?;
+    if !webhook_url_is_safe(url) {
+        return Err("config.url: adresse non autorisée (interne/bouclage) ou URL invalide");
+    }
+    let mut normalized = serde_json::json!({ "url": url });
+    if let Some(username) = non_empty_string(config, "username") {
+        normalized["username"] = serde_json::Value::String(username.to_string());
+    }
+    if let Some(avatar_url) = non_empty_string(config, "avatar_url") {
+        normalized["avatar_url"] = serde_json::Value::String(avatar_url.to_string());
+    }
+    Ok(normalized)
+}
+
+/// Valide+normalise la configuration d'un canal Gotify (REQ-NOT-004) : URL du serveur `http(s)`
+/// **publique** (anti-SSRF — un serveur Gotify est fourni par l'utilisateur, même surface qu'un
+/// webhook) et jeton d'application requis. L'option legacy `ignore_ssl` n'est **pas** reprise
+/// (divergence de sécurité assumée, voir ADR) ; comme toute clé inconnue, elle est jetée.
+#[requirement(REQ-NOT-004)]
+fn validate_gotify_config(config: &serde_json::Value) -> Result<serde_json::Value, &'static str> {
+    let url = config
+        .get("url")
+        .and_then(|v| v.as_str())
+        .ok_or("config.url: requis (chaîne)")?;
+    if !webhook_url_is_safe(url) {
+        return Err("config.url: adresse non autorisée (interne/bouclage) ou URL invalide");
+    }
+    let token =
+        non_empty_string(config, "token").ok_or("config.token: requis (chaîne non vide)")?;
+    Ok(serde_json::json!({ "url": url, "token": token }))
+}
+
+/// Valide+normalise la configuration d'un canal Pushover (REQ-NOT-004) : clé utilisateur et jeton
+/// d'application requis (oracle legacy). L'API cible est fixe (`api.pushover.net`) — pas d'URL
+/// utilisateur, donc pas de garde SSRF nécessaire.
+#[requirement(REQ-NOT-004)]
+fn validate_pushover_config(config: &serde_json::Value) -> Result<serde_json::Value, &'static str> {
+    let user_key =
+        non_empty_string(config, "user_key").ok_or("config.user_key: requis (chaîne non vide)")?;
+    let token =
+        non_empty_string(config, "token").ok_or("config.token: requis (chaîne non vide)")?;
+    Ok(serde_json::json!({ "user_key": user_key, "token": token }))
+}
+
+/// Crée un canal de notification dans le foyer de l'appelant (REQ-NOT-005 webhook, REQ-NOT-003
+/// e-mail, REQ-NOT-004 messageries Telegram/Discord/Gotify/Pushover).
 ///
 /// - **webhook** : `config.url` doit être une URL `http(s)` **publique** ; les adresses internes, de
 ///   bouclage, privées ou `localhost` sont refusées (422) pour prévenir la SSRF (NOT-005 critère #2).
 /// - **email** : `config` doit porter `host`, `port`, `username`, `password`, `from` (adresse valide) ;
 ///   `starttls` optionnel (défaut vrai).
+/// - **telegram** : `config.bot_token` et `config.chat_id` requis (API Bot Telegram).
+/// - **discord** : `config.url` (webhook Discord, même garde SSRF) ; `username` et `avatar_url`
+///   optionnels.
+/// - **gotify** : `config.url` (serveur Gotify, même garde SSRF) et `config.token` requis.
+/// - **pushover** : `config.user_key` et `config.token` requis.
 #[utoipa::path(
     post,
     path = "/notifications/channels",
     operation_id = "createNotificationChannel",
-    extensions(("x-requirements" = json!(["REQ-NOT-005", "REQ-NOT-003"]))),
+    extensions(("x-requirements" = json!(["REQ-NOT-005", "REQ-NOT-003", "REQ-NOT-004"]))),
     request_body = CreateNotificationChannelRequest,
     responses(
         (status = 201, description = "Canal créé", body = NotificationChannelDto, content_type = "application/json"),
@@ -150,22 +246,27 @@ fn validate_email_config(config: &serde_json::Value) -> Result<serde_json::Value
 )]
 #[requirement(REQ-NOT-005)]
 #[requirement(REQ-NOT-003)]
+#[requirement(REQ-NOT-004)]
 pub async fn create_notification_channel(
     AuthActor(actor): AuthActor,
     State(db): State<Db>,
     Json(req): Json<CreateNotificationChannelRequest>,
 ) -> Response {
     // Normalise la configuration selon le type ; tout autre type est refusé explicitement.
-    let (kind, config) = match req.kind.as_str() {
-        KIND_WEBHOOK => match validate_webhook_config(&req.config) {
-            Ok(config) => (KIND_WEBHOOK, config),
-            Err(detail) => return invalid(detail),
-        },
-        KIND_EMAIL => match validate_email_config(&req.config) {
-            Ok(config) => (KIND_EMAIL, config),
-            Err(detail) => return invalid(detail),
-        },
-        _ => return invalid("kind: type de canal non supporté (webhook ou email attendu)"),
+    let validated = match req.kind.as_str() {
+        KIND_WEBHOOK => validate_webhook_config(&req.config).map(|c| (KIND_WEBHOOK, c)),
+        KIND_EMAIL => validate_email_config(&req.config).map(|c| (KIND_EMAIL, c)),
+        KIND_TELEGRAM => validate_telegram_config(&req.config).map(|c| (KIND_TELEGRAM, c)),
+        KIND_DISCORD => validate_discord_config(&req.config).map(|c| (KIND_DISCORD, c)),
+        KIND_GOTIFY => validate_gotify_config(&req.config).map(|c| (KIND_GOTIFY, c)),
+        KIND_PUSHOVER => validate_pushover_config(&req.config).map(|c| (KIND_PUSHOVER, c)),
+        _ => Err(
+            "kind: type de canal non supporté (webhook, email, telegram, discord, gotify ou pushover attendu)",
+        ),
+    };
+    let (kind, config) = match validated {
+        Ok(pair) => pair,
+        Err(detail) => return invalid(detail),
     };
     let enabled = req.enabled.unwrap_or(true);
     match NotificationChannelRepository::new(db.pool())
