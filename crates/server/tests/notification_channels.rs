@@ -1397,3 +1397,67 @@ async fn test_channel_is_rate_limited_per_household(pool: PgPool) {
         "Retry-After={retry_after}"
     );
 }
+
+// --- SSRF à l'appel : résolution DNS publique seulement (REQ-SEC-005) ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SEC-005, case = "un nom d'hôte résolvant vers une adresse interne est refusé À L'APPEL (pas seulement à l'enregistrement)")]
+async fn hostname_resolving_to_private_address_is_refused_at_call_time(pool: PgPool) {
+    let web = account(&pool, "sec005-dns@example.com").await;
+    assert_eq!(
+        send(
+            &pool,
+            "POST",
+            "/api/v1/subscriptions",
+            Some(&web),
+            Some(json!({
+                "name": "Netflix", "amount": "9.99", "currency": "EUR",
+                "cycle": { "unit": "month", "interval": 1 }, "first_payment": "2026-08-07",
+                "active": true
+            })),
+        )
+        .await
+        .status(),
+        StatusCode::CREATED
+    );
+    // Récepteur local joignable par IP — mais l'URL du canal utilise le NOM `localhost`, qui
+    // résout vers une adresse de bouclage : le résolveur public-only doit refuser la connexion.
+    // (La garde d'enregistrement refuse déjà `localhost` ; on contourne par SQL, comme un
+    // rebinding DNS contournerait la validation d'enregistrement.)
+    let (receiver_url, captured) = spawn_receiver().await;
+    let port = receiver_url
+        .trim_start_matches("http://127.0.0.1:")
+        .trim_end_matches("/hook")
+        .to_string();
+    let created = body_json(create_webhook(&pool, &web, "https://hooks.example.com/x").await).await;
+    let id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
+    sqlx::query("update notification_channels set config = $2 where id = $1")
+        .bind(id)
+        .bind(json!({ "url": format!("http://localhost:{port}/hook") }))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let cron = app_with_db_and_cron(
+        Db::from_pool(pool.clone()),
+        CronToken(Some(CRON_SECRET.to_string())),
+    );
+    let resp = cron
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/internal/run-reminders?as_of=2026-08-06")
+                .header("x-cron-token", CRON_SECRET)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    // Le rappel est émis (journal) mais AUCUNE requête n'atteint l'adresse interne : le nom a été
+    // refusé à la résolution. L'échec ouvre un suivi de livraison (best-effort, REQ-NOT-007).
+    assert_eq!(body_json(resp).await["emitted"], 1);
+    assert!(
+        captured.lock().unwrap().is_empty(),
+        "aucune connexion vers l'adresse interne résolue"
+    );
+}

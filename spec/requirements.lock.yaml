@@ -402,7 +402,7 @@ requirements:
 - id: REQ-SEC-005
   title: Protection contre la falsification de requête côté serveur
   domain: security
-  status: draft
+  status: verified
   criticality: high
   layer:
   - api

@@ -105,7 +105,7 @@ depends_on: [REQ-NOT-004]
 id: REQ-SEC-005
 title: Protection contre la falsification de requête côté serveur
 domain: security
-status: draft
+status: verified
 criticality: high
 layer: [api]
 e2e: optional

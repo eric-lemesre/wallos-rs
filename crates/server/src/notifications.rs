@@ -253,7 +253,7 @@ fn validate_pushover_config(config: &serde_json::Value) -> Result<serde_json::Va
     post,
     path = "/notifications/channels",
     operation_id = "createNotificationChannel",
-    extensions(("x-requirements" = json!(["REQ-NOT-005", "REQ-NOT-003", "REQ-NOT-004"]))),
+    extensions(("x-requirements" = json!(["REQ-NOT-005", "REQ-NOT-003", "REQ-NOT-004", "REQ-SEC-005"]))),
     request_body = CreateNotificationChannelRequest,
     responses(
         (status = 201, description = "Canal créé", body = NotificationChannelDto, content_type = "application/json"),
@@ -265,6 +265,7 @@ fn validate_pushover_config(config: &serde_json::Value) -> Result<serde_json::Va
 #[requirement(REQ-NOT-005)]
 #[requirement(REQ-NOT-003)]
 #[requirement(REQ-NOT-004)]
+#[requirement(REQ-SEC-005)]
 pub async fn create_notification_channel(
     AuthActor(actor): AuthActor,
     State(db): State<Db>,
