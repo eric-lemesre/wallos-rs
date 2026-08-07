@@ -22,10 +22,11 @@ use std::time::Duration;
 use lettre::message::header::ContentType;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-/// Un rappel individuel à notifier (élément de la charge utile).
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+/// Un rappel individuel à notifier (élément de la charge utile). `Deserialize` : une livraison en
+/// échec stocke la charge utile pour la rejouer à l'identique au réessai (REQ-NOT-007).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReminderItem {
     /// Identifiant (UUID) de l'abonnement concerné.
     pub subscription_id: String,
@@ -41,7 +42,7 @@ pub struct ReminderItem {
 
 /// Charge utile de rappel groupée pour un compte — **commune à tous les canaux** (documentée dans
 /// l'OpenAPI côté serveur, REQ-NOT-005). Sérialisée telle quelle en JSON par le webhook.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReminderNotification {
     /// Date de référence du balayage (`YYYY-MM-DD`).
     pub as_of: String,

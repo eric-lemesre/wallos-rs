@@ -12,6 +12,7 @@ pub mod exchange_rates;
 pub mod idempotency;
 pub mod login_attempts;
 pub mod notification_channels;
+pub mod notification_deliveries;
 pub mod outcomes;
 pub mod payers;
 pub mod payment_methods;
@@ -32,6 +33,9 @@ pub use exchange_rates::{ExchangeRateRepository, StoredRate};
 pub use idempotency::{IdempotencyRepository, Reservation};
 pub use login_attempts::LoginAttemptRepository;
 pub use notification_channels::{NotificationChannelRepository, NotificationChannelRow};
+pub use notification_deliveries::{
+    DueDeliveryRow, NotificationDeliveryRepository, NotificationDeliveryRow,
+};
 pub use outcomes::CreateOutcome;
 pub use payers::{DeleteOutcome as PayerDeleteOutcome, PayerRepository, PayerRow};
 pub use payment_methods::{PaymentMethodRepository, PaymentMethodRow};

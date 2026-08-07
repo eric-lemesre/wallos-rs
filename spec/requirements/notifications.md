@@ -147,7 +147,7 @@ depends_on: [REQ-NOT-003, REQ-NOT-004]
 id: REQ-NOT-007
 title: Politique de réessai et d'abandon
 domain: notifications
-status: draft
+status: verified
 criticality: medium
 layer: [core, api]
 e2e: optional
