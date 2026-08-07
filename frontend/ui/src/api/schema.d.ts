@@ -312,7 +312,8 @@ export interface paths {
          *     diagnostic exploitable : `sent`, ou un code d'échec stable (`http-status` + code, `timeout`,
          *     `connection-failed`, `smtp-failed`, `send-failed`) — jamais le texte brut de l'erreur (il peut
          *     refléter l'URL cible, donc un jeton). Un canal **désactivé** reste testable : le test sert
-         *     précisément à valider une configuration avant de l'activer.
+         *     précisément à valider une configuration avant de l'activer. Limité à 5 envois de test par
+         *     foyer et par 5 minutes (429 + `Retry-After` au-delà).
          */
         post: operations["testNotificationChannel"];
         delete?: never;
@@ -2648,6 +2649,15 @@ export interface operations {
             };
             /** @description Configuration stockée illisible pour ce type de canal */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Trop d'envois de test (Retry-After en secondes) */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

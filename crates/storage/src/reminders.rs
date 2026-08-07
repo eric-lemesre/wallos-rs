@@ -122,12 +122,15 @@ impl<'a> ReminderRepository<'a> {
     /// Enregistre l'émission d'un rappel de type `kind` (`payment` / `trial_ending`, REQ-SUB-010).
     /// Renvoie `true` si une **nouvelle** ligne a été insérée, `false` si ce rappel avait déjà été émis
     /// pour ce `(foyer, abonnement, échéance, type)` — l'appelant n'émet alors pas de doublon
-    /// (préparation REQ-NOT-002). Un rappel de paiement et un rappel de fin d'essai coïncidant le même
-    /// jour sont distincts (types différents).
+    /// (REQ-NOT-002 : l'`on conflict do nothing` sur l'unicité `(foyer, abonnement, échéance, type)`
+    /// sérialise aussi les instances **concurrentes** — un seul `insert` gagne, donc un seul envoi).
+    /// Un rappel de paiement et un rappel de fin d'essai coïncidant le même jour sont distincts
+    /// (types différents).
     ///
     /// # Errors
     /// `StorageError::Database` en cas d'échec d'insertion.
     #[requirement(REQ-NOT-001)]
+    #[requirement(REQ-NOT-002)]
     pub async fn record_emitted(
         &self,
         household_id: Uuid,
