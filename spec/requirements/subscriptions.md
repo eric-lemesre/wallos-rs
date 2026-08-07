@@ -311,7 +311,7 @@ depends_on: [REQ-SUB-003, REQ-SUB-012]
 id: REQ-SUB-014
 title: Rattrapage des échéances passées
 domain: subscriptions
-status: draft
+status: verified
 criticality: high
 layer: [core, api]
 e2e: required

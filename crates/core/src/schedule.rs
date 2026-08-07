@@ -36,11 +36,15 @@ const MAX_STEPS: u32 = 100_000;
 
 /// Prochaine échéance strictement postérieure à `after`, pour un abonnement démarré à `anchor`.
 ///
-/// Rattrapage inclus : si plusieurs échéances sont passées, renvoie la première encore future.
+/// Rattrapage inclus (REQ-SUB-014) : si plusieurs échéances sont passées — client hors ligne des
+/// semaines, premier démarrage tardif — renvoie la **première encore future**, sans jamais exposer
+/// une date passée ; l'ordonnanceur n'émet donc rien de rétroactif (garde NOT-002, jamais de
+/// rafale de rappels).
 ///
 /// Renvoie `None` si le calcul déborde la plage de dates représentable **ou** si la borne
 /// [`MAX_STEPS`] est atteinte (rattrapage démesuré / entrée pathologique).
 #[requirement(REQ-SUB-012)]
+#[requirement(REQ-SUB-014)]
 pub fn next_due(anchor: NaiveDate, cycle: BillingCycle, after: NaiveDate) -> Option<NaiveDate> {
     // Boucle bornée par construction. Les occurrences sont strictement croissantes ; pour une entrée
     // réelle on sort bien avant la borne (celle-ci ne mord que sur un rattrapage de plusieurs siècles).
@@ -493,5 +497,30 @@ mod tests {
             next_due(day(2025, 1, 30), monthly(1), day(2025, 3, 1)),
             Some(day(2025, 3, 30))
         );
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-014, case = "plusieurs échéances dépassées -> première strictement future, sans rafale")]
+    fn catch_up_skips_all_past_occurrences() {
+        // Abonnement mensuel ancré 18 mois plus tôt : 18 occurrences dépassées d'un coup.
+        let due = next_due(day(2025, 1, 15), monthly(1), day(2026, 8, 6));
+        assert_eq!(due, Some(day(2026, 8, 15)));
+        // Strictement postérieure à la date courante, jamais une occurrence passée.
+        assert!(due.unwrap() > day(2026, 8, 6));
+    }
+
+    #[test]
+    #[verifies(REQ-SUB-014, case = "le rattrapage hebdomadaire converge aussi (pas de dérive)")]
+    fn catch_up_weekly_lands_on_future_anchor_weekday() {
+        // Hebdomadaire ancré un lundi (2025-01-06), ~1,5 an plus tard : premier lundi futur.
+        let due = next_due(
+            day(2025, 1, 6),
+            cycle(BillingUnit::Week, 1),
+            day(2026, 8, 6),
+        )
+        .unwrap();
+        assert!(due > day(2026, 8, 6));
+        // Toujours sur le jour d'ancrage : un nombre entier de semaines depuis l'ancre.
+        assert_eq!((due - day(2025, 1, 6)).num_days() % 7, 0);
     }
 }
