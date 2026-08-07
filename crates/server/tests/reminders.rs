@@ -480,3 +480,25 @@ async fn first_run_emits_nothing_retroactively(pool: PgPool) {
     assert_eq!(resp["emitted"], 0);
     assert_eq!(*count.lock().unwrap(), 0, "aucun envoi sortant");
 }
+
+// --- Rattrapage des échéances passées (REQ-SUB-014) ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-014, case = "plusieurs échéances dépassées : aucune rafale rétroactive au premier balayage")]
+async fn many_past_occurrences_emit_no_retroactive_burst(pool: PgPool) {
+    let cookie = account(&pool, "sub014-burst@example.com").await;
+    // Abonnement mensuel ancré ~5 mois dans le passé : 5 occurrences dépassées d'un coup
+    // (client hors ligne des semaines / premier démarrage tardif).
+    let anchor = (Utc::now().date_naive() - Duration::days(150))
+        .format("%Y-%m-%d")
+        .to_string();
+    let today = Utc::now().date_naive().format("%Y-%m-%d").to_string();
+    create_sub(&pool, &cookie, "Netflix", &anchor).await;
+    let (url, count) = spawn_counting_receiver().await;
+    webhook_to(&pool, &cookie, &url).await;
+
+    let resp = body_json(run_cron(&pool, Some(CRON_SECRET), &today).await).await;
+    // Le rattrapage converge : la prochaine échéance est future, rien de passé n'est émis.
+    assert_eq!(resp["emitted"], 0);
+    assert_eq!(*count.lock().unwrap(), 0, "aucun envoi rétroactif");
+}

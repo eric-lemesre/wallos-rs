@@ -387,3 +387,23 @@ async fn authz_anon_compute_next_due(pool: PgPool) {
         StatusCode::UNAUTHORIZED
     );
 }
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-SUB-014, case = "le calcul d'échéance rattrape : première occurrence strictement future")]
+async fn compute_next_due_catches_up_past_occurrences(pool: PgPool) {
+    let cookie = account(&pool, "sub014-nextdue@example.com").await;
+    // Ancrage 18 mois avant `after` : 18 occurrences dépassées, la réponse est la première future.
+    let r = post(
+        &pool,
+        "/api/v1/schedule/next-due",
+        json!({
+            "first_payment": "2025-01-15",
+            "cycle": { "unit": "month", "interval": 1 },
+            "after": "2026-08-06"
+        }),
+        Some(&cookie),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::OK);
+    assert_eq!(next_payment(r).await, "2026-08-15");
+}

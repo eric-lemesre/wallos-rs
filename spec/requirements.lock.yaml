@@ -745,7 +745,7 @@ requirements:
 - id: REQ-SUB-014
   title: Rattrapage des échéances passées
   domain: subscriptions
-  status: draft
+  status: verified
   criticality: high
   layer:
   - core
