@@ -171,6 +171,8 @@ mod tests {
     #[test]
     #[verifies(REQ-NOT-007, case = "réessai à intervalle croissant, borné puis abandon")]
     fn retry_delays_grow_then_stop() {
+        // `0` (hors domaine : attempts commence à 1) est traité comme la première tentative.
+        assert_eq!(retry_delay_minutes(0), Some(60));
         let delays: Vec<Option<i64>> = (1..=6).map(retry_delay_minutes).collect();
         assert_eq!(
             delays,
