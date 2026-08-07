@@ -1262,11 +1262,23 @@ async fn authz_owner_test_notification_channel(pool: PgPool) {
 async fn authz_other_test_notification_channel(pool: PgPool) {
     let web = account(&pool, "not006-authz-web@example.com").await;
     let other = account(&pool, "not006-authz-other@example.com").await;
+    let (base, captured) = spawn_capture_receiver().await;
     let created = body_json(create_webhook(&pool, &web, "https://hooks.example.com/x").await).await;
     let id = created["id"].as_str().unwrap().to_string();
+    // Canal repointé vers un récepteur local : prouve qu'aucun envoi n'est déclenché (revue F5).
+    sqlx::query("update notification_channels set config = $2 where id = $1")
+        .bind(Uuid::parse_str(&id).unwrap())
+        .bind(json!({ "url": format!("{base}/hook") }))
+        .execute(&pool)
+        .await
+        .unwrap();
     // Un tiers authentifié voit 404 (jamais 403) — et surtout AUCUN envoi n'est déclenché.
     let resp = test_channel(&pool, Some(&other), &id).await;
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    assert!(
+        captured.lock().unwrap().is_empty(),
+        "aucune requête sortante pour un tiers"
+    );
 }
 
 #[sqlx::test(migrations = "../storage/migrations")]
@@ -1274,4 +1286,114 @@ async fn authz_other_test_notification_channel(pool: PgPool) {
 async fn authz_anon_test_notification_channel(pool: PgPool) {
     let resp = test_channel(&pool, None, &Uuid::new_v4().to_string()).await;
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+}
+
+// --- Corrections revue NOT-006 (rapport docs/code-review/2026-08-07-not-006.md) ---
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-006, case = "canal e-mail injoignable : le diagnostic rapporte `smtp-failed` (revue F4)")]
+async fn test_channel_reports_smtp_failure(pool: PgPool) {
+    let web = account(&pool, "not006-smtp@example.com").await;
+    // Port 1 refusé en connexion : l'envoi SMTP échoue immédiatement, sans réseau externe.
+    let created = body_json(
+        create_channel(
+            &pool,
+            &web,
+            "email",
+            json!({
+                "host": "127.0.0.1", "port": 1,
+                "username": "u", "password": "p",
+                "from": "wallos@example.com", "starttls": false
+            }),
+        )
+        .await,
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_string();
+    let resp = test_channel(&pool, Some(&web), &id).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = body_json(resp).await;
+    assert_eq!(body["ok"], false);
+    assert_eq!(body["code"], "smtp-failed");
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-006, case = "config stockée illisible : 422 (revue F6)")]
+async fn test_channel_unreadable_config_is_rejected(pool: PgPool) {
+    let web = account(&pool, "not006-corrupt@example.com").await;
+    let created = body_json(
+        create_channel(
+            &pool,
+            &web,
+            "telegram",
+            json!({ "bot_token": "123:abc", "chat_id": "42" }),
+        )
+        .await,
+    )
+    .await;
+    let id = created["id"].as_str().unwrap().to_string();
+    // Corruption par SQL direct : clé obligatoire supprimée (impossible via l'API, validée).
+    sqlx::query("update notification_channels set config = $2 where id = $1")
+        .bind(Uuid::parse_str(&id).unwrap())
+        .bind(json!({ "chat_id": "42" }))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let resp = test_channel(&pool, Some(&web), &id).await;
+    assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-006, case = "la réponse de test n'expose que ok/code/http_status (revue F11)")]
+async fn test_channel_response_has_exact_shape(pool: PgPool) {
+    let web = account(&pool, "not006-shape@example.com").await;
+    let failing_url = spawn_failing_receiver(StatusCode::INTERNAL_SERVER_ERROR).await;
+    let created = body_json(create_webhook(&pool, &web, "https://hooks.example.com/x").await).await;
+    let id = created["id"].as_str().unwrap().to_string();
+    sqlx::query("update notification_channels set config = $2 where id = $1")
+        .bind(Uuid::parse_str(&id).unwrap())
+        .bind(json!({ "url": failing_url }))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let body = body_json(test_channel(&pool, Some(&web), &id).await).await;
+    // L'ensemble EXACT des clés : aucune autre donnée (URL, chemin, port, jeton) ne peut fuiter.
+    let keys: Vec<&str> = body
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(keys, ["code", "http_status", "ok"]);
+}
+
+#[sqlx::test(migrations = "../storage/migrations")]
+#[verifies(REQ-NOT-006, case = "limitation de taux : 6e test du foyer en 5 minutes -> 429 + Retry-After (revue F1)")]
+async fn test_channel_is_rate_limited_per_household(pool: PgPool) {
+    let web = account(&pool, "not006-ratelimit@example.com").await;
+    let created = body_json(create_webhook(&pool, &web, "https://hooks.example.com/x").await).await;
+    let id = created["id"].as_str().unwrap().to_string();
+    // Cible locale fermée : chaque tentative échoue vite, sans réseau externe.
+    sqlx::query("update notification_channels set config = $2 where id = $1")
+        .bind(Uuid::parse_str(&id).unwrap())
+        .bind(json!({ "url": "http://127.0.0.1:1/hook" }))
+        .execute(&pool)
+        .await
+        .unwrap();
+    for _ in 0..5 {
+        let resp = test_channel(&pool, Some(&web), &id).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+    let limited = test_channel(&pool, Some(&web), &id).await;
+    assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
+    let retry_after: i64 = limited
+        .headers()
+        .get("retry-after")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+        .expect("en-tête Retry-After");
+    assert!(
+        (1..=300).contains(&retry_after),
+        "Retry-After={retry_after}"
+    );
 }

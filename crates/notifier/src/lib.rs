@@ -946,6 +946,17 @@ mod tests {
     }
 
     #[test]
+    fn diagnose_classifies_typed_status_and_falls_back() {
+        // Revue NOT-006 F3 : les variantes constructibles sans I/O. `timeout`/`connection-failed`
+        // exigent de vraies erreurs reqwest (couvertes en intégration serveur), `smtp-failed`
+        // une vraie erreur lettre (idem, test `test_channel_reports_smtp_failure`).
+        let status = anyhow::Error::new(UnexpectedStatus(503));
+        assert_eq!(diagnose_send_error(&status), ("http-status", Some(503)));
+        let generic = anyhow::anyhow!("boom");
+        assert_eq!(diagnose_send_error(&generic), ("send-failed", None));
+    }
+
+    #[test]
     fn notification_counts_its_items() {
         let n = ReminderNotification::new(
             "2026-08-06",
