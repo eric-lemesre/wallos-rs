@@ -423,12 +423,15 @@ pub async fn run_reminders(
                     continue;
                 };
                 // Best-effort : on ne journalise PAS l'erreur brute (elle peut contenir l'URL du canal,
-                // potentiellement porteuse d'un secret) — seulement le type de canal et le foyer. Le
-                // détail exploitable et redacté relèvera de REQ-NOT-007 (réessai/diagnostic).
-                if channel.send(&notification).await.is_err() {
+                // potentiellement porteuse d'un secret) — seulement le type de canal, le foyer et un
+                // code de diagnostic redacté (revue NOT-004 F6). Le réessai relèvera de REQ-NOT-007.
+                if let Err(err) = channel.send(&notification).await {
+                    let (code, http_status) = wallos_notifier::diagnose_send_error(&err);
                     tracing::warn!(
                         household_id = %household_id,
                         channel = channel.kind(),
+                        code,
+                        http_status,
                         "échec d'envoi d'un canal de notification"
                     );
                 }
