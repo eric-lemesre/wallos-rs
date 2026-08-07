@@ -67,6 +67,11 @@ fn invalid(detail: &str) -> Response {
     )
 }
 
+/// Clés de configuration **secrètes**, tous canaux confondus : mot de passe SMTP (email), jeton
+/// de bot (telegram), jeton d'application (gotify/pushover), clé utilisateur (pushover).
+/// Redactées en sortie d'API (REQ-NOT-003/004) et chiffrées au repos (REQ-SEC-004).
+pub(crate) const SECRET_KEYS: [&str; 4] = ["password", "bot_token", "token", "user_key"];
+
 /// Projette une ligne stockée en DTO, en **redactant** tout secret de la configuration (le mot de passe
 /// SMTP d'un canal e-mail n'est jamais renvoyé au client — REQ-NOT-003 « sans exposer les identifiants »).
 #[requirement(REQ-NOT-005)]
@@ -74,9 +79,7 @@ fn invalid(detail: &str) -> Response {
 #[requirement(REQ-NOT-004)]
 fn row_to_dto(row: NotificationChannelRow) -> NotificationChannelDto {
     let mut config = row.config;
-    // Secrets par type de canal : mot de passe SMTP (email), jeton de bot (telegram), jeton
-    // d'application (gotify/pushover), clé utilisateur (pushover).
-    for secret in ["password", "bot_token", "token", "user_key"] {
+    for secret in SECRET_KEYS {
         if let Some(value) = config.get_mut(secret) {
             *value = serde_json::Value::String("<redacted>".to_string());
         }
@@ -253,7 +256,7 @@ fn validate_pushover_config(config: &serde_json::Value) -> Result<serde_json::Va
     post,
     path = "/notifications/channels",
     operation_id = "createNotificationChannel",
-    extensions(("x-requirements" = json!(["REQ-NOT-005", "REQ-NOT-003", "REQ-NOT-004", "REQ-SEC-005"]))),
+    extensions(("x-requirements" = json!(["REQ-NOT-005", "REQ-NOT-003", "REQ-NOT-004", "REQ-SEC-005", "REQ-SEC-004"]))),
     request_body = CreateNotificationChannelRequest,
     responses(
         (status = 201, description = "Canal créé", body = NotificationChannelDto, content_type = "application/json"),
@@ -266,9 +269,11 @@ fn validate_pushover_config(config: &serde_json::Value) -> Result<serde_json::Va
 #[requirement(REQ-NOT-003)]
 #[requirement(REQ-NOT-004)]
 #[requirement(REQ-SEC-005)]
+#[requirement(REQ-SEC-004)]
 pub async fn create_notification_channel(
     AuthActor(actor): AuthActor,
     State(db): State<Db>,
+    axum::Extension(encryption): axum::Extension<crate::EncryptionKey>,
     Json(req): Json<CreateNotificationChannelRequest>,
 ) -> Response {
     // Normalise la configuration selon le type ; tout autre type est refusé explicitement.
@@ -283,10 +288,28 @@ pub async fn create_notification_channel(
             "kind: type de canal non supporté (webhook, email, telegram, discord, gotify ou pushover attendu)",
         ),
     };
-    let (kind, config) = match validated {
+    let (kind, mut config) = match validated {
         Ok(pair) => pair,
         Err(detail) => return invalid(detail),
     };
+    // Chiffrement au repos des champs secrets (REQ-SEC-004) : sans clé configurée, un canal à
+    // secrets est refusé explicitement — jamais de stockage en clair silencieux.
+    let has_secret = SECRET_KEYS.iter().any(|k| config.get(k).is_some());
+    if has_secret {
+        let Some(key) = encryption.0 else {
+            return invalid(
+                "chiffrement au repos non configuré (ENCRYPTION_KEY) : canal à secrets refusé",
+            );
+        };
+        for secret in SECRET_KEYS {
+            if let Some(value) = config.get(secret).and_then(|v| v.as_str()) {
+                match wallos_core::secrets::encrypt(&key, value) {
+                    Some(sealed) => config[secret] = serde_json::Value::String(sealed),
+                    None => return internal_error(),
+                }
+            }
+        }
+    }
     let enabled = req.enabled.unwrap_or(true);
     match NotificationChannelRepository::new(db.pool())
         .create(&actor, kind, &config, enabled)
@@ -427,6 +450,7 @@ fn too_many_tests(retry_after: i64) -> Response {
 pub async fn test_notification_channel(
     AuthActor(actor): AuthActor,
     State(db): State<Db>,
+    axum::Extension(encryption): axum::Extension<crate::EncryptionKey>,
     Path(id): Path<String>,
 ) -> Response {
     let Ok(channel_id) = Uuid::parse_str(&id) else {
@@ -443,7 +467,8 @@ pub async fn test_notification_channel(
         Ok(contact) => contact,
         Err(_) => return internal_error(),
     };
-    let Some(channel) = crate::reminders::channel_from_row(&row, contact.as_ref()) else {
+    let Some(channel) = crate::reminders::channel_from_row(&row, contact.as_ref(), encryption.0)
+    else {
         // Config stockée illisible pour ce type (ne devrait pas arriver : validée à la création).
         return invalid("config: configuration stockée illisible pour ce canal");
     };

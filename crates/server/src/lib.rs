@@ -230,6 +230,12 @@ pub fn app() -> Router {
 #[derive(Debug, Clone)]
 pub struct CronToken(pub Option<String>);
 
+/// Clé de chiffrement au repos des secrets de canaux (REQ-SEC-004), dérivée d'`ENCRYPTION_KEY`
+/// (`wallos_core::secrets::derive_key`). `None` = chiffrement non configuré : la création d'un
+/// canal comportant un champ secret est refusée (422) — jamais de stockage en clair silencieux.
+#[derive(Clone, Copy)]
+pub struct EncryptionKey(pub Option<[u8; 32]>);
+
 /// Construit le routeur complet, avec état (base de données) : santé + création de compte.
 ///
 /// Le secret du cron de rappel est lu depuis l'environnement (`CRON_TOKEN`). Les tests utilisent
@@ -237,12 +243,27 @@ pub struct CronToken(pub Option<String>);
 #[requirement(REQ-AUT-001)]
 pub fn app_with_db(db: Db) -> Router {
     let cron = std::env::var("CRON_TOKEN").ok().filter(|s| !s.is_empty());
-    app_with_db_and_cron(db, CronToken(cron))
+    let key = std::env::var("ENCRYPTION_KEY")
+        .ok()
+        .and_then(|raw| wallos_core::secrets::derive_key(&raw));
+    app_with_db_cron_key(db, CronToken(cron), EncryptionKey(key))
 }
 
 /// Comme [`app_with_db`], mais le secret du cron est fourni explicitement (injection de test).
+/// La clé de chiffrement reste lue depuis l'environnement.
 #[requirement(REQ-AUT-001)]
 pub fn app_with_db_and_cron(db: Db, cron: CronToken) -> Router {
+    let key = std::env::var("ENCRYPTION_KEY")
+        .ok()
+        .and_then(|raw| wallos_core::secrets::derive_key(&raw));
+    app_with_db_cron_key(db, cron, EncryptionKey(key))
+}
+
+/// Comme [`app_with_db_and_cron`], avec la clé de chiffrement fournie explicitement
+/// (injection de test, REQ-SEC-004).
+#[requirement(REQ-AUT-001)]
+#[requirement(REQ-SEC-004)]
+pub fn app_with_db_cron_key(db: Db, cron: CronToken, encryption: EncryptionKey) -> Router {
     let (router, _api) = OpenApiRouter::new()
         .routes(routes!(api_v1_health))
         .routes(routes!(accounts::create_account))
@@ -314,5 +335,6 @@ pub fn app_with_db_and_cron(db: Db, cron: CronToken) -> Router {
         .nest("/api/v1", router.with_state(db))
         .fallback(not_found)
         .layer(axum::Extension(cron))
+        .layer(axum::Extension(encryption))
         .layer(axum::middleware::map_response(security::security_headers))
 }

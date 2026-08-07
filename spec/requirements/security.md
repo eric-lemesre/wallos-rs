@@ -81,7 +81,7 @@ depends_on: []
 id: REQ-SEC-004
 title: Chiffrement au repos des secrets de configuration
 domain: security
-status: draft
+status: verified
 criticality: high
 layer: [core, api]
 e2e: n-a

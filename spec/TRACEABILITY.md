@@ -2,7 +2,7 @@
 
 # Matrice de traçabilité des exigences
 
-Total : **73** exigences — 72 verified · 1 draft.
+Total : **73** exigences — 73 verified.
 
 Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et [`spec/requirements/`](requirements/). Régénérer avec `cargo xtask trace --write`.
 
@@ -77,7 +77,7 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 | `REQ-SEC-001` | Isolation stricte des données entre comptes | high | ✅ verified |
 | `REQ-SEC-002` | Format d'erreur uniforme sans fuite d'information | high | ✅ verified |
 | `REQ-SEC-003` | Journalisation sans secret | high | ✅ verified |
-| `REQ-SEC-004` | Chiffrement au repos des secrets de configuration | high | ⚪ draft |
+| `REQ-SEC-004` | Chiffrement au repos des secrets de configuration | high | ✅ verified |
 | `REQ-SEC-005` | Protection contre la falsification de requête côté serveur | high | ✅ verified |
 | `REQ-SEC-006` | En-têtes de sécurité et politique de contenu | medium | ✅ verified |
 
