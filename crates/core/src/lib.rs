@@ -23,6 +23,7 @@ pub mod payment_method;
 pub mod reference_currency;
 pub mod reminders;
 pub mod schedule;
+pub mod secrets;
 pub mod stats;
 pub mod subscription;
 pub mod sync;
