@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
+import { formatDate } from "../lib/format";
 import type { components } from "../api/client";
 
 type NotificationChannelDto = components["schemas"]["NotificationChannelDto"];
@@ -33,7 +34,7 @@ type TestOutcome = { channelId: string; response: TestChannelResponse | null };
  * @implements REQ-NOT-007
  */
 export function NotificationChannelsCard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [channels, setChannels] = useState<NotificationChannelDto[]>([]);
   const [failed, setFailed] = useState(false);
   const [rejected, setRejected] = useState(false);
@@ -353,7 +354,7 @@ export function NotificationChannelsCard() {
                 data-status={delivery.status}
               >
                 <span data-testid="notification-delivery-kind">{delivery.channel_kind}</span>
-                <span data-testid="notification-delivery-date">{delivery.as_of}</span>
+                <span data-testid="notification-delivery-date">{formatDate(delivery.as_of, i18n.language)}</span>
                 <span data-testid="notification-delivery-status">{deliveryStatus(delivery)}</span>
               </li>
             ))}

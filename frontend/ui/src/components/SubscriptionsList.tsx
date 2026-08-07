@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
-import { formatAmount } from "../lib/format";
+import { formatAmount, formatDate } from "../lib/format";
 import type { components } from "../api/client";
 import { SubscriptionLogo } from "./SubscriptionLogo";
 
@@ -308,7 +308,7 @@ function SubscriptionRow({
       ) : (
         sub.next_payment && (
           <span data-testid="subscription-next">
-            {t("subscriptions.nextPayment")}: {sub.next_payment}
+            {t("subscriptions.nextPayment")}: {formatDate(sub.next_payment, i18n.language)}
           </span>
         )
       )}

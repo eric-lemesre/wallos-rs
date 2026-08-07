@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
+import { formatDate } from "../lib/format";
 import type { components } from "../api/client";
 
 type CategoryDto = components["schemas"]["CategoryDto"];
@@ -16,7 +17,7 @@ const UNITS = ["day", "week", "month", "year"] as const;
  * @implements REQ-SUB-002
  */
 export function SubscriptionForm() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("9.99");
   const [currency, setCurrency] = useState("EUR");
@@ -140,7 +141,7 @@ export function SubscriptionForm() {
       )}
       {nextPayment && (
         <p data-testid="sub-success" role="status">
-          {t("subscription.created")}: {nextPayment}
+          {t("subscription.created")}: {formatDate(nextPayment, i18n.language)}
         </p>
       )}
     </section>

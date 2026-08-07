@@ -21,6 +21,6 @@ test.describe("Création d'abonnement", { tag: ["@design", "@REQ-SUB-002"] }, ()
       name: "Netflix", amount: "9.99", currency: "EUR", unit: "month", interval: "1", firstPayment: "2030-01-31",
     });
     // Rattaché + prochaine échéance calculée immédiatement (first_payment futur -> lui-même).
-    expect(await app.subscriptionNextPayment()).toContain("2030-01-31");
+    expect(await app.subscriptionNextPayment()).toContain("Jan 31, 2030");
   });
 });

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
+import { formatDate } from "../lib/format";
 import type { components } from "../api/client";
 
 type NextDueResponse = components["schemas"]["NextDueResponse"];
@@ -15,7 +16,7 @@ const UNITS = ["day", "week", "month", "year"] as const;
  * @implements REQ-SUB-012
  */
 export function NextDueCard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [anchor, setAnchor] = useState("2025-01-31");
   const [unit, setUnit] = useState<(typeof UNITS)[number]>("month");
   const [interval, setInterval] = useState("1");
@@ -82,7 +83,7 @@ export function NextDueCard() {
       )}
       {result && (
         <p data-testid="nextdue-result">
-          {t("nextDue.result")}: {result.next_payment}
+          {t("nextDue.result")}: {formatDate(result.next_payment, i18n.language)}
         </p>
       )}
     </section>

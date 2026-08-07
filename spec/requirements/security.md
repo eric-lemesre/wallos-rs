@@ -203,7 +203,7 @@ depends_on: [REQ-I18N-001]
 id: REQ-I18N-003
 title: Formats de date et de nombre localisés
 domain: i18n
-status: draft
+status: verified
 criticality: medium
 layer: [ui]
 e2e: required

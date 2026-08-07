@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
+import { formatDate } from "../lib/format";
 import type { components } from "../api/client";
 
 type Reminder = components["schemas"]["ReminderDto"];
@@ -20,7 +21,7 @@ type Reminder = components["schemas"]["ReminderDto"];
  * @implements REQ-NOT-008
  */
 export function RemindersCard() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [leadDays, setLeadDays] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -93,7 +94,7 @@ export function RemindersCard() {
             <li key={r.subscription_id} data-testid="reminder-item">
               <span data-testid="reminder-name">{r.name}</span>
               <span data-testid="reminder-when">
-                {t("reminders.dueIn", { count: r.days_until })} — {r.due_date}
+                {t("reminders.dueIn", { count: r.days_until })} — {formatDate(r.due_date, i18n.language)}
               </span>
             </li>
           ))}

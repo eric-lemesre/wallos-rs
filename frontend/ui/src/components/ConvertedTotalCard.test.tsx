@@ -49,7 +49,7 @@ describe("ConvertedTotalCard", () => {
     expect(await screen.findByTestId("exchange-total")).toHaveTextContent("$16.00");
     // Fraîcheur affichée (mode dégradé : on indique la date du taux utilisé).
     expect(screen.getByTestId("exchange-asof")).toHaveTextContent(
-      i18n.t("exchange.asOf", { date: "2026-07-20" }),
+      i18n.t("exchange.asOf", { date: "Jul 20, 2026" }),
     );
     // Agrégat complet : aucun bandeau d'incomplétude.
     expect(screen.queryByTestId("exchange-incomplete")).toBeNull();
