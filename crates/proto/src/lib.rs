@@ -576,7 +576,8 @@ pub struct RunRemindersResponse {
     /// Nombre de comptes destinataires (rappels regroupés par compte).
     #[schema(example = 2)]
     pub accounts_notified: usize,
-    /// Livraisons en échec **réessayées** pendant cette exécution (REQ-NOT-007).
+    /// Livraisons en échec dont le réessai a été **tenté** pendant cette exécution (REQ-NOT-007).
+    /// Un réessai qui échoue en atteignant la borne compte aussi dans `abandoned` (revue F4).
     #[schema(example = 0)]
     pub retried: usize,
     /// Livraisons **abandonnées** pendant cette exécution (borne de tentatives atteinte, REQ-NOT-007).
@@ -697,6 +698,8 @@ pub struct NotificationDeliveryDto {
     #[schema(example = "pending")]
     pub status: String,
     /// Code de diagnostic du dernier échec (`http-status`, `timeout`, `connection-failed`, …).
+    /// `in-flight` : livraison ouverte dont l'envoi initial n'a pas encore conclu (revue F5 —
+    /// visible seulement si le processus s'est interrompu en plein envoi).
     #[schema(example = "connection-failed")]
     pub last_code: String,
     /// Prochaine tentative (RFC 3339), absent quand `abandoned`.

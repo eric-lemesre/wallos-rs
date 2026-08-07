@@ -125,7 +125,10 @@ impl<'a> NotificationDeliveryRepository<'a> {
             "update notification_deliveries d \
              set attempts = d.attempts + 1, next_attempt_at = $2, updated_at = now() \
              from notification_channels c \
-             where c.id = d.channel_id and c.enabled = true \
+             where c.id = d.channel_id and c.enabled = true and d.id in ( \
+                 select id from notification_deliveries \
+                 where status = 'pending' and next_attempt_at <= $1 \
+                 order by next_attempt_at asc limit 500) \
                and d.status = 'pending' and d.next_attempt_at <= $1 \
              returning d.id, d.household_id, d.attempts, d.payload, \
                        c.kind, c.config, c.id as channel_id",
@@ -135,6 +138,22 @@ impl<'a> NotificationDeliveryRepository<'a> {
         .fetch_all(self.pool)
         .await?;
         Ok(rows)
+    }
+
+    /// Purge les livraisons **abandonnées** dont la dernière activité précède `before` (revue
+    /// NOT-007 F3) : l'abandon reste visible un temps borné, la table ne croît pas indéfiniment.
+    ///
+    /// # Errors
+    /// `StorageError::Database` en cas d'échec de requête.
+    #[requirement(REQ-NOT-007)]
+    pub async fn purge_abandoned_before(&self, before: DateTime<Utc>) -> Result<u64, StorageError> {
+        let result = sqlx::query(
+            "delete from notification_deliveries where status = 'abandoned' and updated_at < $1",
+        )
+        .bind(before)
+        .execute(self.pool)
+        .await?;
+        Ok(result.rows_affected())
     }
 
     /// Clôt une livraison **réussie** au réessai : le suivi disparaît (plus rien à signaler).
