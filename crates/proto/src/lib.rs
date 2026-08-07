@@ -576,6 +576,12 @@ pub struct RunRemindersResponse {
     /// Nombre de comptes destinataires (rappels regroupés par compte).
     #[schema(example = 2)]
     pub accounts_notified: usize,
+    /// Livraisons en échec **réessayées** pendant cette exécution (REQ-NOT-007).
+    #[schema(example = 0)]
+    pub retried: usize,
+    /// Livraisons **abandonnées** pendant cette exécution (borne de tentatives atteinte, REQ-NOT-007).
+    #[schema(example = 0)]
+    pub abandoned: usize,
 }
 
 /// Un canal de notification exposé à l'interface (REQ-NOT-005). Abstraction **unique** partagée par
@@ -667,6 +673,42 @@ pub struct TestNotificationChannelResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(example = 404)]
     pub http_status: Option<u16>,
+}
+
+/// Une livraison de notification en difficulté ou abandonnée (REQ-NOT-007). Seuls les échecs sont
+/// suivis : un envoi réussi (immédiat ou au réessai) n'apparaît jamais ici. Le diagnostic est le
+/// même code stable que l'envoi de test (jamais l'erreur brute).
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct NotificationDeliveryDto {
+    /// Identifiant stable (UUID).
+    pub id: String,
+    /// Canal concerné (UUID).
+    pub channel_id: String,
+    /// Type du canal (`webhook`, `email`, `telegram`, …).
+    #[schema(example = "webhook")]
+    pub channel_kind: String,
+    /// Date de référence du lot raté (`YYYY-MM-DD`).
+    #[schema(example = "2026-08-07")]
+    pub as_of: String,
+    /// Tentatives déjà effectuées (initiale comprise).
+    #[schema(example = 2)]
+    pub attempts: u32,
+    /// `pending` (réessai planifié) ou `abandoned` (borne atteinte — critère #2).
+    #[schema(example = "pending")]
+    pub status: String,
+    /// Code de diagnostic du dernier échec (`http-status`, `timeout`, `connection-failed`, …).
+    #[schema(example = "connection-failed")]
+    pub last_code: String,
+    /// Prochaine tentative (RFC 3339), absent quand `abandoned`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_attempt_at: Option<String>,
+}
+
+/// Livraisons en difficulté du compte (REQ-NOT-007), abandons d'abord.
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct NotificationDeliveriesResponse {
+    /// Livraisons `pending` et `abandoned` du foyer.
+    pub deliveries: Vec<NotificationDeliveryDto>,
 }
 
 /// Une catégorie d'abonnements exposée à l'interface (REQ-CAT-001).

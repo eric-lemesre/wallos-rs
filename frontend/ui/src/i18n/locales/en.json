@@ -262,6 +262,9 @@
     "testTimeout": "The target did not reply in time (timeout)",
     "testConnectionFailed": "Could not connect to the target",
     "testSmtpFailed": "SMTP delivery failed (check host, port and credentials)",
-    "testSendFailed": "Sending failed"
+    "testSendFailed": "Sending failed",
+    "deliveriesTitle": "Delivery issues",
+    "deliveryPending": "Retry scheduled (attempt {{attempts}})",
+    "deliveryAbandoned": "Abandoned after {{attempts}} attempts"
   }
 }

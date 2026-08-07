@@ -18,9 +18,12 @@ use wallos_notifier::{
 };
 use wallos_proto::{
     CreateNotificationChannelRequest, NotificationChannelDto, NotificationChannelsResponse,
-    TestNotificationChannelResponse, problem,
+    NotificationDeliveriesResponse, NotificationDeliveryDto, TestNotificationChannelResponse,
+    problem,
 };
-use wallos_storage::{Db, NotificationChannelRepository, NotificationChannelRow};
+use wallos_storage::{
+    Db, NotificationChannelRepository, NotificationChannelRow, NotificationDeliveryRepository,
+};
 
 use crate::auth::AuthActor;
 use crate::problem_response;
@@ -481,4 +484,47 @@ pub async fn test_notification_channel(
         }
     };
     Json(response).into_response()
+}
+
+/// Liste les livraisons de notification **en difficulté** du foyer (REQ-NOT-007) : réessais
+/// planifiés (`pending`) et abandons (`abandoned` — critère #2 : l'abandon est visible dans
+/// l'interface, pas seulement dans les journaux). Un envoi réussi n'apparaît jamais ici.
+#[utoipa::path(
+    get,
+    path = "/notifications/deliveries",
+    operation_id = "listNotificationDeliveries",
+    extensions(("x-requirements" = json!(["REQ-NOT-007"]))),
+    responses(
+        (status = 200, description = "Livraisons en difficulté du foyer", body = NotificationDeliveriesResponse, content_type = "application/json"),
+        (status = 401, description = "Non authentifié", body = wallos_proto::Problem, content_type = "application/problem+json"),
+        (status = 500, description = "Erreur interne", body = wallos_proto::Problem, content_type = "application/problem+json")
+    )
+)]
+#[requirement(REQ-NOT-007)]
+pub async fn list_notification_deliveries(
+    AuthActor(actor): AuthActor,
+    State(db): State<Db>,
+) -> Response {
+    match NotificationDeliveryRepository::new(db.pool())
+        .list(&actor)
+        .await
+    {
+        Ok(rows) => Json(NotificationDeliveriesResponse {
+            deliveries: rows
+                .into_iter()
+                .map(|row| NotificationDeliveryDto {
+                    id: row.id.to_string(),
+                    channel_id: row.channel_id.to_string(),
+                    channel_kind: row.channel_kind,
+                    as_of: row.as_of.to_string(),
+                    attempts: u32::try_from(row.attempts).unwrap_or(0),
+                    status: row.status,
+                    last_code: row.last_code,
+                    next_attempt_at: row.next_attempt_at.map(|t| t.to_rfc3339()),
+                })
+                .collect(),
+        })
+        .into_response(),
+        Err(_) => internal_error(),
+    }
 }

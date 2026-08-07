@@ -6,6 +6,7 @@ import type { components } from "../api/client";
 
 type NotificationChannelDto = components["schemas"]["NotificationChannelDto"];
 type TestChannelResponse = components["schemas"]["TestNotificationChannelResponse"];
+type NotificationDeliveryDto = components["schemas"]["NotificationDeliveryDto"];
 
 type ChannelKind = "webhook" | "email" | "telegram" | "discord" | "gotify" | "pushover";
 
@@ -22,11 +23,14 @@ type TestOutcome = { channelId: string; response: TestChannelResponse | null };
  *
  * Chaque canal offre un envoi de **test** (REQ-NOT-006) : le résultat est affiché avec un
  * diagnostic localisé à partir d'un code stable renvoyé par le serveur (jamais l'erreur brute).
+ * Les livraisons en difficulté — réessai planifié ou **abandon** — sont affichées ici même
+ * (REQ-NOT-007 critère #2 : visible dans l'interface, pas seulement dans les journaux).
  *
  * @implements REQ-NOT-005
  * @implements REQ-NOT-003
  * @implements REQ-NOT-004
  * @implements REQ-NOT-006
+ * @implements REQ-NOT-007
  */
 export function NotificationChannelsCard() {
   const { t } = useTranslation();
@@ -48,6 +52,7 @@ export function NotificationChannelsCard() {
   const [botAvatarUrl, setBotAvatarUrl] = useState("");
   const [testOutcome, setTestOutcome] = useState<TestOutcome | null>(null);
   const [testing, setTesting] = useState(false);
+  const [deliveries, setDeliveries] = useState<NotificationDeliveryDto[]>([]);
 
   const refresh = useCallback(async () => {
     const { data, response } = await api.GET("/notifications/channels");
@@ -56,6 +61,12 @@ export function NotificationChannelsCard() {
       setFailed(false);
     } else {
       setFailed(true);
+    }
+    // Livraisons en difficulté (REQ-NOT-007) : les abandons doivent être VISIBLES ici,
+    // pas seulement dans les journaux du serveur.
+    const failures = await api.GET("/notifications/deliveries");
+    if (failures.response.ok && failures.data) {
+      setDeliveries(failures.data.deliveries ?? []);
     }
   }, []);
 
@@ -177,6 +188,13 @@ export function NotificationChannelsCard() {
       default:
         return "";
     }
+  }
+
+  /** Libellé localisé du statut d'une livraison en difficulté (REQ-NOT-007). */
+  function deliveryStatus(delivery: NotificationDeliveryDto): string {
+    return delivery.status === "abandoned"
+      ? t("notificationChannels.deliveryAbandoned", { attempts: delivery.attempts })
+      : t("notificationChannels.deliveryPending", { attempts: delivery.attempts });
   }
 
   /** L'URL saisie sert le webhook générique, le webhook Discord et le serveur Gotify. */
@@ -323,6 +341,25 @@ export function NotificationChannelsCard() {
           {t("notificationChannels.add")}
         </button>
       </div>
+
+      {deliveries.length > 0 && (
+        <div data-testid="notification-deliveries">
+          <h3>{t("notificationChannels.deliveriesTitle")}</h3>
+          <ul>
+            {deliveries.map((delivery) => (
+              <li
+                key={delivery.id}
+                data-testid="notification-delivery-row"
+                data-status={delivery.status}
+              >
+                <span data-testid="notification-delivery-kind">{delivery.channel_kind}</span>
+                <span data-testid="notification-delivery-date">{delivery.as_of}</span>
+                <span data-testid="notification-delivery-status">{deliveryStatus(delivery)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {channels.length === 0 ? (
         <p data-testid="notification-channels-empty">{t("notificationChannels.empty")}</p>

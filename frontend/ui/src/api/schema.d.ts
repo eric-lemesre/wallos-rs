@@ -322,6 +322,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Liste les livraisons de notification **en difficulté** du foyer (REQ-NOT-007) : réessais
+         *     planifiés (`pending`) et abandons (`abandoned` — critère #2 : l'abandon est visible dans
+         *     l'interface, pas seulement dans les journaux). Un envoi réussi n'apparaît jamais ici.
+         */
+        get: operations["listNotificationDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/password": {
         parameters: {
             query?: never;
@@ -1311,6 +1332,50 @@ export interface components {
             /** @description Canaux configurés, du plus ancien au plus récent. */
             channels: components["schemas"]["NotificationChannelDto"][];
         };
+        /** @description Livraisons en difficulté du compte (REQ-NOT-007), abandons d'abord. */
+        NotificationDeliveriesResponse: {
+            /** @description Livraisons `pending` et `abandoned` du foyer. */
+            deliveries: components["schemas"]["NotificationDeliveryDto"][];
+        };
+        /**
+         * @description Une livraison de notification en difficulté ou abandonnée (REQ-NOT-007). Seuls les échecs sont
+         *     suivis : un envoi réussi (immédiat ou au réessai) n'apparaît jamais ici. Le diagnostic est le
+         *     même code stable que l'envoi de test (jamais l'erreur brute).
+         */
+        NotificationDeliveryDto: {
+            /**
+             * @description Date de référence du lot raté (`YYYY-MM-DD`).
+             * @example 2026-08-07
+             */
+            as_of: string;
+            /**
+             * Format: int32
+             * @description Tentatives déjà effectuées (initiale comprise).
+             * @example 2
+             */
+            attempts: number;
+            /** @description Canal concerné (UUID). */
+            channel_id: string;
+            /**
+             * @description Type du canal (`webhook`, `email`, `telegram`, …).
+             * @example webhook
+             */
+            channel_kind: string;
+            /** @description Identifiant stable (UUID). */
+            id: string;
+            /**
+             * @description Code de diagnostic du dernier échec (`http-status`, `timeout`, `connection-failed`, …).
+             * @example connection-failed
+             */
+            last_code: string;
+            /** @description Prochaine tentative (RFC 3339), absent quand `abandoned`. */
+            next_attempt_at?: string | null;
+            /**
+             * @description `pending` (réessai planifié) ou `abandoned` (borne atteinte — critère #2).
+             * @example pending
+             */
+            status: string;
+        };
         /** @description Un payeur exposé à l'interface (REQ-SUB-017). Étiquette nominative du foyer (pas de compte). */
         PayerDto: {
             /** @description Identifiant stable (UUID). */
@@ -1506,6 +1571,11 @@ export interface components {
         /** @description Résultat d'une exécution du cron de rappel (REQ-NOT-001). */
         RunRemindersResponse: {
             /**
+             * @description Livraisons **abandonnées** pendant cette exécution (borne de tentatives atteinte, REQ-NOT-007).
+             * @example 0
+             */
+            abandoned: number;
+            /**
              * @description Nombre de comptes destinataires (rappels regroupés par compte).
              * @example 2
              */
@@ -1520,6 +1590,11 @@ export interface components {
              * @example 3
              */
             emitted: number;
+            /**
+             * @description Livraisons en échec **réessayées** pendant cette exécution (REQ-NOT-007).
+             * @example 0
+             */
+            retried: number;
         };
         /** @description Requête de choix de langue (REQ-I18N-001) : le code doit être une langue supportée. */
         SetLanguageRequest: {
@@ -2658,6 +2733,44 @@ export interface operations {
             };
             /** @description Trop d'envois de test (Retry-After en secondes) */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Erreur interne */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listNotificationDeliveries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Livraisons en difficulté du foyer */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationDeliveriesResponse"];
+                };
+            };
+            /** @description Non authentifié */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
