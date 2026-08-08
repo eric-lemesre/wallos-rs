@@ -17,7 +17,7 @@
 | R4 | Les montants monétaires utilisent `rust_decimal::Decimal`. `f32`/`f64` interdits dans `core` et `domain` | `cargo xtask lint-money` |
 | R5 | `unwrap()`, `expect()`, `panic!` interdits hors `#[cfg(test)]` et hors `main.rs` | `clippy -D clippy::unwrap_used` |
 | R6 | Aucune dépendance nouvelle sans ADR (`docs/adr/NNNN-*.md`) | revue |
-| R7 | Aucun `@tauri-apps/*` importé hors de `frontend/shells/` | `eslint` règle custom |
+| R7 | *Retirée (OQ-009, ADR 0054 : natif hors périmètre — aucun `@tauri-apps/*` dans le dépôt)* | — |
 | R8 | Le schéma OpenAPI committé doit être identique à celui généré | CI drift gate |
 
 **Protocole de blocage** — si une règle rend une tâche impossible, l'agent **s'arrête**, ajoute une entrée
@@ -45,16 +45,11 @@ subtrack/
 │   ├── storage/         # sqlx, migrations, repositories (traits définis dans core)
 │   ├── server/          # axum, auth, scheduler de notifications, endpoints de sync
 │   ├── notifier/        # canaux : email, webhook, telegram, discord, gotify, pushover
-│   ├── client/          # SDK HTTP Rust (réutilisé par le desktop)
-│   ├── desktop/         # Tauri v2 — coquille native uniquement
 │   └── req-macros/      # proc-macro #[requirement(...)] — validation des IDs à la compilation
 ├── frontend/
-│   ├── ui/              # Composants + logique de vue PARTAGÉS (100 % du métier d'affichage)
-│   ├── platform/        # Abstraction plateforme : storage, notifications, fichiers, deep-links
+│   ├── ui/              # Composants + logique de vue (100 % du métier d'affichage)
 │   └── shells/
-│       ├── web/         # Vite + build statique servi par `server`
-│       ├── desktop/     # point d'entrée Tauri desktop
-│       └── mobile/      # point d'entrée Tauri iOS/Android
+│       └── web/         # Vite + build statique servi par `server` (seule coquille — OQ-009)
 ├── e2e/
 │   ├── specs/           # Scénarios AGNOSTIQUES de l'implémentation
 │   ├── drivers/         # LegacyDriver (app d'origine) | TargetDriver (subtrack)
@@ -234,27 +229,17 @@ justification écrite et un `REQ` ou `OQ` de référence. Aucun `#[coverage(off)
 
 ## 7. Frontend — UI partagée sur trois modalités
 
-**Principe** : une seule implémentation du comportement d'interface, trois coquilles.
+**Principe** : une seule implémentation du comportement d'interface, une coquille web
+(le natif est **hors périmètre de parité** — OQ-009, ADR 0054 ; `PlatformAdapter` et les
+coquilles desktop/mobile ont été retirés).
 
 ```
 frontend/ui        ← 100 % du métier d'affichage, des formulaires, de la navigation, de l'i18n
-frontend/platform  ← interface PlatformAdapter + 3 implémentations
-frontend/shells/*  ← montage, configuration, permissions natives. Le plus mince possible.
-```
-
-```ts
-export interface PlatformAdapter {
-  secureStore: SecureStore;          // web: cookie httpOnly | tauri: plugin-stronghold
-  notifications: NotificationSink;   // web: Notification API | tauri: plugin-notification
-  files: FileGateway;                // export CSV/JSON
-  network: NetworkStatus;            // pilote le mode hors-ligne
-  deepLink: DeepLinkHandler;
-}
+frontend/shells/web ← montage et configuration. Le plus mince possible.
 ```
 
 Règles :
-- Aucun `if (isTauri)` dans `frontend/ui`. Toute divergence passe par `PlatformAdapter` (R7).
-- Budget de code spécifique par coquille : **≤ 300 lignes**. Au-delà, ouvrir une OQ.
+- Budget de code spécifique à la coquille web : **≤ 300 lignes**. Au-delà, ouvrir une OQ.
 - Responsive : un seul jeu de composants, points de rupture `sm/md/lg`. Pas de composants
   « mobile » dupliqués.
 - Tout élément interactif porte un `data-testid` stable, dérivé de l'exigence quand c'est pertinent
@@ -264,11 +249,11 @@ Règles :
 
 | Sujet | Décision | Motif |
 |-------|----------|-------|
-| Composants | React 19 + TypeScript `strict` | modalité web/desktop/mobile unifiée |
+| Composants | React 19 + TypeScript `strict` | une seule modalité web (PWA responsive) |
 | Client API | `openapi-typescript` + `openapi-fetch`, **générés** depuis `api/openapi.json` | contrat unique |
 | État serveur | TanStack Query, alimenté exclusivement par le client généré | cache + mode hors-ligne |
 | État local | Zustand, un store par domaine | pas de contexte géant |
-| Routage | TanStack Router en mode `hash` | le protocole custom des WebViews Tauri rend le routage `history` fragile |
+| Routage | TanStack Router en mode `hash` | choix hérité de la cible native retirée (OQ-009) ; conservé — coût de migration nul, aucune contrainte SEO |
 | Formulaires | `react-hook-form` + `zod`, schémas `zod` dérivés d'OpenAPI | validation identique client/serveur |
 | i18n | `i18next`, clés générées, aucune chaîne littérale en JSX | exigences `REQ-I18N-*` |
 
@@ -319,21 +304,16 @@ mécanisme qui empêche l'IA de « réinventer » une règle métier de manière
 
 ### 8.2 Stratégie par modalité — limites réelles de l'outillage
 
-Playwright **ne pilote pas la coquille native Tauri** : Tauri utilise WebView2 sur Windows,
-WKWebView sur macOS et WebKitGTK sur Linux, et le chemin officiel de test desktop passe par
-WebDriver (`tauri-driver`), pas par CDP. La stratégie est donc **étagée** :
+Un seul niveau depuis le retrait du natif (OQ-009, ADR 0054 — les niveaux L2 desktop
+`tauri-driver` et L3 mobile Maestro sont retirés ; la modalité mobile est la PWA responsive,
+couverte par L1 en émulation de viewport au besoin) :
 
 | Niveau | Cible | Outil | Portée | Seuil |
 |--------|-------|-------|--------|-------|
 | L1 | Web (`shells/web`) | Playwright, projets `chromium` **et** `webkit` | Suite complète, les deux cibles legacy/app | **90 %** des exigences `e2e: required` |
-| L2 | Desktop | WebdriverIO + `tauri-driver` | Sous-ensemble « coquille » : fenêtres, menus, IPC, notifications natives, updater | 100 % des exigences `layer` contenant `desktop` |
-| L3 | Mobile | Playwright en émulation de viewport + smoke natif Maestro | Rendu responsive + démarrage, permissions, deep-links | Smoke uniquement |
 
 Le projet `webkit` de Playwright est **obligatoire** : une suite qui ne tourne qu'en Chromium
 donne une fausse assurance sur macOS et Linux, où le moteur de rendu réel n'est pas Chromium.
-
-Les Page Objects de L1 et L2 partagent la même interface `AppDriver`. Un scénario n'est jamais
-dupliqué entre les niveaux.
 
 ### 8.3 Définition de la couverture E2E — 90 %
 
@@ -365,7 +345,7 @@ Le test passe, la faille est en production.
 |-------|----------|
 | Hachage | `argon2id`, paramètres OWASP, jamais configurables par l'utilisateur |
 | Session web | jeton opaque en cookie `HttpOnly` / `SameSite=Lax` / `Secure`, rotation à chaque privilège élevé |
-| Desktop & mobile | jeton **par appareil**, révocable individuellement, stocké via `PlatformAdapter.secureStore` |
+| API (intégrations) | jeton **par appareil** (Bearer), révocable individuellement — REQ-AUT-005 re-cadré, ADR 0028 ; conservation sûre à la charge du client |
 | JWT | **interdit** pour les sessions (pas de révocation immédiate) |
 | Portée | toute entité métier porte `owner_id` non nullable |
 
@@ -406,7 +386,7 @@ titre qu'un test rouge. Ces tests sont rattachés à `REQ-SEC-001` (isolation de
 9.  pnpm ts-types-drift                          ⟶ bloquant
 10. vitest + couverture frontend/ui (≥ 90 %)     ⟶ bloquant
 11. e2e L1 TARGET=app (chromium + webkit)        ⟶ bloquant
-12. e2e L2 desktop (Linux + Windows)             ⟶ bloquant
+12. (retirée — e2e L2 desktop, OQ-009/ADR 0054)  ⟶ sans objet
 13. cargo xtask trace --e2e (≥ 90 %)             ⟶ bloquant
 14. cargo-mutants sur core                       ⟶ nightly, bloquant sur main
 15. cargo-deny + audit                           ⟶ bloquant
@@ -467,7 +447,6 @@ pnpm ts-types-drift               # aucun type métier écrit à la main côté 
 pnpm e2e --target=legacy          # exécute la suite contre l'app d'origine
 pnpm e2e --target=app             # exécute la suite contre subtrack
 pnpm e2e:record                   # gèle les oracles
-pnpm e2e:desktop                  # niveau L2 (tauri-driver)
 ```
 
 ---
@@ -481,7 +460,7 @@ valeurs par défaut, révisables par ADR, mais également jamais modifiées à l
 |---|----------------------|--------|
 | H1 | UI partagée en React 19 + TypeScript, packagée dans `frontend/ui` | ✅ |
 | H2 | OpenAPI *code-first* via `utoipa` / `utoipa-axum`, artefact committé | ✅ |
-| H3 | Serveur PostgreSQL ; SQLite uniquement côté client desktop/mobile | ⬜ |
+| H3 | Serveur PostgreSQL (le volet « SQLite client natif » est caduc — OQ-009) | ✅ |
 | H4 | Multi-utilisateur avec comptes serveur, argon2id + sessions opaques | ✅ |
 | H5 | Synchronisation LWW par enregistrement + tombstones + curseur `since` | ⬜ |
 | H6 | Le scheduler de notifications vit côté serveur, jamais côté client | ⬜ |
