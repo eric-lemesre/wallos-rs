@@ -19,6 +19,4 @@ exclusions = [
     "crates/storage/src/outcomes.rs",
     # Crates stub : aucune exigence encore implémentée. À retirer quand le domaine est livré.
     "crates/notifier/src/lib.rs", # notifications (REQ-NOT-*) non démarrées
-    "crates/client/src/lib.rs",   # SDK HTTP Rust — squelette, non implémenté
-    "crates/desktop/src/lib.rs",  # coquille Tauri — placeholder (OQ-008, natif différé)
 ]

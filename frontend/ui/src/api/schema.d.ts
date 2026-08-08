@@ -1187,7 +1187,7 @@ export interface components {
         /**
          * @description Jeton d'appareil émis à l'appairage (REQ-AUT-005).
          *
-         *     Renvoyé **une seule fois** : la coquille native le stocke via `PlatformAdapter.secureStore`,
+         *     Renvoyé **une seule fois** : le client doit le conserver de façon sûre (jamais en stockage web lisible),
          *     jamais en clair côté serveur (seule son empreinte SHA-256 est conservée).
          */
         DeviceToken: {

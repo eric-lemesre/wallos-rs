@@ -134,14 +134,12 @@ layer: [api, ui]
 e2e: optional
 oracle: design
 rationale: >
-  La modalité web est exposée publiquement ; les coquilles natives ont leur propre politique de capacités.
+  La modalité web est exposée publiquement. (Critère « capacités Tauri » retiré : le natif est
+  hors périmètre de parité — OQ-009, ADR 0054.)
 acceptance:
   - given: une réponse de la modalité web
     when: elle est émise
     then: elle porte une politique de sécurité de contenu sans directive permissive de script en ligne
-  - given: la configuration Tauri
-    when: elle est établie
-    then: seules les capacités effectivement utilisées sont accordées, et chacune est justifiée
 depends_on: []
 ---
 ```

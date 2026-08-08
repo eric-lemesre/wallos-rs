@@ -152,7 +152,14 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   3. **Périmètre mort** : crate `crates/desktop` (Tauri), règle R7 (`@tauri-apps` hors `shells/`),
      `frontend/shells/{desktop,mobile}`, `frontend/platform` → à `deprecated`/supprimer par un ADR de
      nettoyage. `crates/client` (SDK Rust) perd son consommateur desktop : à réévaluer.
-- **Statut** : resolved (décision) — conséquences 1–3 **à ordonnancer**
+- **Exécution des conséquences (2026-08-08, demande Eric, ADR 0054)** :
+  1. REQ-AUT-005 : traité via OQ-011 (re-cadré « jeton d'API porteur, révocable », `verified`, ADR 0028).
+  2. REQ-SEC-006 : critère « capacités Tauri » retiré de la spec (le volet CSP web, déjà testé, demeure).
+  3. Périmètre mort supprimé : `crates/desktop` (Tauri) et `crates/client` (SDK sans consommateur)
+     retirés du workspace et des exclusions de traçabilité ; AGENTS.md nettoyé (règle R7 retirée,
+     `PlatformAdapter`, niveaux e2e L2/L3, porte 12, hypothèse H3, arborescence) ;
+     `frontend/shells/{desktop,mobile}` et `frontend/platform` n'avaient jamais été créés.
+- **Statut** : resolved
 
 ---
 

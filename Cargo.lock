@@ -3674,20 +3674,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "wallos-client"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "wallos-core",
- "wallos-proto",
-]
-
-[[package]]
 name = "wallos-core"
 version = "0.1.0"
 dependencies = [
@@ -3704,14 +3690,6 @@ dependencies = [
  "unicode-normalization",
  "uuid",
  "wallos-req-macros",
-]
-
-[[package]]
-name = "wallos-desktop"
-version = "0.1.0"
-dependencies = [
- "tokio",
- "wallos-client",
 ]
 
 [[package]]
