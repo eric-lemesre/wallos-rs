@@ -249,5 +249,30 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   et version exposée conservés, publication d'image retirée).
 - **Recommandation agent** : A. Le jeton est déjà disponible en CI, l'image suit le dépôt, et rien
   n'interdit d'ajouter Docker Hub plus tard.
+- **Portée étendue (2026-08-16)** : la même question se pose pour les **paquets système**
+  (REQ-OPS-010) — se contenter d'attacher les paquets aux versions publiées, ou **tenir un dépôt
+  apt/dnf** signé. Tenir un dépôt est un engagement de maintenance durable, bien supérieur à celui
+  d'une image ; l'agent recommande de commencer par l'attachement aux versions publiées.
+- **Décision** : _(en attente)_
+- **Statut** : open
+
+---
+
+## OQ-014 — Que recouvre « client » dans la demande de paquets système ?
+- **Bloque** : le volet « clients » de la distribution — aucune exigence ne le couvre à ce jour.
+- **Contexte** : la demande (2026-08-16) porte sur des paquets Debian, RPM et autres, « serveur et
+  clients ». Or le dépôt ne produit **qu'un seul binaire**, `wallos-server`. Le SDK `crates/client` a
+  été **supprimé** faute de consommateur (ADR 0054) et les coquilles natives sont **hors périmètre**
+  (OQ-009, décision du 2026-08-04). Le client d'aujourd'hui est la PWA, servie par le serveur
+  lui-même (REQ-OPS-003) : il n'existe donc rien à installer séparément sur un poste.
+- **Options** : A) **aucun paquet client** — le client est la PWA, REQ-OPS-010/011/012 couvrent le
+  serveur et la demande est satisfaite en l'état — B) **client en ligne de commande** : un binaire
+  distinct dialoguant avec l'API (administration, scripts d'auto-hébergement, sauvegarde), qui
+  ressusciterait le SDK supprimé et se packagerait par les mêmes chaînes ; périmètre **neuf**, à
+  spécifier, sans rapport avec la parité — C) **coquille native de bureau**, ce qui **rouvre OQ-009**
+  et inverse la décision stratégique du 2026-08-04, au prix de Tauri, du niveau e2e L2 et du
+  `PlatformAdapter`.
+- **Recommandation agent** : A si « clients » désignait la PWA. Sinon **B** : valeur réelle et coût
+  borné, sans revenir sur OQ-009. C n'est justifié que si la parité cesse d'être la boussole.
 - **Décision** : _(en attente)_
 - **Statut** : open

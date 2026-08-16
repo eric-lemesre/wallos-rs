@@ -269,3 +269,109 @@ acceptance:
 depends_on: [REQ-OPS-004, REQ-SEC-004]
 ---
 ```
+
+```yaml
+---
+id: REQ-OPS-010
+title: Paquets système pour distributions Linux
+domain: ops
+status: draft
+criticality: high
+layer: [api]
+e2e: n-a
+oracle: design
+rationale: >
+  Le conteneur ne couvre pas tous les auto-hébergeurs : beaucoup administrent un serveur ordinaire et
+  attendent une installation par le gestionnaire de paquets, avec un service géré par l'init du
+  système, une configuration dans /etc et des mises à jour par la voie habituelle. Sans paquet natif,
+  ces utilisateurs sont renvoyés à une installation manuelle non reproductible et non désinstallable.
+acceptance:
+  - given: le dépôt et une version donnée
+    when: les paquets sont construits
+    then: un paquet au format Debian et un paquet au format RPM sont produits pour la même version,
+      chacun installable sur une distribution cible de cette famille sans dépendance non déclarée
+  - given: un paquet installé
+    when: l'installation s'achève
+    then: le binaire, l'interface compilée, une unité de service et une configuration par défaut sont
+      posés aux emplacements standards de la distribution, et le service s'exécute sous un compte
+      système dédié, non privilégié et sans session interactive
+  - given: le fichier de configuration porteur de secrets
+    when: il est posé par le paquet
+    then: il n'est lisible que par le compte de service, et ne contient aucun secret prédéfini —
+      une installation ne doit jamais aboutir à une clé de chiffrement connue de tous
+  - given: une configuration modifiée par l'exploitant
+    when: le paquet est mis à jour vers une version ultérieure
+    then: ses modifications sont préservées, le service redémarre sur la nouvelle version et les
+      migrations sont appliquées
+  - given: un paquet désinstallé
+    when: la désinstallation ordinaire a lieu
+    then: les données et la configuration de l'exploitant sont conservées ; leur suppression exige
+      une purge explicitement demandée
+  - given: le serveur de base de données
+    when: le paquet est installé
+    then: il n'est ni imposé ni installé d'office sur la même machine, la connexion restant décrite
+      par la configuration
+depends_on: [REQ-OPS-003, REQ-OPS-004, REQ-OPS-006]
+---
+```
+
+```yaml
+---
+id: REQ-OPS-011
+title: Archives binaires autonomes et canaux de distribution additionnels
+domain: ops
+status: draft
+criticality: medium
+layer: [api]
+e2e: n-a
+oracle: design
+rationale: >
+  Les familles Debian et RPM ne couvrent ni Alpine, ni Arch, ni les gestionnaires transverses. Plutôt
+  que de multiplier des recettes maintenues à la main — chacune vieillissant en silence —, la
+  distribution repose sur une archive binaire autonome, socle unique dont tout autre canal dérive.
+acceptance:
+  - given: une version publiée
+    when: les artefacts sont construits
+    then: une archive autonome par plateforme prise en charge est produite, contenant le binaire du
+      serveur, l'interface compilée et la documentation minimale d'exploitation, et fonctionnant par
+      simple décompression sans compilation
+  - given: une archive autonome
+    when: elle est exécutée sur une distribution dépourvue des bibliothèques du système de
+      construction
+    then: elle démarre néanmoins, la portée exacte des plateformes prises en charge étant documentée
+  - given: un canal de distribution additionnel, communautaire ou non
+    when: il est ajouté
+    then: il consomme les artefacts publiés sans modifier la chaîne de construction, et son caractère
+      non officiellement maintenu, le cas échéant, est déclaré
+depends_on: [REQ-OPS-003, REQ-OPS-008]
+---
+```
+
+```yaml
+---
+id: REQ-OPS-012
+title: Intégrité et authenticité des artefacts publiés
+domain: ops
+status: draft
+criticality: high
+layer: [api]
+e2e: n-a
+oracle: design
+rationale: >
+  Un artefact d'installation est le vecteur de compromission le plus direct d'une application
+  auto-hébergée : l'utilisateur exécute avec privilèges ce qu'il vient de télécharger. Distribuer des
+  paquets sans moyen d'en vérifier l'origine annulerait le soin porté au reste de la sécurité.
+acceptance:
+  - given: l'ensemble des artefacts d'une version — image, paquets, archives
+    when: ils sont publiés
+    then: chacun est accompagné d'une empreinte et d'une signature vérifiables publiquement, et la
+      procédure de vérification est documentée à l'endroit où l'utilisateur télécharge
+  - given: un artefact altéré après publication
+    when: la vérification est menée selon la procédure documentée
+    then: elle échoue
+  - given: la chaîne de publication
+    when: elle s'exécute
+    then: aucune clé privée de signature n'apparaît dans les artefacts, les journaux ou le dépôt
+depends_on: [REQ-OPS-008, REQ-OPS-010, REQ-OPS-011]
+---
+```

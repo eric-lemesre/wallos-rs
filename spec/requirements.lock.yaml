@@ -996,3 +996,41 @@ requirements:
   depends_on:
   - REQ-OPS-004
   - REQ-SEC-004
+- id: REQ-OPS-010
+  title: Paquets système pour distributions Linux
+  domain: ops
+  status: draft
+  criticality: high
+  layer:
+  - api
+  e2e: n-a
+  oracle: design
+  depends_on:
+  - REQ-OPS-003
+  - REQ-OPS-004
+  - REQ-OPS-006
+- id: REQ-OPS-011
+  title: Archives binaires autonomes et canaux de distribution additionnels
+  domain: ops
+  status: draft
+  criticality: medium
+  layer:
+  - api
+  e2e: n-a
+  oracle: design
+  depends_on:
+  - REQ-OPS-003
+  - REQ-OPS-008
+- id: REQ-OPS-012
+  title: Intégrité et authenticité des artefacts publiés
+  domain: ops
+  status: draft
+  criticality: high
+  layer:
+  - api
+  e2e: n-a
+  oracle: design
+  depends_on:
+  - REQ-OPS-008
+  - REQ-OPS-010
+  - REQ-OPS-011
