@@ -347,7 +347,7 @@ requirements:
 - id: REQ-NOT-008
   title: Notification native sur desktop et mobile
   domain: notifications
-  status: verified
+  status: draft
   criticality: low
   layer:
   - ui
@@ -355,6 +355,7 @@ requirements:
   oracle: design
   depends_on:
   - REQ-NOT-001
+  - REQ-CLT-003
 - id: REQ-SEC-001
   title: Isolation stricte des données entre comptes
   domain: security
@@ -1034,3 +1035,88 @@ requirements:
   - REQ-OPS-008
   - REQ-OPS-010
   - REQ-OPS-011
+- id: REQ-CLT-001
+  title: Coquille de bureau
+  domain: clients
+  status: draft
+  criticality: high
+  layer:
+  - ui
+  e2e: optional
+  oracle: design
+  depends_on:
+  - REQ-CLT-003
+  - REQ-CLT-004
+  - REQ-CLT-005
+- id: REQ-CLT-002
+  title: Coquille mobile
+  domain: clients
+  status: draft
+  criticality: medium
+  layer:
+  - ui
+  e2e: optional
+  oracle: design
+  depends_on:
+  - REQ-CLT-003
+  - REQ-CLT-004
+  - REQ-CLT-005
+- id: REQ-CLT-003
+  title: Adaptateur de plateforme
+  domain: clients
+  status: draft
+  criticality: high
+  layer:
+  - ui
+  e2e: optional
+  oracle: design
+  depends_on: []
+- id: REQ-CLT-004
+  title: Stockage sécurisé du jeton sur coquille native
+  domain: clients
+  status: draft
+  criticality: high
+  layer:
+  - ui
+  e2e: optional
+  oracle: design
+  depends_on:
+  - REQ-CLT-003
+  - REQ-AUT-005
+- id: REQ-CLT-005
+  title: Instance auto-hébergée configurable
+  domain: clients
+  status: draft
+  criticality: high
+  layer:
+  - ui
+  e2e: optional
+  oracle: design
+  depends_on:
+  - REQ-CLT-003
+  - REQ-AUT-005
+- id: REQ-CLT-006
+  title: Confinement des capacités de la coquille native
+  domain: clients
+  status: draft
+  criticality: high
+  layer:
+  - ui
+  e2e: n-a
+  oracle: design
+  depends_on:
+  - REQ-CLT-001
+- id: REQ-CLT-007
+  title: Artefacts d'installation des clients
+  domain: clients
+  status: draft
+  criticality: medium
+  layer:
+  - ui
+  e2e: n-a
+  oracle: design
+  depends_on:
+  - REQ-CLT-001
+  - REQ-CLT-002
+  - REQ-OPS-011
+  - REQ-OPS-012

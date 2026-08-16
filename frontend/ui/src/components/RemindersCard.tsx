@@ -13,9 +13,11 @@ type Reminder = components["schemas"]["ReminderDto"];
  * rappels sont regroupés par compte (un seul bloc). Isolée par le serveur (§9). S'appuie sur le client
  * généré ; aucune chaîne d'affichage en dur (REQ-I18N-002).
  *
- * Cette vue in-app **est** la surface de consultation des rappels : elle satisfait le volet applicable
- * de REQ-NOT-008 (« l'information reste consultable dans l'interface »), la notification **native** étant
- * hors périmètre (OQ-009, ADR 0045 — pas de coquille native pour la parité, comme SEC-006/AUT-005).
+ * Cette vue in-app **est** la surface de consultation des rappels : elle satisfait le second critère
+ * de REQ-NOT-008 (« l'information reste consultable dans l'interface »), acquis et conservé. Le
+ * premier critère — notification **système** via l'adaptateur de plateforme — est redevenu exigible
+ * depuis le retour des clients natifs dans le périmètre (OQ-009 rouverte, ADR 0055 supersédant 0045)
+ * et relève de REQ-CLT-003 ; REQ-NOT-008 est repassée en `draft` en conséquence.
  *
  * @implements REQ-NOT-001
  * @implements REQ-NOT-008

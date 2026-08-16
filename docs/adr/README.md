@@ -60,7 +60,17 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0042 | STA-003 exclusion transverse (essai exclu par occurrence dans l'échéancier) | 🟡 |
 | 0043 | NOT-005 webhook (abstraction fermée, garde SSRF à l'enregistrement, cycle SEC-005) | 🔴 |
 | 0044 | NOT-003 e-mail (dépendance `lettre`, destinataire=compte, corps localisé serveur) | 🟡 |
-| 0045 | NOT-008 natif hors périmètre (OQ-009 ; consultation in-app via RemindersCard) | 🟡 |
+| 0045 | NOT-008 natif hors périmètre (OQ-009) — **supersédée par 0055** | ⚪ |
+| 0046 | NOT-004 messageries : quatre adaptateurs sur l'abstraction de canal, divergences legacy assumées | 🔴 |
+| 0047 | NOT-006 test d'un canal : envoi sur le canal enregistré, diagnostic par code stable | 🟡 |
+| 0048 | NOT-002 idempotence : unicité en base, pas de verrou, pas de rattrapage | 🔴 |
+| 0049 | NOT-007 réessai : outbox par (canal, lot), intervalle croissant borné, abandon visible | 🟡 |
+| 0050 | SUB-014 rattrapage des échéances : convergence par calcul, jamais par rejeu | 🔴 |
+| 0051 | CUR-006 / I18N-003 formatage localisé : `Intl` natif, locale = langue de l'interface | 🟡 |
+| 0052 | SEC-005 SSRF : validation des adresses résolues à la connexion, redirections refusées | 🟡 |
+| 0053 | SEC-004 secrets au repos : AES-256-GCM applicatif, clé dérivée d'`ENCRYPTION_KEY` | 🟡 |
+| 0054 | Nettoyage du périmètre natif (exécution des conséquences d'OQ-009) | ⚪ |
+| 0055 | **Retour des clients natifs** : web + bureau + mobile, domaine `CLT`, R7 rétablie | 🔴 |
 
 ## À relire en priorité aujourd'hui (🔴)
 
@@ -73,6 +83,9 @@ Les décisions d'interprétation prises jusqu'ici, susceptibles de diverger de l
 - **0025** — sémantique « abonnement actif à ce mois-là » définie par conception (pas d'historique
   d'activation dans le modèle).
 - **0023** — jeu de catégories par défaut (impacte tout import/export et l'expérience initiale).
+- **0055** — **retour du natif dans le périmètre** : renverse la décision d'OQ-009 du 2026-08-04. La
+  parité continue de régir le comportement métier, mais plus le périmètre des modalités. À relire en
+  premier : c'est la décision la plus structurante prise depuis le cadrage initial.
 - **0022** — règle de clamp des échéances mensuelles (28/29/30/31).
 - **0012** — foyer partagé, payeurs = membres : structurant pour SUB-017/STA-004 et l'isolation.
 - **0040** — rappels : déclenchement **exact** (jour J−N, pas la fenêtre) et regroupement par compte
@@ -82,5 +95,6 @@ Les décisions d'interprétation prises jusqu'ici, susceptibles de diverger de l
 - **0031** — répartition : bucket « (aucun) » explicite (subtrack rend l'axe nullable, là où Wallos a
   des sentinelles) ; petite divergence d'affichage (entrées de coût nul conservées, pas omises).
 
-> Voir aussi `spec/OPEN-QUESTIONS.md` pour les arbitrages **encore ouverts** (OQ-010 dépendance
-> STA-004↔SUB-017, OQ-011 devenir d'AUT-005).
+> Voir aussi `spec/OPEN-QUESTIONS.md` pour les arbitrages **encore ouverts** — à ce jour **OQ-015**
+> (signature et publication des clients natifs : certificats macOS et Windows, clé de signature
+> Android non régénérable, compte de boutique iOS).
