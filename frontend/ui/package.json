@@ -10,11 +10,10 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "generate:api": "openapi-typescript ../../api/openapi.json --output src/api/schema.d.ts",
-    "ts-types-drift": "openapi-typescript ../../api/openapi.json --output src/api/schema.d.ts && git diff --exit-code -- src/api/schema.d.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@wallos/api-client": "*",
     "@hookform/resolvers": "^3.10.0",
     "i18next": "^24.2.2",
     "openapi-fetch": "^0.13.5",
@@ -32,7 +31,6 @@
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
     "jsdom": "^26.0.0",
-    "openapi-typescript": "^7.6.1",
     "typescript": "^5.7.3",
     "vite": "^6.1.0",
     "vitest": "^3.0.5"

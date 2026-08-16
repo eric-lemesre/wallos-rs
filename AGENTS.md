@@ -50,7 +50,7 @@ subtrack/
 ├── frontend/            # Espaces de travail npm (déclarés à la racine du dépôt)
 │   ├── ui/              # 100 % de l'interface. Expose App({ canal, apiBaseUrl }).
 │   │                    # `src/ds/` = design system (feuille unique + primitives + stories)
-│   ├── api-client/      # Contrat généré depuis api/openapi.json, en paquet (à créer — ADR 0057)
+│   ├── api-client/      # Contrat généré depuis api/openapi.json, en paquet (ADR 0057)
 │   └── shells/          # Coquilles. R7 : aucune dépendance de coquille hors d'ici.
 │       ├── web/         # Vite + build statique servi par `server` (REQ-OPS-003)
 │       ├── desktop/     # Coquille bureau — Linux, macOS, Windows (REQ-CLT-001)
@@ -207,7 +207,7 @@ artefact **généré et committé**. La CI régénère et compare : toute diverg
 Chaîne :
 
 ```
-crates/proto (utoipa)  ──▶  api/openapi.json  ──▶  frontend/ui/src/api/ (openapi-typescript)
+crates/proto (utoipa)  ──▶  api/openapi.json  ──▶  frontend/api-client/ (openapi-typescript)
                                     │
                                     └────────────▶  tests de conformité (schemathesis)
 ```
@@ -283,7 +283,7 @@ Règles :
 
 **Règle de non-duplication de types** : aucun type d'entité métier n'est écrit à la main en
 TypeScript. Tout type provient de `components['schemas']` du client généré. Un `interface
-Subscription` rédigé manuellement est une erreur CI (`pnpm ts-types-drift`), pas un choix de style.
+Subscription` rédigé manuellement est une erreur CI (`npm run ts-types-drift`), pas un choix de style.
 C'est la protection principale contre la dérive silencieuse entre back-end et front-end quand le
 code est produit par un agent.
 
@@ -407,7 +407,7 @@ titre qu'un test rouge. Ces tests sont rattachés à `REQ-SEC-001` (isolation de
 6.  cargo xtask api-coverage (100 %)             ⟶ bloquant
 7.  cargo xtask authz-coverage (100 %)           ⟶ bloquant
 8.  schemathesis (conformité contrat)            ⟶ bloquant
-9.  pnpm ts-types-drift                          ⟶ bloquant
+9.  npm run ts-types-drift                          ⟶ bloquant
 10. vitest + couverture frontend/ui (≥ 90 %)     ⟶ bloquant
 11. e2e L1 TARGET=app (chromium + webkit)        ⟶ bloquant
 12. (retirée — e2e L2 desktop, OQ-009/ADR 0054)  ⟶ sans objet
@@ -467,7 +467,7 @@ cargo xtask lint-money            # interdiction des flottants monétaires
 cargo llvm-cov --workspace --branch --fail-under-lines 100
 cargo mutants -p subtrack-core
 
-pnpm ts-types-drift               # aucun type métier écrit à la main côté TS
+npm run ts-types-drift            # aucun type métier écrit à la main côté TS
 pnpm e2e --target=legacy          # exécute la suite contre l'app d'origine
 pnpm e2e --target=app             # exécute la suite contre subtrack
 pnpm e2e:record                   # gèle les oracles
