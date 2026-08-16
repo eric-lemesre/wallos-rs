@@ -19,6 +19,7 @@
 | R6 | Aucune dépendance nouvelle sans ADR (`docs/adr/NNNN-*.md`) | revue |
 | R7 | Aucune dépendance de coquille native hors de `frontend/shells/` : le code d'interface partagé ignore la plateforme et passe par l'adaptateur (REQ-CLT-003) | revue + `cargo xtask trace` |
 | R8 | Le schéma OpenAPI committé doit être identique à celui généré | CI drift gate |
+| R9 | **Dépôt unique** : serveur, interface, coquilles et recettes de paquets vivent dans `wallos-rs`. Aucun dépôt satellite, aucun sous-module | revue + ADR 0056 |
 
 **Protocole de blocage** — si une règle rend une tâche impossible, l'agent **s'arrête**, ajoute une entrée
 dans `spec/OPEN-QUESTIONS.md` au format ci-dessous, et rend la main. Il ne contourne jamais.
@@ -48,8 +49,13 @@ subtrack/
 │   └── req-macros/      # proc-macro #[requirement(...)] — validation des IDs à la compilation
 ├── frontend/
 │   ├── ui/              # Composants + logique de vue (100 % du métier d'affichage)
-│   └── shells/
-│       └── web/         # Vite + build statique servi par `server` (seule coquille — OQ-009)
+│   │                    # Ignore la plateforme : passe par l'adaptateur (REQ-CLT-003)
+│   └── shells/          # Coquilles. R7 : aucune dépendance de coquille hors d'ici.
+│       ├── web/         # Vite + build statique servi par `server` (REQ-OPS-003)
+│       ├── desktop/     # Coquille bureau — Linux, macOS, Windows (REQ-CLT-001)
+│       └── mobile/      # Coquille mobile — Android, iOS (REQ-CLT-002)
+├── packaging/           # Recettes serveur ET clients : conteneur, deb, rpm, archives,
+│                        # dépôt signé (REQ-OPS-007/010/011/012, REQ-CLT-007)
 ├── e2e/
 │   ├── specs/           # Scénarios AGNOSTIQUES de l'implémentation
 │   ├── drivers/         # LegacyDriver (app d'origine) | TargetDriver (subtrack)

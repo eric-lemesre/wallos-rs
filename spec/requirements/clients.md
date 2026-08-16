@@ -8,6 +8,11 @@
 > Règle directrice : **une seule interface**. Les coquilles natives empaquettent l'interface web
 > existante ; elles n'en sont pas une réécriture. Tout ce qui les distingue passe par un adaptateur
 > de plateforme unique (REQ-CLT-003), afin que le code d'interface ignore sur quoi il s'exécute.
+>
+> Corollaire : **un seul dépôt**. Coquilles et recettes d'empaquetage vivent dans `wallos-rs`
+> (règle R9, ADR 0056) — sans quoi la traçabilité (R1), la porte de dérive du contrat d'API (R8) et
+> la version commune exigée par REQ-CLT-007 perdraient leur objet. Un dépôt unique ne veut pas dire
+> un artefact unique : serveur et clients se construisent et se publient séparément.
 
 ```yaml
 ---
