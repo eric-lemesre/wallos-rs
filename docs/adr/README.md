@@ -73,6 +73,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0055 | **Retour des clients natifs** : web + bureau + mobile, domaine `CLT`, R7 rétablie | 🔴 |
 | 0056 | **Dépôt unique** : serveur, interface, coquilles et paquets dans `wallos-rs` (R9) | 🟡 |
 | 0057 | **Principe frontend** repris d'`ergonomia` : `App({canal, apiBaseUrl})`, coquilles minces, design system à feuille unique, Storybook + MSW | 🔴 |
+| 0058 | Atelier : Storybook, et MSW à la **seule** frontière réseau (dépendances de dev, R6) | 🟡 |
 
 ## À relire en priorité aujourd'hui (🔴)
 

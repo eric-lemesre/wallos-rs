@@ -1,0 +1,30 @@
+# Galerie de composants (ADR 0058). Hors du chemin critique : le job `frontend` reste court, et la
+# galerie n'est construite que lorsque l'interface change, ou à la demande.
+#
+# Elle est publiée en ARTEFACT plutôt qu'en site : un artefact se télécharge, s'ouvre hors ligne et
+# fige ce qui a été construit à ce commit, sans hébergement à maintenir.
+name: Storybook
+
+on:
+  push:
+    branches: [main]
+    paths: ["frontend/ui/**", ".github/workflows/storybook.yml"]
+  workflow_dispatch:
+
+jobs:
+  gallery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: install
+        run: npm ci
+      - name: build gallery
+        run: npm run build-storybook
+      - uses: actions/upload-artifact@v4
+        with:
+          name: storybook-static
+          path: frontend/ui/storybook-static
+          retention-days: 30
