@@ -249,3 +249,34 @@ acceptance:
 depends_on: [REQ-CLT-001, REQ-CLT-002, REQ-OPS-011, REQ-OPS-012]
 ---
 ```
+
+```yaml
+---
+id: REQ-CLT-008
+title: Cohérence visuelle par jetons
+domain: clients
+status: draft
+criticality: medium
+layer: [ui]
+e2e: n-a
+oracle: legacy
+rationale: >
+  L'interface n'a longtemps eu aucune feuille de style : chaque écran aurait fini par inventer ses
+  couleurs, et trois clients auraient multiplié les divergences par trois. Une valeur écrite en dur
+  dans un écran ne se retrouve plus, ne se corrige plus globalement, et rend tout contrôle de
+  contraste illusoire.
+acceptance:
+  - given: l'apparence de l'application d'origine
+    when: le socle visuel est établi
+    then: ses jetons — couleurs, surfaces, encres, ombres, rayons, typographie — sont relevés sur
+      la cible figée plutôt qu'inventés, et tout écart assumé est documenté
+  - given: un thème clair et un thème sombre
+    when: l'utilisateur en change, ou que son système exprime une préférence
+    then: l'interface les honore, aucune couleur ne restant fixée hors des jetons
+  - given: un composant d'interface
+    when: son code est examiné
+    then: il ne contient aucune valeur de couleur littérale et n'importe aucune feuille de style,
+      ce qu'une porte automatique vérifie
+depends_on: [REQ-CLT-003]
+---
+```

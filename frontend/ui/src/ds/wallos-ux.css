@@ -1,0 +1,275 @@
+/*
+ * Socle visuel de wallos-rs — feuille UNIQUE du design system (ADR 0057, REQ-CLT-008).
+ *
+ * Les jetons ci-dessous sont RELEVÉS sur la cible figée `bellamy/wallos:5.4.2`
+ * (`@sha256:316f26e1…789f`, ADR 0011), fichiers `styles/theme.css` et `styles/dark-theme.css`.
+ * Ils ne sont pas inventés, et leurs NOMS sont repris tels quels : n'importe qui peut comparer ce
+ * bloc au fichier d'origine et constater l'écart — ou son absence. Wallos étant sous AGPL-3.0 et
+ * wallos-rs sous AGPL-3.0-or-later, la reprise est compatible.
+ *
+ * Deux règles tiennent tout l'édifice :
+ *   1. aucun composant n'importe de CSS — il pose des `className` définies ici, la feuille étant
+ *      importée UNE fois par point d'entrée (un `import "*.css"` casserait `tsc --noEmit`) ;
+ *   2. aucune couleur littérale hors de ce fichier — une porte automatique le vérifie
+ *      (`ds/tokens.test.ts`).
+ */
+
+/* ---------------------------------------------------------------- thème clair (relevé) */
+:root {
+  --main-color: #2563eb;
+  --main-color-rgb: 37, 99, 235;
+  --accent-color: #93c5fd;
+  --hover-color: #1d4ed8;
+  --error-color: #ef4444;
+  --success-color: #16a34a;
+  --warning-color: #b45309;
+
+  --background-color: #f2f4f8;
+  --header-background-color: #ffffff;
+  --box-background-color: #ffffff;
+  --box-border-color: #e7eaf0;
+  --surface-hover: #f3f5f9;
+
+  --text-color: #1c2434;
+  --text-color-inverted: #ffffff;
+  --text-muted: #64748b;
+
+  --input-background-color: #ffffff;
+  --input-border-color: #d7dce5;
+  --input-disabled-background-color: #f2f4f8;
+  --input-disabled-border-color: #e7eaf0;
+
+  --box-shadow: 0 1px 2px rgb(15 23 42 / 4%), 0 10px 30px -18px rgb(15 23 42 / 18%);
+  --shadow-pop: 0 2px 6px rgb(15 23 42 / 8%), 0 16px 40px -16px rgb(15 23 42 / 28%);
+  --focus-ring: 0 0 0 3px rgb(var(--main-color-rgb) / 18%);
+
+  /*
+   * Rayons et graduation typographique : Wallos ne les expose pas en variables — il répète des
+   * valeurs littérales. Le relevé porte donc sur les valeurs DOMINANTES de `styles.css`
+   * (8px : 13 occurrences, 12px : 12, 16px : 10 ; corps 16px, secondaire 14px, appui 13px).
+   * Les nommer est un écart assumé : c'est ce qui rend l'ensemble corrigible d'un seul endroit.
+   */
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --font-family: Barlow, "Helvetica Neue", Helvetica, sans-serif;
+  --font-size: 16px;
+  --font-size-sm: 14px;
+  --font-size-xs: 13px;
+  --font-size-lg: 20px;
+
+  --space: 16px;
+  --space-sm: 8px;
+  --space-lg: 24px;
+}
+
+/* ------------------------------------------------------------- thème sombre (relevé) */
+:root[data-theme="dark"] {
+  --background-color: #0f1218;
+  --header-background-color: #12151c;
+  --box-background-color: #171b23;
+  --box-border-color: #262c38;
+  --surface-hover: #1f2530;
+
+  --text-color: #e4e8f1;
+  --text-muted: #8b94a7;
+
+  --input-background-color: #1f2530;
+  --input-border-color: #38404f;
+  --input-disabled-background-color: #232936;
+  --input-disabled-border-color: #2a3140;
+
+  --warning-color: #f59e0b;
+
+  --box-shadow: 0 1px 2px rgb(0 0 0 / 35%), 0 10px 30px -18px rgb(0 0 0 / 55%);
+  --shadow-pop: 0 2px 6px rgb(0 0 0 / 45%), 0 16px 40px -16px rgb(0 0 0 / 65%);
+  --focus-ring: 0 0 0 3px rgb(var(--main-color-rgb) / 35%);
+}
+
+/*
+ * Préférence système, sauf choix explicite de l'utilisateur : `:root:not([data-theme="light"])`
+ * laisse un thème clair choisi à la main l'emporter sur un système sombre.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --background-color: #0f1218;
+    --header-background-color: #12151c;
+    --box-background-color: #171b23;
+    --box-border-color: #262c38;
+    --surface-hover: #1f2530;
+
+    --text-color: #e4e8f1;
+    --text-muted: #8b94a7;
+
+    --input-background-color: #1f2530;
+    --input-border-color: #38404f;
+    --input-disabled-background-color: #232936;
+    --input-disabled-border-color: #2a3140;
+
+    --warning-color: #f59e0b;
+
+    --box-shadow: 0 1px 2px rgb(0 0 0 / 35%), 0 10px 30px -18px rgb(0 0 0 / 55%);
+    --shadow-pop: 0 2px 6px rgb(0 0 0 / 45%), 0 16px 40px -16px rgb(0 0 0 / 65%);
+    --focus-ring: 0 0 0 3px rgb(var(--main-color-rgb) / 35%);
+  }
+}
+
+/* ------------------------------------------------------------------------ socle */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  line-height: 1.5;
+  background-color: var(--background-color);
+  color: var(--text-color);
+}
+
+/*
+ * Styles d'ÉLÉMENT plutôt que de classe, à dessein : les 22 composants existants rendent du
+ * balisage sémantique nu. Les habiller par l'élément donne une cohérence immédiate sans toucher
+ * une ligne de composant — les primitives à classes viendront avec l'atelier (étape 5).
+ */
+main {
+  display: grid;
+  gap: var(--space);
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: var(--space);
+}
+
+main > section {
+  background-color: var(--box-background-color);
+  border: 1px solid var(--box-border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--box-shadow);
+  padding: var(--space-lg);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 var(--space-sm);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-lg);
+}
+
+h3 {
+  font-size: var(--font-size);
+}
+
+a {
+  color: var(--main-color);
+}
+
+a:hover {
+  color: var(--hover-color);
+}
+
+label {
+  display: block;
+  margin-bottom: var(--space-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--text-color);
+  background-color: var(--input-background-color);
+  border: 1px solid var(--input-border-color);
+  border-radius: var(--radius);
+  padding: var(--space-sm);
+  max-width: 100%;
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background-color: var(--input-disabled-background-color);
+  border-color: var(--input-disabled-border-color);
+  color: var(--text-muted);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  color: var(--text-color-inverted);
+  background-color: var(--main-color);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: var(--space-sm) var(--space);
+}
+
+button:hover {
+  background-color: var(--hover-color);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  background-color: var(--input-disabled-background-color);
+  border-color: var(--input-disabled-border-color);
+  color: var(--text-muted);
+}
+
+/*
+ * Le focus n'est JAMAIS supprimé : c'est la seule indication dont dispose une navigation au
+ * clavier. `:focus-visible` le réserve aux interactions clavier, sans halo au clic souris.
+ */
+:focus-visible {
+  outline: 2px solid var(--main-color);
+  outline-offset: 2px;
+  box-shadow: var(--focus-ring);
+}
+
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+li {
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--box-border-color);
+}
+
+li:last-child {
+  border-bottom: none;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: var(--space-sm);
+  border-bottom: 1px solid var(--box-border-color);
+}
+
+th {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+/* Les messages d'erreur portent `role="alert"` : la couleur ne doit jamais être leur seul signal. */
+[role="alert"] {
+  color: var(--error-color);
+  font-size: var(--font-size-sm);
+}

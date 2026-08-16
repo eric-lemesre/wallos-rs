@@ -19,7 +19,7 @@ export function SubscriptionLogo({ name, logo }: { name: string; logo?: string |
       aria-hidden="true"
       style={{
         backgroundColor: color,
-        color: "#fff",
+        color: "var(--text-color-inverted)",
         width: 32,
         height: 32,
         display: "inline-flex",
