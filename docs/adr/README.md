@@ -71,6 +71,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0053 | SEC-004 secrets au repos : AES-256-GCM applicatif, clé dérivée d'`ENCRYPTION_KEY` | 🟡 |
 | 0054 | Nettoyage du périmètre natif (exécution des conséquences d'OQ-009) | ⚪ |
 | 0055 | **Retour des clients natifs** : web + bureau + mobile, domaine `CLT`, R7 rétablie | 🔴 |
+| 0056 | **Dépôt unique** : serveur, interface, coquilles et paquets dans `wallos-rs` (R9) | 🟡 |
 
 ## À relire en priorité aujourd'hui (🔴)
 

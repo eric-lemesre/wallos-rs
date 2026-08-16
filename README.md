@@ -52,17 +52,29 @@ Périmètre cible, à parité avec Wallos (les cases cochées sont **vérifiées
 - **Statistiques** — coût mensuel normalisé, évolution du coût sur douze mois glissants, répartitions
 - **Authentification** — session par cookie ou jeton `Bearer`, jetons d'appareil, changement de mot de passe, limitation des tentatives
 - **Isolation par foyer** — chaque foyer ne voit que ses propres données
-- **Notifications multi-canaux** — email, webhook, Telegram, Discord, Gotify, Pushover *(en cours)*
-- **Synchronisation** multi-appareils *(en cours)*
+- **Notifications multi-canaux** — email, webhook, Telegram, Discord, Gotify, Pushover
+- **Synchronisation** multi-appareils
 - **Multi-langue** — interface i18n (français / anglais), aucune chaîne d'affichage en dur
 - **Auto-hébergement** — données chez vous, aucune dépendance à un service tiers
-- **Coquille native desktop / mobile** via Tauri v2 *(planifié)*
+
+Le périmètre **fonctionnel** ci-dessus est vérifié. Deux chantiers sont **spécifiés mais pas encore
+construits** — les exigences existent, le code non :
+
+- **Déploiement** *(spécifié)* — image conteneur, paquets `.deb` / `.rpm`, archives autonomes,
+  artefacts signés, sauvegarde et restauration vérifiées (domaine `OPS`). Aujourd'hui, l'installation
+  passe encore par la compilation des sources ; voir [Prise en main](#prise-en-main).
+- **Trois clients : web, bureau et mobile** *(spécifié)* — une interface unique, empaquetée par des
+  coquilles natives derrière un adaptateur de plateforme (domaine `CLT`). C'est une **divergence
+  assumée** avec l'application d'origine, qui n'a qu'un client web : depuis l'[ADR 0055](docs/adr/0055-native-clients-back-in-scope.md),
+  la parité régit le *comportement métier*, plus le *périmètre des modalités*.
 
 ---
 
 ## Architecture
 
-Monorepo à deux versants : un workspace Cargo (backend + domaine) et un frontend React partagé entre coquilles web et natives.
+**Dépôt unique** (règle R9, [ADR 0056](docs/adr/0056-single-repository.md)) : serveur, interface, coquilles et recettes d'empaquetage vivent ici. Ce n'est pas une préférence de style — les portes de qualité du projet (traçabilité, dérive du contrat d'API, version commune client/serveur) ne fonctionnent que si le générateur et le généré sont commités ensemble.
+
+Les entrées marquées *(à créer)* sont **spécifiées et localisées, pas encore construites**.
 
 ```
 wallos-rs/
@@ -73,12 +85,16 @@ wallos-rs/
 │   ├── storage/      # sqlx, migrations Postgres, repositories (isolation par foyer)
 │   ├── server/       # axum : auth, handlers, scheduler de notifications
 │   ├── notifier/     # canaux email / webhook / telegram / discord / gotify / pushover
-│   ├── client/       # SDK HTTP Rust (réutilisé par le desktop)
-│   ├── desktop/      # Tauri v2 — coquille native uniquement
 │   └── req-macros/   # proc-macro #[requirement(...)] : validation des IDs à la compilation
 ├── frontend/
-│   ├── ui/           # Composants + logique de vue PARTAGÉS (React, i18next, client openapi-fetch)
-│   └── shells/web/   # Vite : build statique servi par `server`
+│   ├── ui/           # Composants + logique de vue PARTAGÉS (React, i18next, openapi-fetch).
+│   │                 # Ignore la plateforme : passe par l'adaptateur (REQ-CLT-003).
+│   └── shells/       # R7 : aucune dépendance de coquille hors d'ici
+│       ├── web/      # Vite : build statique servi par `server`
+│       ├── desktop/  # Linux / macOS / Windows          (à créer — REQ-CLT-001)
+│       └── mobile/   # Android / iOS                    (à créer — REQ-CLT-002)
+├── packaging/        # Conteneur, deb, rpm, archives, dépôt signé
+│                     #                                   (à créer — REQ-OPS-007/010/011/012)
 ├── e2e/
 │   ├── specs/        # Scénarios AGNOSTIQUES de l'implémentation (Playwright)
 │   └── drivers/      # LegacyDriver (Wallos d'origine) | TargetDriver (wallos-rs)
@@ -87,7 +103,7 @@ wallos-rs/
 └── docs/adr/         # Décisions d'architecture (ADR)
 ```
 
-**Pile technique** — Rust 2024 / axum 0.8 / sqlx (Postgres) / utoipa · React + Vite + openapi-fetch + i18next · Playwright · Tauri v2.
+**Pile technique** — Rust 2024 / axum 0.8 / sqlx (Postgres) / utoipa · React + Vite + openapi-fetch + i18next · Playwright. La technologie des coquilles natives n'est **pas arrêtée** : Tauri v2 est le candidat, l'engagement relèvera d'un ADR d'implémentation.
 
 Principes de couches : `core` est un domaine **pur et sans horloge** (porte `lint-clock`) ; `storage` prend un `&Actor` pour l'isolation ; `server` ne fait qu'orchestrer ; le frontend consomme **exclusivement** le client typé généré depuis l'OpenAPI.
 
@@ -117,6 +133,10 @@ Les points en suspens sont consignés dans [`spec/OPEN-QUESTIONS.md`](spec/OPEN-
 ---
 
 ## Prise en main
+
+> **Aujourd'hui, l'installation passe par la compilation des sources.** Image conteneur, paquets
+> `.deb` / `.rpm` et archives autonomes sont **spécifiés** (domaine `OPS`) mais pas encore publiés :
+> ce qui suit est un environnement de **développement**, pas une procédure de mise en production.
 
 ### Prérequis
 
@@ -195,13 +215,17 @@ Les tests d'intégration provisionnent des bases éphémères via `#[sqlx::test]
 
 Le [badge d'exigences](#wallos-rs--suivi-dabonnements-personnels-réécrit-en-rust) en tête de page est **généré automatiquement** : il pointe (via un endpoint shields.io) vers `spec/trace-badge.json`, régénéré par `cargo xtask trace --write` et maintenu à jour par une porte de *drift* en CI. La ventilation détaillée, exigence par exigence, vit dans la **[matrice de traçabilité](spec/TRACEABILITY.md)** (elle aussi générée).
 
-Instantané au dernier passage :
+Le badge est la seule source à jour de ce décompte : il est régénéré à chaque passage de la porte, là
+où un chiffre recopié dans ce README vieillirait en silence.
 
-- **43** exigences `verified`
-- **2** exigences `implemented`
-- **28** exigences `draft`
+Le **périmètre fonctionnel** de parité est vérifié de bout en bout — abonnements, catégories, devises
+et conversion, statistiques, authentification et sessions, notifications multi-canaux, synchronisation
+multi-appareils, internationalisation. Restent en `draft` les deux chantiers annoncés plus haut :
+**déploiement** (`OPS`) et **clients natifs** (`CLT`).
 
-Domaines les plus avancés : authentification et sessions, abonnements (CRUD, recherche/tri), devises et conversion, statistiques (coût mensuel, évolution sur douze mois). En cours / à venir : notifications multi-canaux, synchronisation multi-appareils, coquilles natives Tauri.
+Le décompte de `verified` a **reculé** d'un cran le 2026-08-16, lorsque le retour des clients natifs
+dans le périmètre a rendu de nouveau exigible la notification système de `REQ-NOT-008`. Un badge qui
+recule est le comportement attendu : il suit le périmètre réel, il ne le flatte pas.
 
 ---
 
