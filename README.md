@@ -86,11 +86,12 @@ wallos-rs/
 │   ├── server/       # axum : auth, handlers, scheduler de notifications
 │   ├── notifier/     # canaux email / webhook / telegram / discord / gotify / pushover
 │   └── req-macros/   # proc-macro #[requirement(...)] : validation des IDs à la compilation
-├── frontend/
-│   ├── ui/           # Composants + logique de vue PARTAGÉS (React, i18next, openapi-fetch).
-│   │                 # Ignore la plateforme : passe par l'adaptateur (REQ-CLT-003).
+├── frontend/         # Espaces de travail npm (lock unique à la racine)
+│   ├── api-client/   # Contrat TypeScript GÉNÉRÉ depuis api/openapi.json
+│   ├── ui/           # 100 % de l'interface. Expose App({ canal, apiBaseUrl }).
+│   │                 # Ignore la plateforme : seul le canal reçu la distingue (REQ-CLT-003).
 │   └── shells/       # R7 : aucune dépendance de coquille hors d'ici
-│       ├── web/      # Vite : build statique servi par `server`
+│       ├── web/      # index.html + un main.tsx de 15 lignes + vite.config.ts
 │       ├── desktop/  # Linux / macOS / Windows          (à créer — REQ-CLT-001)
 │       └── mobile/   # Android / iOS                    (à créer — REQ-CLT-002)
 ├── packaging/        # Conteneur, deb, rpm, archives, dépôt signé
@@ -165,15 +166,17 @@ cargo run -p wallos-server    # démarre l'API axum
 
 ### Frontend
 
+Les paquets front sont des **espaces de travail npm** : une seule installation à la racine les
+couvre tous (`api-client`, `ui`, coquilles).
+
 ```bash
-cd frontend/ui
-npm ci
-npm run generate:api          # régénère le client typé depuis api/openapi.json
-npm run dev                    # serveur Vite
+npm ci                        # à la racine du dépôt
+npm run generate:api          # régénère le contrat typé (@wallos/api-client)
+npm run dev:web               # serveur Vite de la coquille web
 ```
 
 > Toute modification de `proto` impose de régénérer le contrat :
-> `cargo xtask openapi` puis `npm run generate:api` dans `frontend/ui`.
+> `cargo xtask openapi` puis `npm run generate:api` à la racine du dépôt.
 
 ---
 
@@ -200,8 +203,8 @@ Complétées par `cargo clippy` (dont `-D clippy::unwrap_used`) et le lint front
 # Unitaires + intégration (Postgres requis)
 DATABASE_URL=postgres://postgres:postgres@localhost:5433/wallos cargo test
 
-# Frontend
-cd frontend/ui && npm test
+# Frontend (depuis la racine)
+npm test
 
 # End-to-end (Playwright démarre le serveur Rust + Vite)
 cd e2e && DATABASE_URL=postgres://postgres:postgres@localhost:5433/wallos npx playwright test

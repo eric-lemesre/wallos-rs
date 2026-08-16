@@ -1,5 +1,5 @@
 import createClient from "openapi-fetch";
-import type { components, paths } from "./schema";
+import type { components, paths } from "@wallos/api-client";
 
 /** Chemin du contrat, invariant : seule l'**origine** qui le précède dépend de la coquille. */
 const API_PATH = "/api/v1";
@@ -71,4 +71,4 @@ export type CreateSessionRequest = components["schemas"]["CreateSessionRequest"]
  */
 export type CurrentUser = components["schemas"]["CurrentUser"];
 
-export type { paths, components } from "./schema";
+export type { paths, components } from "@wallos/api-client";
