@@ -269,9 +269,9 @@ Règles :
 | Client API | `openapi-typescript` + `openapi-fetch`, **générés** depuis `api/openapi.json` | **en place** |
 | Formulaires | `react-hook-form` + `zod` | **en place** |
 | i18n | `i18next`, clés typées, aucune chaîne littérale en JSX (`REQ-I18N-*`) | **en place** |
-| Espaces de travail | npm workspaces à la racine ; contrat d'API en paquet dédié | *cible — ADR 0057* |
-| Racine unique | `App({ canal, apiBaseUrl })` exporté par `ui` | *cible — ADR 0057* |
-| Design system | feuille unique : jetons CSS + classes ; aucune couleur en dur | *cible — ADR 0057* |
+| Espaces de travail | npm workspaces à la racine ; contrat d'API en paquet `@wallos/api-client` | **en place** |
+| Racine unique | `App({ canal, apiBaseUrl })` exporté par `ui` | **en place** |
+| Design system | feuille unique `ui/src/ds/wallos-ux.css` : jetons **relevés sur la cible figée**, socle d'éléments, thèmes clair et sombre. Porte : aucune couleur littérale hors de la feuille | **en place** — primitives à venir |
 | Atelier | Storybook dans `ui` ; écrans réels rendus sur MSW | *cible — ADR 0057* |
 | Charte d'interaction | référence UX **documentant l'existant**, lacunes déclarées | *après le design system* |
 

@@ -1120,3 +1120,14 @@ requirements:
   - REQ-CLT-002
   - REQ-OPS-011
   - REQ-OPS-012
+- id: REQ-CLT-008
+  title: Cohérence visuelle par jetons
+  domain: clients
+  status: draft
+  criticality: medium
+  layer:
+  - ui
+  e2e: n-a
+  oracle: legacy
+  depends_on:
+  - REQ-CLT-003

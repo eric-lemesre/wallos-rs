@@ -2,7 +2,7 @@
 
 # Matrice de traçabilité des exigences
 
-Total : **91** exigences — 72 verified · 19 draft.
+Total : **92** exigences — 72 verified · 20 draft.
 
 Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et [`spec/requirements/`](requirements/). Régénérer avec `cargo xtask trace --write`.
 
@@ -41,6 +41,7 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 | `REQ-CLT-005` | Instance auto-hébergée configurable | high | ⚪ draft |
 | `REQ-CLT-006` | Confinement des capacités de la coquille native | high | ⚪ draft |
 | `REQ-CLT-007` | Artefacts d'installation des clients | medium | ⚪ draft |
+| `REQ-CLT-008` | Cohérence visuelle par jetons | medium | ⚪ draft |
 
 ## currencies
 
