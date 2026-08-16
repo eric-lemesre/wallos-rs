@@ -47,9 +47,10 @@ subtrack/
 │   ├── server/          # axum, auth, scheduler de notifications, endpoints de sync
 │   ├── notifier/        # canaux : email, webhook, telegram, discord, gotify, pushover
 │   └── req-macros/      # proc-macro #[requirement(...)] — validation des IDs à la compilation
-├── frontend/
-│   ├── ui/              # Composants + logique de vue (100 % du métier d'affichage)
-│   │                    # Ignore la plateforme : passe par l'adaptateur (REQ-CLT-003)
+├── frontend/            # Espaces de travail npm (déclarés à la racine du dépôt)
+│   ├── ui/              # 100 % de l'interface. Expose App({ canal, apiBaseUrl }).
+│   │                    # `src/ds/` = design system (feuille unique + primitives + stories)
+│   ├── api-client/      # Contrat généré depuis api/openapi.json, en paquet (à créer — ADR 0057)
 │   └── shells/          # Coquilles. R7 : aucune dépendance de coquille hors d'ici.
 │       ├── web/         # Vite + build statique servi par `server` (REQ-OPS-003)
 │       ├── desktop/     # Coquille bureau — Linux, macOS, Windows (REQ-CLT-001)
@@ -236,17 +237,25 @@ justification écrite et un `REQ` ou `OQ` de référence. Aucun `#[coverage(off)
 
 ## 7. Frontend — UI partagée sur trois modalités
 
-**Principe** : une seule implémentation du comportement d'interface, une coquille web
-(le natif est **hors périmètre de parité** — OQ-009, ADR 0054 ; `PlatformAdapter` et les
-coquilles desktop/mobile ont été retirés).
+**Principe** (ADR 0057, repris d'`ergonomia`) : **une** implémentation de l'interface, servie par
+**trois coquilles de quelques lignes** — web, bureau, mobile (ADR 0055).
 
 ```
-frontend/ui        ← 100 % du métier d'affichage, des formulaires, de la navigation, de l'i18n
-frontend/shells/web ← montage et configuration. Le plus mince possible.
+frontend/ui         ← 100 % de l'interface : écrans, formulaires, navigation, i18n, design system.
+                      Expose UN composant racine : App({ canal, apiBaseUrl }).
+frontend/shells/*   ← index.html + main.tsx + vite.config.ts (+ projet natif). Rien d'autre.
 ```
 
 Règles :
-- Budget de code spécifique à la coquille web : **≤ 300 lignes**. Au-delà, ouvrir une OQ.
+- Une coquille **monte `App`, un point c'est tout**. Elle ne compose pas d'écrans, n'importe pas de
+  composant à l'unité, et ne connaît aucun chemin `../../ui/src/…`.
+- Budget de code spécifique à une coquille : **≤ 300 lignes**, plafond très large — la référence
+  tient en douze. Au-delà de quelques dizaines, c'est que de la composition a fui hors de `ui`.
+- La plateforme se réduit à **deux paramètres** : `canal` et `apiBaseUrl`. Toute capacité
+  réellement native (magasin de secrets, notification système) s'introduit **au cas par cas**, pas
+  par une abstraction préalable.
+- Un composant **n'importe jamais de CSS** : il pose des `className` définies dans la feuille unique
+  du design system, importée une fois par point d'entrée (un `import "*.css"` casserait `typecheck`).
 - Responsive : un seul jeu de composants, points de rupture `sm/md/lg`. Pas de composants
   « mobile » dupliqués.
 - Tout élément interactif porte un `data-testid` stable, dérivé de l'exigence quand c'est pertinent
@@ -254,15 +263,23 @@ Règles :
 
 ### 7.1 Choix figés
 
-| Sujet | Décision | Motif |
-|-------|----------|-------|
-| Composants | React 19 + TypeScript `strict` | une seule modalité web (PWA responsive) |
-| Client API | `openapi-typescript` + `openapi-fetch`, **générés** depuis `api/openapi.json` | contrat unique |
-| État serveur | TanStack Query, alimenté exclusivement par le client généré | cache + mode hors-ligne |
-| État local | Zustand, un store par domaine | pas de contexte géant |
-| Routage | TanStack Router en mode `hash` | choix hérité de la cible native retirée (OQ-009) ; conservé — coût de migration nul, aucune contrainte SEO |
-| Formulaires | `react-hook-form` + `zod`, schémas `zod` dérivés d'OpenAPI | validation identique client/serveur |
-| i18n | `i18next`, clés générées, aucune chaîne littérale en JSX | exigences `REQ-I18N-*` |
+| Sujet | Décision | État |
+|-------|----------|------|
+| Composants | React 19 + TypeScript `strict` | **en place** |
+| Client API | `openapi-typescript` + `openapi-fetch`, **générés** depuis `api/openapi.json` | **en place** |
+| Formulaires | `react-hook-form` + `zod` | **en place** |
+| i18n | `i18next`, clés typées, aucune chaîne littérale en JSX (`REQ-I18N-*`) | **en place** |
+| Espaces de travail | npm workspaces à la racine ; contrat d'API en paquet dédié | *cible — ADR 0057* |
+| Racine unique | `App({ canal, apiBaseUrl })` exporté par `ui` | *cible — ADR 0057* |
+| Design system | feuille unique : jetons CSS + classes ; aucune couleur en dur | *cible — ADR 0057* |
+| Atelier | Storybook dans `ui` ; écrans réels rendus sur MSW | *cible — ADR 0057* |
+| Charte d'interaction | référence UX **documentant l'existant**, lacunes déclarées | *après le design system* |
+
+> **Le tableau distingue l'existant de la cible, et c'est délibéré.** Il a longtemps figé TanStack
+> Query, TanStack Router et Zustand — **aucun des trois n'a jamais été installé**. Un contrat qui
+> décrit ce qui n'existe pas cesse de guider. Le choix d'un gestionnaire d'état serveur, d'un
+> routeur et d'un stockage local est **rouvert** : il sera tranché par un ADR au moment où une
+> exigence le rendra nécessaire, pas par anticipation.
 
 **Règle de non-duplication de types** : aucun type d'entité métier n'est écrit à la main en
 TypeScript. Tout type provient de `components['schemas']` du client généré. Un `interface

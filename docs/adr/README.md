@@ -72,6 +72,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0054 | Nettoyage du périmètre natif (exécution des conséquences d'OQ-009) | ⚪ |
 | 0055 | **Retour des clients natifs** : web + bureau + mobile, domaine `CLT`, R7 rétablie | 🔴 |
 | 0056 | **Dépôt unique** : serveur, interface, coquilles et paquets dans `wallos-rs` (R9) | 🟡 |
+| 0057 | **Principe frontend** repris d'`ergonomia` : `App({canal, apiBaseUrl})`, coquilles minces, design system à feuille unique, Storybook + MSW | 🔴 |
 
 ## À relire en priorité aujourd'hui (🔴)
 
@@ -84,6 +85,10 @@ Les décisions d'interprétation prises jusqu'ici, susceptibles de diverger de l
 - **0025** — sémantique « abonnement actif à ce mois-là » définie par conception (pas d'historique
   d'activation dans le modèle).
 - **0023** — jeu de catégories par défaut (impacte tout import/export et l'expérience initiale).
+- **0057** — **principe frontend** repris d'`ergonomia`. Corrige un écart de fond : la coquille web
+  monte 22 composants (donc *elle* est l'application), il n'existe aucune feuille de style, et
+  AGENTS.md §7 figeait trois bibliothèques jamais installées. **Simplifie REQ-CLT-003** :
+  `App({canal, apiBaseUrl})` au lieu d'un adaptateur de plateforme généralisé.
 - **0055** — **retour du natif dans le périmètre** : renverse la décision d'OQ-009 du 2026-08-04. La
   parité continue de régir le comportement métier, mais plus le périmètre des modalités. À relire en
   premier : c'est la décision la plus structurante prise depuis le cadrage initial.

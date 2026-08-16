@@ -6,8 +6,9 @@
 > — mais elle ne commande plus le périmètre des modalités.
 >
 > Règle directrice : **une seule interface**. Les coquilles natives empaquettent l'interface web
-> existante ; elles n'en sont pas une réécriture. Tout ce qui les distingue passe par un adaptateur
-> de plateforme unique (REQ-CLT-003), afin que le code d'interface ignore sur quoi il s'exécute.
+> existante ; elles n'en sont pas une réécriture. Le paquet partagé expose **une racine**
+> `App({ canal, apiBaseUrl })` que chaque coquille se borne à monter (REQ-CLT-003, ADR 0057) : la
+> plateforme tient dans deux paramètres, et le code d'interface ignore sur quoi il s'exécute.
 >
 > Corollaire : **un seul dépôt**. Coquilles et recettes d'empaquetage vivent dans `wallos-rs`
 > (règle R9, ADR 0056) — sans quoi la traçabilité (R1), la porte de dérive du contrat d'API (R8) et
@@ -17,7 +18,7 @@
 ```yaml
 ---
 id: REQ-CLT-003
-title: Adaptateur de plateforme
+title: Racine d'interface unique montée par des coquilles minces
 domain: clients
 status: draft
 criticality: high
@@ -25,22 +26,28 @@ layer: [ui]
 e2e: optional
 oracle: design
 rationale: >
-  Sans point de passage unique, chaque capacité native se paie d'une condition dispersée dans
-  l'interface, et le web finit par régresser à chaque ajout. L'adaptateur est ce qui permet à trois
-  coquilles de partager une seule interface plutôt que d'en faire diverger trois copies.
+  Ce qui permet à trois clients de partager une interface, ce n'est pas une abstraction de
+  capacités : c'est que la composition de l'application n'existe qu'à **un seul endroit**. Dès
+  qu'une coquille compose des écrans, elle devient une seconde application qui dérivera. Le modèle
+  retenu est celui déjà éprouvé sur trois modalités dans `ergonomia` (ADR 0057) : une racine
+  exportée, des coquilles réduites à leur montage, et la plateforme ramenée à deux paramètres.
 acceptance:
-  - given: le code de l'interface
-    when: il utilise une capacité dépendante de la plateforme — stockage sécurisé, notification
-      système, ouverture d'un lien externe
-    then: il passe par l'adaptateur, sans jamais tester la plateforme sur laquelle il s'exécute,
-      ce qu'une porte automatique vérifie
-  - given: une exécution dans un navigateur ordinaire
-    when: l'adaptateur est sollicité
-    then: une implémentation web par défaut répond, de sorte que le client web reste complet
-  - given: une capacité absente ou refusée sur la plateforme courante
-    when: elle est sollicitée
-    then: l'adaptateur le signale explicitement à l'appelant, qui dégrade la fonctionnalité sans
-      interrompre l'application
+  - given: le paquet d'interface partagé
+    when: il est consommé
+    then: il expose **une** racine applicative paramétrée par le canal et par l'adresse de base de
+      l'API, portant à elle seule la navigation, l'authentification et les écrans
+  - given: une coquille, quelle que soit sa plateforme
+    when: son code propre est examiné
+    then: il se borne à monter cette racine — il ne compose aucun écran, n'importe aucun composant
+      à l'unité, et ne référence pas l'intérieur du paquet d'interface par un chemin relatif
+  - given: le code de l'interface partagée
+    when: il s'exécute
+    then: il ne teste jamais la plateforme pour choisir un comportement d'affichage ; seul le canal
+      reçu en paramètre distingue les modalités
+  - given: une capacité réellement native — magasin de secrets, notification système
+    when: elle devient nécessaire à une exigence
+    then: elle est introduite pour ce besoin précis, et non par une abstraction générale posée à
+      l'avance
 depends_on: []
 ---
 ```

@@ -1062,7 +1062,7 @@ requirements:
   - REQ-CLT-004
   - REQ-CLT-005
 - id: REQ-CLT-003
-  title: Adaptateur de plateforme
+  title: Racine d'interface unique montée par des coquilles minces
   domain: clients
   status: draft
   criticality: high

@@ -36,7 +36,7 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 |----|-------|-----------|--------|
 | `REQ-CLT-001` | Coquille de bureau | high | ⚪ draft |
 | `REQ-CLT-002` | Coquille mobile | medium | ⚪ draft |
-| `REQ-CLT-003` | Adaptateur de plateforme | high | ⚪ draft |
+| `REQ-CLT-003` | Racine d'interface unique montée par des coquilles minces | high | ⚪ draft |
 | `REQ-CLT-004` | Stockage sécurisé du jeton sur coquille native | high | ⚪ draft |
 | `REQ-CLT-005` | Instance auto-hébergée configurable | high | ⚪ draft |
 | `REQ-CLT-006` | Confinement des capacités de la coquille native | high | ⚪ draft |
