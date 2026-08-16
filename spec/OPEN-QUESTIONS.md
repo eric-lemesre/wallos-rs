@@ -232,3 +232,22 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   verts sur 4, flake résiduel ~1/380 exécutions sans retry. `e2e` **rétabli en check requis**
   (`ci`+`frontend`+`e2e`) après merge vert de la PR de stabilisation.
 - **Statut** : resolved
+
+---
+
+## OQ-013 — Canal de publication des versions
+- **Bloque** : REQ-OPS-008 (et le volet « image publiée » de REQ-OPS-007)
+- **Contexte** : publier une image conteneur suppose de choisir un registre, un espace de noms et
+  d'y déposer des identifiants. C'est une décision qui engage un compte personnel et rend des
+  artefacts **publics** : elle n'appartient pas à l'agent. Le reste du domaine OPS (écoute
+  configurable, service de l'interface, configuration validée, sondes, arrêt propre, image
+  construite **localement**, sauvegarde/restauration) n'en dépend pas et peut avancer sans.
+- **Options** : A) **GHCR** (`ghcr.io/eric-lemesre/wallos-rs`) — jeton fourni par la CI, aucun secret
+  à créer, cohérent avec l'hébergement du dépôt — B) **Docker Hub**, plus familier aux
+  auto-hébergeurs mais impose un secret dédié et un compte séparé — C) **aucune publication** :
+  l'image se construit depuis les sources, REQ-OPS-008 est alors rescopée (journal des changements
+  et version exposée conservés, publication d'image retirée).
+- **Recommandation agent** : A. Le jeton est déjà disponible en CI, l'image suit le dépôt, et rien
+  n'interdit d'ajouter Docker Hub plus tard.
+- **Décision** : _(en attente)_
+- **Statut** : open
