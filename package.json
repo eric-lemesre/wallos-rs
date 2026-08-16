@@ -14,6 +14,8 @@
     "generate:api": "npm run generate --workspace @wallos/api-client",
     "ts-types-drift": "npm run ts-types-drift --workspace @wallos/api-client",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspace @wallos/ui"
+    "test": "npm run test --workspace @wallos/ui",
+    "storybook": "npm run storybook --workspace @wallos/ui",
+    "build-storybook": "npm run build-storybook --workspace @wallos/ui"
   }
 }

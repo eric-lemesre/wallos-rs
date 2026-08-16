@@ -272,7 +272,7 @@ Règles :
 | Espaces de travail | npm workspaces à la racine ; contrat d'API en paquet `@wallos/api-client` | **en place** |
 | Racine unique | `App({ canal, apiBaseUrl })` exporté par `ui` | **en place** |
 | Design system | feuille unique `ui/src/ds/wallos-ux.css` : jetons **relevés sur la cible figée**, socle d'éléments, thèmes clair et sombre. Porte : aucune couleur littérale hors de la feuille | **en place** — primitives à venir |
-| Atelier | Storybook dans `ui` ; écrans réels rendus sur MSW | *cible — ADR 0057* |
+| Atelier | Storybook dans `ui` (`npm run storybook`) ; écrans réels rendus sur MSW, garde-fou `storybook/mockApi.test.tsx`. Hors du job `frontend` : workflow dédié, galerie en artefact | **en place** — un domaine livré comme patron |
 | Charte d'interaction | référence UX **documentant l'existant**, lacunes déclarées | *après le design system* |
 
 > **Le tableau distingue l'existant de la cible, et c'est délibéré.** Il a longtemps figé TanStack

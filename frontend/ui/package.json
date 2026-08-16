@@ -10,11 +10,13 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "storybook": "storybook dev -p 6006 --no-open",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
-    "@wallos/api-client": "*",
     "@hookform/resolvers": "^3.10.0",
+    "@wallos/api-client": "*",
     "i18next": "^24.2.2",
     "openapi-fetch": "^0.13.5",
     "react": "^19.0.0",
@@ -24,6 +26,8 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@storybook/addon-docs": "^10.5.8",
+    "@storybook/react-vite": "^10.5.8",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@testing-library/user-event": "^14.6.1",
@@ -32,8 +36,16 @@
     "@types/react-dom": "^19.0.4",
     "@vitejs/plugin-react": "^4.3.4",
     "jsdom": "^26.0.0",
+    "msw": "^2.15.0",
+    "msw-storybook-addon": "^3.0.0",
+    "storybook": "^10.5.8",
     "typescript": "^5.7.3",
     "vite": "^6.1.0",
     "vitest": "^3.0.5"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }
