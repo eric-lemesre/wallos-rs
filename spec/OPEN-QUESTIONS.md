@@ -159,7 +159,30 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
      retirés du workspace et des exclusions de traçabilité ; AGENTS.md nettoyé (règle R7 retirée,
      `PlatformAdapter`, niveaux e2e L2/L3, porte 12, hypothèse H3, arborescence) ;
      `frontend/shells/{desktop,mobile}` et `frontend/platform` n'avaient jamais été créés.
-- **Statut** : resolved
+- **Réouverture (2026-08-16, décision du responsable via OQ-014)** : la décision de 2026-08-04
+  reposait sur un syllogisme — « la cible est la parité, or Wallos n'a pas de natif, donc pas de
+  natif ». Sa **prémisse** est retirée : le produit vise désormais **trois clients — web, bureau et
+  mobile** — et assume une divergence fonctionnelle vis-à-vis de l'application d'origine. Le natif
+  **rentre** dans le périmètre. La parité reste la règle pour le **comportement métier** (les
+  oracles `legacy` demeurent la référence) ; elle cesse de commander le **périmètre des modalités**.
+  Voir `docs/adr/0055-native-clients-back-in-scope.md`.
+- **Conséquences de la réouverture** (traitées par le domaine `CLT`, à ne pas exécuter au-delà) :
+  1. **Nouveau domaine `CLT`** : coquilles bureau et mobile, adaptateur de plateforme, stockage
+     sécurisé des jetons, instance configurable, confinement des capacités, artefacts d'installation.
+  2. **REQ-NOT-008** repasse en `draft` : son premier critère (notification système via l'adaptateur
+     de plateforme) redevient exigible ; l'ADR 0045, qui l'avait déclarée hors périmètre, est
+     **supersédée**. Le volet in-app déjà livré (`RemindersCard`) reste acquis.
+  3. **REQ-AUT-005** n'est **pas** rouverte : son re-cadrage en « jeton d'API porteur, révocable »
+     (OQ-011, ADR 0028) reste juste en soi. Le stockage natif du jeton devient l'objet de
+     REQ-CLT-004 plutôt qu'un critère d'AUT-005 — l'exigence serveur et l'exigence client sont
+     séparées, ce que le re-cadrage a rendu possible.
+  4. **REQ-SEC-006** n'est **pas** rouverte : son volet CSP web demeure, et le confinement des
+     capacités de la coquille native devient REQ-CLT-006, exigence à part entière.
+  5. **AGENTS.md** : règle R7 rétablie (aucune dépendance de coquille native hors de `shells/`), et
+     niveaux e2e au-delà du web à réintroduire **au moment de l'implémentation**, pas avant.
+  6. **`crates/client`** (SDK Rust, supprimé par l'ADR 0054) n'est **pas** ressuscité : les coquilles
+     consomment l'API par le client TypeScript généré, comme le web.
+- **Statut** : resolved (réouvert et retranché — la décision en vigueur est celle de 2026-08-16)
 
 ---
 
@@ -253,8 +276,13 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   (REQ-OPS-010) — se contenter d'attacher les paquets aux versions publiées, ou **tenir un dépôt
   apt/dnf** signé. Tenir un dépôt est un engagement de maintenance durable, bien supérieur à celui
   d'une image ; l'agent recommande de commencer par l'attachement aux versions publiées.
-- **Décision** : _(en attente)_
-- **Statut** : open
+- **Décision (responsable, 2026-08-16)** : **A** pour l'image — `ghcr.io/eric-lemesre/wallos-rs`.
+  Pour les paquets, **les deux** modes : ils sont attachés aux versions publiées **et** poussés dans
+  un dépôt signé **auto-hébergé** — `apt.lemesre.org` existe déjà pour la famille Debian, le pendant
+  RPM étant servi par la même infrastructure. Conséquence : REQ-OPS-011 doit traiter le dépôt
+  auto-hébergé comme un canal **officiellement maintenu**, et REQ-OPS-012 couvre aussi la clé de
+  signature **du dépôt**, distincte de celle des artefacts.
+- **Statut** : resolved
 
 ---
 
@@ -274,5 +302,31 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   `PlatformAdapter`.
 - **Recommandation agent** : A si « clients » désignait la PWA. Sinon **B** : valeur réelle et coût
   borné, sans revenir sur OQ-009. C n'est justifié que si la parité cesse d'être la boussole.
+- **Décision (responsable, 2026-08-16)** : **C, élargie** — le produit vise **trois** clients :
+  **web, bureau et mobile**. La parité cesse donc d'être la seule boussole : le produit assume une
+  **divergence fonctionnelle** vis-à-vis de l'application d'origine, qui n'a pas de client natif.
+  Cette décision **rouvre OQ-009** (voir sa section « Réouverture ») et fonde le domaine `CLT`.
+- **Statut** : resolved
+
+---
+
+## OQ-015 — Signature et publication des clients natifs
+- **Bloque** : REQ-CLT-007 (artefacts d'installation des clients), partiellement REQ-OPS-012.
+- **Contexte** : distribuer un client natif engage bien plus qu'un serveur. macOS exige un certificat
+  de développeur et une **notarisation** ; Windows, un certificat de signature de code sans lequel
+  l'installeur déclenche un avertissement ; Android, une clé de signature d'application à conserver
+  **à vie** — la perdre interdit toute mise à jour ; iOS, un compte payant et un passage par la
+  boutique, sans distribution directe possible. Ce sont des comptes personnels, des coûts annuels et
+  des secrets à long terme : rien de tout cela n'appartient à l'agent.
+- **Options** : A) **Linux seul dans un premier temps** — paquets `.deb`/`.rpm` du client de bureau
+  servis par `apt.lemesre.org`, aucun certificat tiers, les autres plateformes restant construites
+  mais non signées et déclarées comme telles — B) **bureau complet** (Linux + macOS notarisé +
+  Windows signé), sans mobile publié — C) **toutes plateformes publiées**, boutiques comprises,
+  avec les comptes et coûts associés.
+- **Recommandation agent** : **A**, puis élargir. L'infrastructure de distribution existe déjà pour
+  Linux (`apt.lemesre.org`) et c'est la plateforme naturelle des auto-hébergeurs ; les certificats et
+  les boutiques peuvent s'ajouter sans rien redéfinir, alors que les acquérir d'emblée retarderait
+  toute publication. La clé de signature Android devrait néanmoins être créée **et sauvegardée** dès
+  le premier artefact, même non publié — elle n'est pas régénérable.
 - **Décision** : _(en attente)_
 - **Statut** : open

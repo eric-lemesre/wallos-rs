@@ -2,7 +2,7 @@
 
 # Matrice de traçabilité des exigences
 
-Total : **84** exigences — 73 verified · 11 draft.
+Total : **91** exigences — 72 verified · 19 draft.
 
 Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et [`spec/requirements/`](requirements/). Régénérer avec `cargo xtask trace --write`.
 
@@ -29,6 +29,18 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 | `REQ-CAT-003` | Suppression d'une catégorie référencée | medium | ✅ verified |
 | `REQ-CAT-004` | Unicité du nom de catégorie par compte | low | ✅ verified |
 | `REQ-CAT-005` | Ordre d'affichage des catégories | low | ✅ verified |
+
+## clients
+
+| ID | Titre | Criticité | Statut |
+|----|-------|-----------|--------|
+| `REQ-CLT-001` | Coquille de bureau | high | ⚪ draft |
+| `REQ-CLT-002` | Coquille mobile | medium | ⚪ draft |
+| `REQ-CLT-003` | Adaptateur de plateforme | high | ⚪ draft |
+| `REQ-CLT-004` | Stockage sécurisé du jeton sur coquille native | high | ⚪ draft |
+| `REQ-CLT-005` | Instance auto-hébergée configurable | high | ⚪ draft |
+| `REQ-CLT-006` | Confinement des capacités de la coquille native | high | ⚪ draft |
+| `REQ-CLT-007` | Artefacts d'installation des clients | medium | ⚪ draft |
 
 ## currencies
 
@@ -62,7 +74,7 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 | `REQ-NOT-005` | Webhook générique | medium | ✅ verified |
 | `REQ-NOT-006` | Test d'un canal de notification | medium | ✅ verified |
 | `REQ-NOT-007` | Politique de réessai et d'abandon | medium | ✅ verified |
-| `REQ-NOT-008` | Notification native sur desktop et mobile | low | ✅ verified |
+| `REQ-NOT-008` | Notification native sur desktop et mobile | low | ⚪ draft |
 
 ## ops
 

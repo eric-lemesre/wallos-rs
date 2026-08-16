@@ -170,20 +170,23 @@ depends_on: [REQ-NOT-002]
 id: REQ-NOT-008
 title: Notification native sur desktop et mobile
 domain: notifications
-status: verified
+status: draft
 criticality: low
 layer: [ui]
 e2e: optional
 oracle: design
 rationale: >
   Confort d'usage. Le client se contente d'afficher ce que le serveur a décidé d'émettre.
+  Rouverte le 2026-08-16 : l'ADR 0045 l'avait déclarée sans objet faute de coquille native, or
+  celle-ci est revenue dans le périmètre (OQ-009 réouverte, ADR 0055). Le volet in-app est acquis
+  et le reste ; c'est le premier critère qui redevient exigible.
 acceptance:
   - given: une coquille native disposant de la permission
     when: le client reçoit un rappel du serveur
-    then: une notification système est affichée via PlatformAdapter.notifications
+    then: une notification système est affichée via l'adaptateur de plateforme
   - given: une permission refusée
     when: un rappel est reçu
     then: l'application reste fonctionnelle et l'information reste consultable dans l'interface
-depends_on: [REQ-NOT-001]
+depends_on: [REQ-NOT-001, REQ-CLT-003]
 ---
 ```

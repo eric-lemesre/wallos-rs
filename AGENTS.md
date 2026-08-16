@@ -17,7 +17,7 @@
 | R4 | Les montants monétaires utilisent `rust_decimal::Decimal`. `f32`/`f64` interdits dans `core` et `domain` | `cargo xtask lint-money` |
 | R5 | `unwrap()`, `expect()`, `panic!` interdits hors `#[cfg(test)]` et hors `main.rs` | `clippy -D clippy::unwrap_used` |
 | R6 | Aucune dépendance nouvelle sans ADR (`docs/adr/NNNN-*.md`) | revue |
-| R7 | *Retirée (OQ-009, ADR 0054 : natif hors périmètre — aucun `@tauri-apps/*` dans le dépôt)* | — |
+| R7 | Aucune dépendance de coquille native hors de `frontend/shells/` : le code d'interface partagé ignore la plateforme et passe par l'adaptateur (REQ-CLT-003) | revue + `cargo xtask trace` |
 | R8 | Le schéma OpenAPI committé doit être identique à celui généré | CI drift gate |
 
 **Protocole de blocage** — si une règle rend une tâche impossible, l'agent **s'arrête**, ajoute une entrée
@@ -113,7 +113,7 @@ depends_on: [REQ-SUB-003]
 **Conventions d'ID** : `REQ-<DOMAINE>-<NNN>`, jamais réutilisé, jamais renuméroté.
 Domaines : `SUB` (abonnements), `CAT` (catégories), `CUR` (devises), `STA` (statistiques),
 `NOT` (notifications), `AUT` (authentification), `SYN` (synchronisation), `I18N`, `SEC`,
-`OPS` (exploitation et déploiement).
+`OPS` (exploitation et déploiement), `CLT` (clients web, bureau et mobile).
 
 Une exigence `deprecated` conserve ses annotations jusqu'à suppression effective du code.
 
