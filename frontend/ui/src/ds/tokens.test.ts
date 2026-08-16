@@ -11,8 +11,11 @@ import { describe, expect, it } from "vitest";
  * test rend impossible, plutôt que déconseillée.
  */
 
-const RACINE = join(__dirname, "..");
-const FEUILLE = join(__dirname, "wallos-ux.css");
+// `import.meta.dirname` plutôt que `__dirname` : ce paquet est en modules ES, où le second
+// n'existe pas — il ne fonctionnait qu'à la faveur d'une interopérabilité fortuite.
+const ICI = import.meta.dirname;
+const RACINE = join(ICI, "..");
+const FEUILLE = join(ICI, "wallos-ux.css");
 
 /** Couleur littérale : hexadécimal, `rgb(...)`, `hsl(...)`. */
 const COULEUR_LITTERALE = /#[0-9a-f]{3,8}\b|\brgba?\s*\(|\bhsla?\s*\(/i;
@@ -35,7 +38,7 @@ function estDeroge(chemin: string): boolean {
 }
 
 function sourcesTypeScript(dossier: string): string[] {
-  return readdirSync(dossier, { withFileTypes: true }).flatMap((entree) => {
+  return readdirSync(dossier, { withFileTypes: true }).flatMap((entree): string[] => {
     const chemin = join(dossier, entree.name);
     if (entree.isDirectory()) {
       return sourcesTypeScript(chemin);
