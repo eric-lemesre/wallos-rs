@@ -112,7 +112,8 @@ depends_on: [REQ-SUB-003]
 
 **Conventions d'ID** : `REQ-<DOMAINE>-<NNN>`, jamais réutilisé, jamais renuméroté.
 Domaines : `SUB` (abonnements), `CAT` (catégories), `CUR` (devises), `STA` (statistiques),
-`NOT` (notifications), `AUT` (authentification), `SYN` (synchronisation), `I18N`, `SEC`.
+`NOT` (notifications), `AUT` (authentification), `SYN` (synchronisation), `I18N`, `SEC`,
+`OPS` (exploitation et déploiement).
 
 Une exigence `deprecated` conserve ses annotations jusqu'à suppression effective du code.
 

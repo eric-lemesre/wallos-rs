@@ -901,3 +901,98 @@ requirements:
   e2e: optional
   oracle: design
   depends_on: []
+- id: REQ-OPS-002
+  title: Adresse et port d'écoute configurables
+  domain: ops
+  status: draft
+  criticality: high
+  layer:
+  - api
+  e2e: n-a
+  oracle: design
+  depends_on:
+  - REQ-OPS-001
+- id: REQ-OPS-003
+  title: Service de l'interface web par le serveur
+  domain: ops
+  status: draft
+  criticality: high
+  layer:
+  - api
+  - ui
+  e2e: optional
+  oracle: design
+  depends_on:
+  - REQ-OPS-001
+  - REQ-SEC-006
+- id: REQ-OPS-004
+  title: Configuration d'exécution documentée et validée au démarrage
+  domain: ops
+  status: draft
+  criticality: high
+  layer:
+  - api
+  e2e: n-a
+  oracle: design
+  depends_on:
+  - REQ-OPS-001
+  - REQ-SEC-004
+- id: REQ-OPS-005
+  title: Sonde de disponibilité distincte de la vivacité
+  domain: ops
+  status: draft
+  criticality: medium
+  layer:
+  - api
+  e2e: n-a
+  oracle: design
+  depends_on:
+  - REQ-OPS-001
+- id: REQ-OPS-006
+  title: Arrêt propre sur signal d'extinction
+  domain: ops
+  status: draft
+  criticality: medium
+  layer:
+  - api
+  e2e: n-a
+  oracle: design
+  depends_on:
+  - REQ-OPS-002
+- id: REQ-OPS-007
+  title: Image conteneur et composition de déploiement
+  domain: ops
+  status: draft
+  criticality: high
+  layer:
+  - api
+  - ui
+  e2e: n-a
+  oracle: design
+  depends_on:
+  - REQ-OPS-003
+  - REQ-OPS-004
+  - REQ-OPS-005
+- id: REQ-OPS-008
+  title: Publication de versions
+  domain: ops
+  status: draft
+  criticality: medium
+  layer:
+  - api
+  e2e: n-a
+  oracle: design
+  depends_on:
+  - REQ-OPS-007
+- id: REQ-OPS-009
+  title: Sauvegarde et restauration vérifiées
+  domain: ops
+  status: draft
+  criticality: high
+  layer:
+  - api
+  e2e: n-a
+  oracle: design
+  depends_on:
+  - REQ-OPS-004
+  - REQ-SEC-004
