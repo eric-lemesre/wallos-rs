@@ -2,7 +2,7 @@
 
 # Matrice de traçabilité des exigences
 
-Total : **81** exigences — 73 verified · 8 draft.
+Total : **84** exigences — 73 verified · 11 draft.
 
 Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et [`spec/requirements/`](requirements/). Régénérer avec `cargo xtask trace --write`.
 
@@ -77,6 +77,9 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 | `REQ-OPS-007` | Image conteneur et composition de déploiement | high | ⚪ draft |
 | `REQ-OPS-008` | Publication de versions | medium | ⚪ draft |
 | `REQ-OPS-009` | Sauvegarde et restauration vérifiées | high | ⚪ draft |
+| `REQ-OPS-010` | Paquets système pour distributions Linux | high | ⚪ draft |
+| `REQ-OPS-011` | Archives binaires autonomes et canaux de distribution additionnels | medium | ⚪ draft |
+| `REQ-OPS-012` | Intégrité et authenticité des artefacts publiés | high | ⚪ draft |
 
 ## security
 
