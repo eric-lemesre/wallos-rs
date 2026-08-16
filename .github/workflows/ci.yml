@@ -81,20 +81,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # Espaces de travail npm : une seule installation à la racine couvre `ui` et les coquilles
+      # (ADR 0057). Le lock unique est `package-lock.json` à la racine.
       - name: install
-        working-directory: frontend/ui
         run: npm ci
       # Porte 9 : le client TS généré ne doit jamais diverger du contrat OpenAPI.
       - name: ts-types-drift
-        working-directory: frontend/ui
         run: npm run ts-types-drift
       - name: typecheck
-        working-directory: frontend/ui
         run: npm run typecheck
       # Porte 10 : tests de composants (vitest + Testing Library).
       - name: test
-        working-directory: frontend/ui
         run: npm test
+      # La coquille doit se construire : c'est ce qui prouve que `@wallos/ui` se résout en PAQUET
+      # et non par un chemin relatif (REQ-CLT-003).
+      - name: build shell
+        run: npm run build:web
 
   # Porte 11 : e2e L1 web (Playwright, chromium ET webkit) contre subtrack.
   e2e:
@@ -123,14 +125,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # La coquille web importe les SOURCES de frontend/ui ; Vite résout leurs imports bare
-      # (i18next, react-hook-form, zod, @hookform/resolvers, openapi-fetch) via frontend/ui/node_modules
-      # (résolution Node = dossiers ancêtres du fichier). Ce dossier doit donc exister dans ce job.
-      - name: install ui deps
-        working-directory: frontend/ui
-        run: npm ci
-      - name: install shell deps
-        working-directory: frontend/shells/web
+      # Une seule installation à la racine : les espaces de travail npm hissent les dépendances
+      # dans le `node_modules` racine, que Vite résout depuis n'importe quel dossier descendant.
+      - name: install frontend deps
         run: npm ci
       - name: install e2e deps
         working-directory: e2e

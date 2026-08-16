@@ -41,8 +41,9 @@ export default defineConfig({
   plugins: [react(), contentSecurityPolicy()],
   server: {
     port: 5173,
-    // Autorise l'import de l'UI partagée située hors de ce dossier (../../ui/src).
-    fs: { allow: [".."] },
+    // `@wallos/ui` est un espace de travail npm : le lien symbolique de `node_modules` pointe vers
+    // `frontend/ui`, hors de ce dossier. Autorise la racine du dépôt plutôt que le seul parent.
+    fs: { allow: ["../../.."] },
     proxy: {
       "/api": {
         target: "http://localhost:3000",
