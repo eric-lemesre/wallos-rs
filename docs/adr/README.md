@@ -74,6 +74,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0056 | **Dépôt unique** : serveur, interface, coquilles et paquets dans `wallos-rs` (R9) | 🟡 |
 | 0057 | **Principe frontend** repris d'`ergonomia` : `App({canal, apiBaseUrl})`, coquilles minces, design system à feuille unique, Storybook + MSW | 🔴 |
 | 0058 | Atelier : Storybook, et MSW à la **seule** frontière réseau (dépendances de dev, R6) | 🟡 |
+| 0059 | **Oracle exécutable** : niveaux de preuve, porte `oracle-coverage`, relevé d'interface | 🔴 |
 
 ## À relire en priorité aujourd'hui (🔴)
 
@@ -86,6 +87,10 @@ Les décisions d'interprétation prises jusqu'ici, susceptibles de diverger de l
 - **0025** — sémantique « abonnement actif à ce mois-là » définie par conception (pas d'historique
   d'activation dans le modèle).
 - **0023** — jeu de catégories par défaut (impacte tout import/export et l'expérience initiale).
+- **0059** — **la parité n'est démontrée que pour un tiers du périmètre** : sur 33 exigences
+  `oracle: legacy`, 9 reposent sur l'exécution du code d'origine, 10 sur sa simple lecture, et 14 sur
+  rien. Aucun scénario n'a jamais été rejoué contre l'application en marche. À relire avant toute
+  affirmation de conformité.
 - **0057** — **principe frontend** repris d'`ergonomia`. Corrige un écart de fond : la coquille web
   monte 22 composants (donc *elle* est l'application), il n'existe aucune feuille de style, et
   AGENTS.md §7 figeait trois bibliothèques jamais installées. **Simplifie REQ-CLT-003** :
