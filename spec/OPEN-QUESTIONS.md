@@ -330,3 +330,42 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   le premier artefact, même non publié — elle n'est pas régénérable.
 - **Décision** : _(en attente)_
 - **Statut** : open
+
+---
+
+## OQ-016 — Devenir des fonctions de l'application d'origine non reproduites
+- **Bloque** : la lecture du taux de couverture (REQ-CLT-009), et l'arbitrage de tout lot futur de
+  parité. Ne bloque aucune exigence en cours.
+- **Contexte** : l'inventaire relevé sur la cible figée (ADR 0011) dénombre **100 points d'entrée**
+  et **16 pages** ; wallos-rs en couvre **41 + 9**, soit **43 %**
+  (`e2e/fixtures/oracles/REQ-CLT-009-legacy-surface.json`). Les 73 exigences fonctionnelles n'ont
+  jamais prétendu couvrir tout l'original — elles décrivent le périmètre choisi au cadrage. Mais tant
+  que le sort des manques n'est pas tranché, **un taux se lit comme une dette alors qu'il s'agit
+  peut-être d'un choix**. C'est cette ambiguïté qu'il faut lever, pas le taux.
+- **Les manques, par nature** :
+  - **Authentification** — réinitialisation de mot de passe, vérification d'e-mail, TOTP. *Un
+    utilisateur qui oublie son mot de passe est aujourd'hui enfermé dehors* : c'est le manque le plus
+    sérieux, indépendamment de toute considération de parité.
+  - **Exploitation** — sauvegarde et restauration de la base. Déjà spécifiées (REQ-OPS-009), non
+    construites : pas un choix, un reste-à-faire.
+  - **Fonctionnel** — calendrier et export iCal, clonage d'abonnement, budget, recherche et bascule
+    sur les moyens de paiement.
+  - **Canaux** — Wallos en offre **dix**, REQ-NOT-004 en a délibérément retenu **quatre** ; manquent
+    mattermost, ntfy, pushplus, serverchan.
+  - **Administration** — comptes multiples, OIDC, inscriptions ouvertes, SMTP global. Suppose un rôle
+    d'administrateur que le modèle de foyer (ADR 0012) n'a pas.
+  - **Préférences d'affichage** — thèmes, CSS personnalisé, masquage des désactivés, prix d'origine,
+    progression, début de semaine. Le plus gros bloc en nombre, le plus faible en valeur.
+  - **Fonctions IA** — recommandations, traduction de catégories.
+  - **Logos distants** — **écart déjà tranché** : REQ-SUB-015 impose un substitut local sans aucune
+    requête réseau. À conserver comme divergence assumée, pas à compter comme manque.
+- **Options** : A) **trancher par nature** — chaque bloc ci-dessus devient soit un lot d'exigences,
+  soit une divergence assumée et documentée ; le taux cesse alors d'être ambigu — B) viser la parité
+  **complète** et ouvrir autant d'exigences que nécessaire — C) figer le périmètre actuel et déclarer
+  tout le reste hors périmètre.
+- **Recommandation agent** : **A**, avec un ordre dicté par le risque plutôt que par le décompte :
+  d'abord la réinitialisation de mot de passe (enfermement dehors), puis la sauvegarde/restauration
+  (perte de données), puis le reste. B ferait entrer les fonctions IA et l'OIDC dans un produit qui
+  n'en a pas besoin ; C nierait des manques réels.
+- **Décision** : _(en attente)_
+- **Statut** : open

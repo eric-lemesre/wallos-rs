@@ -1,0 +1,239 @@
+{
+  "_requirement": "REQ-CLT-009",
+  "_evidence": "executed",
+  "_source": "Inventaire du système de fichiers de l'image épinglée bellamy/wallos:5.4.2@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f (ADR 0011), extrait par `docker export` puis énumération des `*.php` sous /var/www/html. Relevé le 2026-08-17.",
+  "_note": "Les PAGES et ENDPOINTS sont des faits relevés. Le champ `couvert` de `couverture` est une APPRÉCIATION de l'agent, soumise à arbitrage (OQ-016) : tant que le devenir des manques n'est pas tranché, un taux se lit comme une dette alors qu'il s'agit peut-être d'un choix de périmètre.",
+  "_limite_de_methode": "Chaque point d'entrée compte pour un : un canal de notification pèse autant qu'une case « masquer les abonnements désactivés ». Wallos ayant de nombreuses préférences d'affichage, la méthode SOUS-ESTIME la couverture des domaines majeurs (abonnements, catégories, devises, statistiques, échéancier).",
+  "_hors_perimetre_inverse": "Non comptabilisé ici : ce que wallos-rs fait et que Wallos ne fait PAS — synchronisation multi-appareils (SYN-001..008), payeurs, idempotence de l'ordonnanceur, pierres tombales, journal de conflits, chiffrement des secrets au repos, durcissement SSRF, politique de réessai.",
+  "totaux": {
+    "pages": {
+      "relevees": 16,
+      "couvertes": 9
+    },
+    "endpoints": {
+      "releves": 100,
+      "couverts": 41
+    },
+    "taux_points_d_entree": 43.1
+  },
+  "pages": {
+    "about.php": "absente",
+    "admin.php": "absente",
+    "calendar.php": "absente",
+    "health.php": "couverte",
+    "index.php": "couverte",
+    "login.php": "couverte",
+    "logos.php": "absente",
+    "logout.php": "couverte",
+    "passwordreset.php": "absente",
+    "profile.php": "couverte",
+    "registration.php": "couverte",
+    "settings.php": "couverte",
+    "stats.php": "couverte",
+    "subscriptions.php": "couverte",
+    "totp.php": "absente",
+    "verifyemail.php": "absente"
+  },
+  "couverture": {
+    "admin": {
+      "releves": 9,
+      "couvert": 0,
+      "note": "Aucune administration multi-utilisateurs : ajout/suppression de comptes, OIDC, inscriptions ouvertes, réglages de sécurité, SMTP global."
+    },
+    "ai": {
+      "releves": 5,
+      "couvert": 0,
+      "note": "Recommandations, modèles, traduction de catégories. Aucun équivalent, et aucune exigence."
+    },
+    "categories": {
+      "releves": 1,
+      "couvert": 1,
+      "note": "REQ-CAT-001."
+    },
+    "cronjobs": {
+      "releves": 13,
+      "couvert": 5,
+      "note": "sendnotifications (NOT-001), updateexchange (CUR-003), updatenextpayment (SUB-014), createdatabase (migrations), validate. Absents : e-mails de réinitialisation et de vérification, notifications d'annulation, coût annuel stocké, recommandations, vérification de mises à jour."
+    },
+    "currency": {
+      "releves": 3,
+      "couvert": 3,
+      "note": "Couvert par CUR-001/003/007."
+    },
+    "db": {
+      "releves": 4,
+      "couvert": 2,
+      "note": "import (SUB-016), migrate. Absents : backup, restore — spécifiés en REQ-OPS-009, non construits."
+    },
+    "household": {
+      "releves": 1,
+      "couvert": 1,
+      "note": "REQ-SEC-001, ADR 0012."
+    },
+    "logos": {
+      "releves": 3,
+      "couvert": 0,
+      "note": "ÉCART DÉLIBÉRÉ : REQ-SUB-015 impose un substitut local déterministe, sans aucune requête réseau (confidentialité par conception)."
+    },
+    "notifications": {
+      "releves": 21,
+      "couvert": 13,
+      "note": "6 canaux sur 10 (save+test) + réglages généraux. Absents : mattermost, ntfy, pushplus, serverchan — NOT-004 en a délibérément retenu quatre."
+    },
+    "payments": {
+      "releves": 7,
+      "couvert": 5,
+      "note": "add, delete, get, rename, sort. Absents : search, toggle."
+    },
+    "settings": {
+      "releves": 18,
+      "couvert": 3,
+      "note": "convert_currency, fixer_usage, deleteaccount. Le reste = préférences d'affichage sans équivalent : thèmes, CSS personnalisé, masquage des désactivés, prix d'origine, progression, début de semaine, navigation mobile."
+    },
+    "subscription": {
+      "releves": 7,
+      "couvert": 4,
+      "note": "add, delete, get, renew. Absents : clone, getcalendar, exportcalendar (iCal)."
+    },
+    "subscriptions": {
+      "releves": 2,
+      "couvert": 2,
+      "note": "Liste et statistiques."
+    },
+    "user": {
+      "releves": 6,
+      "couvert": 2,
+      "note": "save_user, regenerateapikey (~ REQ-AUT-005). Absents : TOTP (enable/disable), budget, avatar."
+    }
+  },
+  "endpoints": {
+    "admin": [
+      "adduser.php",
+      "deleteunusedlogos.php",
+      "deleteuser.php",
+      "enableoidc.php",
+      "saveoidcsettings.php",
+      "saveopenregistrations.php",
+      "savesecuritysettings.php",
+      "savesmtpsettings.php",
+      "updatenotification.php"
+    ],
+    "ai": [
+      "delete_recommendation.php",
+      "fetch_models.php",
+      "generate_recommendations.php",
+      "save_settings.php",
+      "translate_categories.php"
+    ],
+    "categories": [
+      "category.php"
+    ],
+    "cronjobs": [
+      "checkforupdates.php",
+      "cleanupresettokens.php",
+      "createdatabase.php",
+      "generaterecommendations.php",
+      "sendcancellationnotifications.php",
+      "sendnotifications.php",
+      "sendresetpasswordemails.php",
+      "sendverificationemails.php",
+      "settimezone.php",
+      "storetotalyearlycost.php",
+      "updateexchange.php",
+      "updatenextpayment.php",
+      "validate.php"
+    ],
+    "currency": [
+      "currency.php",
+      "fixer_api_key.php",
+      "update_exchange.php"
+    ],
+    "db": [
+      "backup.php",
+      "import.php",
+      "migrate.php",
+      "restore.php"
+    ],
+    "household": [
+      "household.php"
+    ],
+    "logos": [
+      "google_search.php",
+      "icon_search.php",
+      "search.php"
+    ],
+    "notifications": [
+      "savediscordnotifications.php",
+      "saveemailnotifications.php",
+      "savegotifynotifications.php",
+      "savemattermostnotifications.php",
+      "savenotificationsettings.php",
+      "saventfynotifications.php",
+      "savepushovernotifications.php",
+      "savepushplusnotifications.php",
+      "saveserverchannotifications.php",
+      "savetelegramnotifications.php",
+      "savewebhooknotifications.php",
+      "testdiscordnotifications.php",
+      "testemailnotifications.php",
+      "testgotifynotifications.php",
+      "testmattermostnotifications.php",
+      "testntfynotifications.php",
+      "testpushovernotifications.php",
+      "testpushplusnotifications.php",
+      "testserverchannotifications.php",
+      "testtelegramnotifications.php",
+      "testwebhooknotifications.php"
+    ],
+    "payments": [
+      "add.php",
+      "delete.php",
+      "get.php",
+      "rename.php",
+      "search.php",
+      "sort.php",
+      "toggle.php"
+    ],
+    "settings": [
+      "colortheme.php",
+      "convert_currency.php",
+      "customcss.php",
+      "customtheme.php",
+      "deleteaccount.php",
+      "disabled_to_bottom.php",
+      "fixer_usage.php",
+      "google_search.php",
+      "google_search_usage.php",
+      "hide_disabled.php",
+      "mobile_navigation.php",
+      "monthly_price.php",
+      "remove_background.php",
+      "resettheme.php",
+      "show_original_price.php",
+      "subscription_progress.php",
+      "theme.php",
+      "week_starts_sunday.php"
+    ],
+    "subscription": [
+      "add.php",
+      "clone.php",
+      "delete.php",
+      "exportcalendar.php",
+      "get.php",
+      "getcalendar.php",
+      "renew.php"
+    ],
+    "subscriptions": [
+      "export.php",
+      "get.php"
+    ],
+    "user": [
+      "budget.php",
+      "delete_avatar.php",
+      "disable_totp.php",
+      "enable_totp.php",
+      "regenerateapikey.php",
+      "save_user.php"
+    ]
+  }
+}
