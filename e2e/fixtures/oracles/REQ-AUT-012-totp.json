@@ -1,0 +1,18 @@
+{
+  "_requirement": "REQ-AUT-012",
+  "_evidence": "read",
+  "_source": "Lecture de totp.php, endpoints/user/enable_totp.php et disable_totp.php dans l'image épinglée bellamy/wallos:5.4.2@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f. Bibliothèque OTPHP embarquée. Relevé le 2026-08-17.",
+  "_a_promouvoir": "Niveau `observed` requis par R11 ; les vecteurs de code temporel se prêtent en outre à un test unitaire (R11, règle calculable).",
+  "parametres": {
+    "secret": "base32_encode(bin2hex(random_bytes(20))) — 20 octets aléatoires, rendus en hexadécimal PUIS encodés en base32",
+    "uri": "otpauth://totp/Wallos:<username>?secret=<secret>&issuer=Wallos",
+    "tolerance_verification": "TOTP::verify(code, null, 15) — fenêtre de 15 SECONDES",
+    "codes_de_secours": "10 codes, chacun bin2hex(random_bytes(10)) soit 20 caractères hexadécimaux",
+    "stockage": "table totp (user_id, totp_secret, backup_codes)",
+    "apres_succes": "session_regenerate_id(true) — l'identifiant de session est renouvelé"
+  },
+  "_note_secret": "Le secret est dérivé en encodant en base32 la REPRÉSENTATION HEXADÉCIMALE de 20 octets, non les octets eux-mêmes. L'entropie effective reste de 20 octets ; la longueur du secret présenté est celle de 40 caractères encodés. À reproduire tel quel pour qu'un secret existant reste valide après migration.",
+  "_defauts_non_reproduits": [
+    "Les codes de secours sont stockés tels quels dans la colonne `backup_codes` de l'original. Un code de secours est un équivalent de mot de passe : il doit être haché au repos. La fonctionnalité est reproduite ; ce défaut ne l'est pas."
+  ]
+}

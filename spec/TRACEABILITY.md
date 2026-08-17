@@ -2,7 +2,7 @@
 
 # Matrice de traçabilité des exigences
 
-Total : **93** exigences — 72 verified · 21 draft.
+Total : **96** exigences — 72 verified · 24 draft.
 
 Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et [`spec/requirements/`](requirements/). Régénérer avec `cargo xtask trace --write`.
 
@@ -19,6 +19,9 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 | `REQ-AUT-007` | Changement de mot de passe | high | ✅ verified |
 | `REQ-AUT-008` | Limitation du taux de tentatives d'authentification | high | ✅ verified |
 | `REQ-AUT-009` | Déconnexion | medium | ✅ verified |
+| `REQ-AUT-010` | Réinitialisation du mot de passe oubliée | high | ⚪ draft |
+| `REQ-AUT-011` | Vérification de l'adresse e-mail | medium | ⚪ draft |
+| `REQ-AUT-012` | Double authentification par code temporel | high | ⚪ draft |
 
 ## categories
 
