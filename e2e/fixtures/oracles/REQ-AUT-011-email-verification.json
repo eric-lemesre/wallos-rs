@@ -1,0 +1,15 @@
+{
+  "_requirement": "REQ-AUT-011",
+  "_evidence": "read",
+  "_source": "Lecture de verifyemail.php et endpoints/cronjobs/sendverificationemails.php dans l'image épinglée bellamy/wallos:5.4.2@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f. Relevé le 2026-08-17.",
+  "_a_promouvoir": "Niveau `observed` requis par R11.",
+  "flux": {
+    "table": "email_verification (email, token)",
+    "validation": "SELECT WHERE email = :email AND token = :token, puis DELETE de la ligne",
+    "aucune_expiration": "Aucune borne temporelle dans la requête, à la différence de la réinitialisation de mot de passe.",
+    "blocage": "L'exigence de vérification est un réglage d'instance : `SELECT require_email_verification FROM admin`."
+  },
+  "_defauts_non_reproduits": [
+    "Le jeton de vérification n'expire jamais dans l'original. Un jeton sans borne reste exploitable indéfiniment s'il fuit. La fonctionnalité est reproduite ; l'absence d'expiration est un défaut, à borner chez nous — écart à déclarer et à justifier au lot d'implémentation."
+  ]
+}

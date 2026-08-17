@@ -214,3 +214,112 @@ acceptance:
 depends_on: [REQ-AUT-004]
 ---
 ```
+
+```yaml
+---
+id: REQ-AUT-010
+title: Réinitialisation du mot de passe oubliée
+domain: auth
+status: draft
+criticality: high
+layer: [api, ui]
+e2e: required
+oracle: legacy
+rationale: >
+  Sans ce parcours, un utilisateur qui oublie son mot de passe est enfermé dehors : son compte
+  existe, ses données aussi, et rien ne lui permet d'y revenir. C'est le manque le plus grave du
+  périmètre de parité, et il le serait même sans exigence de parité.
+acceptance:
+  - given: une adresse soumise depuis le formulaire de mot de passe oublié
+    when: elle correspond à un compte
+    then: tout jeton antérieur pour cette adresse est révoqué, un nouveau jeton aléatoire est émis,
+      et un message contenant le lien de réinitialisation est mis en file pour envoi
+  - given: une adresse qui ne correspond à aucun compte
+    when: elle est soumise
+    then: la réponse est **identique** au cas précédent — aucune divergence de message, de code ni
+      de délai ne doit permettre de savoir si un compte existe
+  - given: un jeton de réinitialisation
+    when: il est présenté plus d'une heure après son émission
+    then: il est refusé
+  - given: un jeton valide et un nouveau mot de passe conforme à la politique
+    when: la réinitialisation est confirmée
+    then: le mot de passe est remplacé, le jeton est consommé et ne peut plus servir, et les
+      sessions ouvertes du compte sont invalidées
+  - given: des jetons expirés
+    when: l'entretien périodique s'exécute
+    then: ils sont supprimés
+depends_on: [REQ-AUT-002, REQ-AUT-003, REQ-NOT-003]
+---
+```
+
+```yaml
+---
+id: REQ-AUT-011
+title: Vérification de l'adresse e-mail
+domain: auth
+status: draft
+criticality: medium
+layer: [api, ui]
+e2e: required
+oracle: legacy
+rationale: >
+  Une adresse non vérifiée rend inopérants les parcours qui en dépendent — à commencer par la
+  réinitialisation du mot de passe, qui deviendrait un moyen d'accès pour qui a saisi l'adresse d'un
+  autre. La vérification est ce qui rend l'adresse digne de confiance.
+acceptance:
+  - given: une inscription
+    when: elle est enregistrée
+    then: un jeton de vérification est émis et un message contenant le lien est mis en file
+  - given: un lien de vérification valide
+    when: il est suivi
+    then: l'adresse est marquée vérifiée et le jeton est consommé
+  - given: un lien invalide, déjà consommé ou inconnu
+    when: il est suivi
+    then: la vérification échoue sans indiquer laquelle des trois causes s'applique
+  - given: l'exigence de vérification activée au niveau de l'instance
+    when: un compte non vérifié tente de se connecter
+    then: la connexion est refusée et la cause en est explicitée à l'utilisateur
+  - given: l'exigence de vérification désactivée
+    when: un compte non vérifié se connecte
+    then: la connexion aboutit — la vérification reste enregistrée mais n'est pas bloquante
+depends_on: [REQ-AUT-001, REQ-NOT-003]
+---
+```
+
+```yaml
+---
+id: REQ-AUT-012
+title: Double authentification par code temporel
+domain: auth
+status: draft
+criticality: high
+layer: [core, api, ui]
+e2e: required
+oracle: legacy
+rationale: >
+  Un gestionnaire d'abonnements expose des habitudes de consommation et des moyens de paiement. Le
+  mot de passe seul ne suffit pas à qui héberge son instance sur l'internet public.
+acceptance:
+  - given: un compte sans double authentification
+    when: l'utilisateur l'active
+    then: un secret est généré et présenté sous une forme utilisable par une application
+      d'authentification, et l'activation n'est effective **qu'après** vérification d'un code valide
+  - given: l'activation confirmée
+    when: elle s'achève
+    then: un lot de codes de secours à usage unique est remis à l'utilisateur, et une fois seulement
+  - given: un compte protégé par double authentification
+    when: le mot de passe est validé
+    then: la session n'est ouverte qu'après présentation d'un code temporel valide ou d'un code de
+      secours, et l'identifiant de session est renouvelé à cet instant
+  - given: un code de secours
+    when: il a servi
+    then: il ne peut plus servir
+  - given: un code temporel légèrement décalé dans le temps
+    when: il est présenté
+    then: il est accepté dans la tolérance capturée sur l'application d'origine, et refusé au-delà
+  - given: la désactivation demandée par l'utilisateur
+    when: elle est confirmée
+    then: le secret et les codes de secours sont détruits
+depends_on: [REQ-AUT-002, REQ-AUT-004]
+---
+```
