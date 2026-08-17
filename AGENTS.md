@@ -332,10 +332,10 @@ Les exigences `oracle: design` (fonctionnalités nouvelles) sont taggées `@desi
 d'oracle.
 
 > ⚠️ **État réel de la couverture** (audit du 2026-08-17, ADR 0059). Sur 33 exigences
-> `oracle: legacy` : **9** `executed`, **10** `read`, **14 sans aucune capture**, **0** `observed`.
-> `LegacyDriver` n'implémente que l'authentification ; `e2e/legacy/` ne contient qu'un smoke de
-> connexion. Le niveau `observed` est donc une **cible**, pas l'existant — et la distinction est
-> écrite ici plutôt que laissée à découvrir. La porte `oracle-coverage` rend le décompte permanent,
+> `oracle: legacy` : **1** `observed`, **8** `executed`, **10** `read`, **14 sans aucune capture**.
+> Le premier `observed` est REQ-STA-001, confronté le 2026-08-17 au comportement rendu par
+> l'application en marche (`e2e/legacy/parity-monthly-cost.spec.ts`). `LegacyDriver` couvre
+> désormais l'authentification **et** la création d'abonnement ; il s'étendra exigence par exigence. La porte `oracle-coverage` rend le décompte permanent,
 > et REQ-CLT-009 étend le relevé à l'interface, où lire le code ne suffit pas.
 
 **Passerelle vers les tests unitaires** : les oracles extraits (dates d'échéance, totaux,

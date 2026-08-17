@@ -1,25 +1,102 @@
 {
   "_requirement": "REQ-STA-001",
   "_rule": "Normalisation du coût mensuel : facteur de conversion d'un cycle vers un mois, CAPTURÉ sur l'application d'origine (convention, pas une évidence mathématique — §8.1).",
-  "_source": "Wallos 5.4.2 (image pinnée par digest sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f), fonction getPricePerMonth() — identique dans includes/list_subscriptions.php et includes/stats_calculations.php. Valeurs VÉRIFIÉES en exécutant le PHP de l'image (docker exec ... php -r).",
+  "_source": "Wallos 5.4.2 (image pinnée par digest sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f), fonction getPricePerMonth() — identique dans includes/list_subscriptions.php et includes/stats_calculations.php. Valeurs VÉRIFIÉES en exécutant le PHP de l'image (docker exec ... php -r). — puis CONFRONTÉ au comportement rendu (voir `_observed`).",
   "_cycle_mapping": "Wallos cycle : 1=jours, 2=semaines, 3=mois, 4=années, 5=lifetime. `frequency` = notre `interval`. Le cycle 5 (lifetime) est hors de notre modèle (BillingUnit = day/week/month/year) et normalise à 0 chez Wallos.",
   "factors": {
-    "day": { "per_month": "30", "formula": "price * 30 / interval" },
-    "week": { "per_month": "4.35", "formula": "price * 4.35 / interval" },
-    "month": { "per_month": "1", "formula": "price / interval" },
-    "year": { "months_per_year": "12", "formula": "price / (12 * interval)" }
+    "day": {
+      "per_month": "30",
+      "formula": "price * 30 / interval"
+    },
+    "week": {
+      "per_month": "4.35",
+      "formula": "price * 4.35 / interval"
+    },
+    "month": {
+      "per_month": "1",
+      "formula": "price / interval"
+    },
+    "year": {
+      "months_per_year": "12",
+      "formula": "price / (12 * interval)"
+    }
   },
   "_displayed": "`monthly` = valeur BRUTE normalisée (précision pleine, testée en core). `displayed_eur` = valeur AFFICHÉE en EUR = arrondi bancaire à 2 décimales (REQ-CUR-005/CUR-007) — celle que l'e2e compare à l'UI.",
   "vectors": [
-    { "unit": "year",  "interval": 1, "price": "120.00", "monthly": "10.00",   "displayed_eur": "10.00", "why": "annuel 120 / 12" },
-    { "unit": "year",  "interval": 1, "price": "99.99",  "monthly": "8.3325",  "displayed_eur": "8.33",  "why": "annuel 99.99 / 12 -> 8.3325, affiché 8.33" },
-    { "unit": "year",  "interval": 2, "price": "240.00", "monthly": "10.00",   "displayed_eur": "10.00", "why": "tous les 2 ans : 240 / (12*2)" },
-    { "unit": "week",  "interval": 1, "price": "10.00",  "monthly": "43.50",   "displayed_eur": "43.50", "why": "hebdo 10 * 4.35" },
-    { "unit": "week",  "interval": 2, "price": "10.00",  "monthly": "21.75",   "displayed_eur": "21.75", "why": "bihebdo 10 * 4.35 / 2" },
-    { "unit": "day",   "interval": 1, "price": "1.00",   "monthly": "30.00",   "displayed_eur": "30.00", "why": "quotidien 1 * 30" },
-    { "unit": "day",   "interval": 7, "price": "7.00",   "monthly": "30.00",   "displayed_eur": "30.00", "why": "tous les 7 jours 7 * 30 / 7" },
-    { "unit": "month", "interval": 1, "price": "15.00",  "monthly": "15.00",   "displayed_eur": "15.00", "why": "mensuel : inchangé" },
-    { "unit": "month", "interval": 3, "price": "15.00",  "monthly": "5.00",    "displayed_eur": "5.00",  "why": "trimestriel (tous les 3 mois) 15 / 3" }
+    {
+      "unit": "year",
+      "interval": 1,
+      "price": "120.00",
+      "monthly": "10.00",
+      "displayed_eur": "10.00",
+      "why": "annuel 120 / 12"
+    },
+    {
+      "unit": "year",
+      "interval": 1,
+      "price": "99.99",
+      "monthly": "8.3325",
+      "displayed_eur": "8.33",
+      "why": "annuel 99.99 / 12 -> 8.3325, affiché 8.33"
+    },
+    {
+      "unit": "year",
+      "interval": 2,
+      "price": "240.00",
+      "monthly": "10.00",
+      "displayed_eur": "10.00",
+      "why": "tous les 2 ans : 240 / (12*2)"
+    },
+    {
+      "unit": "week",
+      "interval": 1,
+      "price": "10.00",
+      "monthly": "43.50",
+      "displayed_eur": "43.50",
+      "why": "hebdo 10 * 4.35"
+    },
+    {
+      "unit": "week",
+      "interval": 2,
+      "price": "10.00",
+      "monthly": "21.75",
+      "displayed_eur": "21.75",
+      "why": "bihebdo 10 * 4.35 / 2"
+    },
+    {
+      "unit": "day",
+      "interval": 1,
+      "price": "1.00",
+      "monthly": "30.00",
+      "displayed_eur": "30.00",
+      "why": "quotidien 1 * 30"
+    },
+    {
+      "unit": "day",
+      "interval": 7,
+      "price": "7.00",
+      "monthly": "30.00",
+      "displayed_eur": "30.00",
+      "why": "tous les 7 jours 7 * 30 / 7"
+    },
+    {
+      "unit": "month",
+      "interval": 1,
+      "price": "15.00",
+      "monthly": "15.00",
+      "displayed_eur": "15.00",
+      "why": "mensuel : inchangé"
+    },
+    {
+      "unit": "month",
+      "interval": 3,
+      "price": "15.00",
+      "monthly": "5.00",
+      "displayed_eur": "5.00",
+      "why": "trimestriel (tous les 3 mois) 15 / 3"
+    }
   ],
-  "_currency_decimals": "L'affichage arrondit au nombre de décimales de la DEVISE (REQ-CUR-007). Vérifié en core (test rounding_uses_the_currency_decimals) : JPY (0 décimale) day/interval=7/100 -> mensuel 429 (EUR : 428.57), borne half-to-even 2.5 -> 2. Les vecteurs ci-dessus sont en EUR (2 décimales)."
+  "_currency_decimals": "L'affichage arrondit au nombre de décimales de la DEVISE (REQ-CUR-007). Vérifié en core (test rounding_uses_the_currency_decimals) : JPY (0 décimale) day/interval=7/100 -> mensuel 429 (EUR : 428.57), borne half-to-even 2.5 -> 2. Les vecteurs ci-dessus sont en EUR (2 décimales).",
+  "_evidence": "observed",
+  "_observed": "Vérifié le 2026-08-17 contre l'application d'origine EN MARCHE, par `e2e/legacy/parity-monthly-cost.spec.ts` : les 9 vecteurs créés l'un après l'autre dans Wallos, la vignette « Monthly Cost » de stats.php contrôlée après chaque création. Cumul final constaté = 173,58 €, soit la somme des valeurs brutes (173,5825) arrondie au centime mi-unité au pair — ce qui confirme du même coup la règle d'arrondi de REQ-CUR-005. PREMIER oracle du dépôt promu au niveau `observed` (ADR 0059, R11) : jusqu'ici aucun comportement métier n'avait été confronté à l'application en marche."
 }
