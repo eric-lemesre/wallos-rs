@@ -1131,3 +1131,15 @@ requirements:
   oracle: legacy
   depends_on:
   - REQ-CLT-003
+- id: REQ-CLT-009
+  title: Inventaire d'interface relevé sur la cible figée
+  domain: clients
+  status: draft
+  criticality: medium
+  layer:
+  - ui
+  e2e: required
+  oracle: legacy
+  depends_on:
+  - REQ-CLT-003
+  - REQ-CLT-008

@@ -280,3 +280,39 @@ acceptance:
 depends_on: [REQ-CLT-003]
 ---
 ```
+
+```yaml
+---
+id: REQ-CLT-009
+title: Inventaire d'interface relevé sur la cible figée
+domain: clients
+status: draft
+criticality: medium
+layer: [ui]
+e2e: required
+oracle: legacy
+rationale: >
+  Pour une règle de gestion, lire le code de référence suffit souvent — la règle y est écrite. Pour
+  une interface, non : ce qui compte est ce qui est **rendu**, et un gabarit ne le dit pas de façon
+  fiable. Sans relevé sur l'application en marche, la parité d'interface reste une impression, et
+  une affordance oubliée ne se découvre que par la plainte d'un utilisateur qui migre.
+acceptance:
+  - given: un écran de l'application d'origine, en fonctionnement
+    when: il est relevé
+    then: l'ensemble de ses affordances — champs et leur nature, actions, colonnes, tris, filtres,
+      états vides, libellés rendus — est capturé et gelé comme oracle, avec son niveau de preuve
+  - given: un oracle d'inventaire
+    when: l'interface de wallos-rs lui est comparée
+    then: toute affordance absente est soit implémentée, soit couverte par une dérogation datée et
+      justifiée, jamais passée sous silence
+  - given: la mise en page de l'application d'origine
+    when: la comparaison a lieu
+    then: elle n'y entre pas — le produit vise trois modalités, et une mise en page de bureau ne
+      peut être imposée à une coquille mobile
+  - given: un défaut relevé sur l'application d'origine — contraste insuffisant, libellé fautif,
+      élément inatteignable au clavier
+    when: il est capturé
+    then: il est déclaré comme tel dans l'oracle et **n'est pas** reproduit
+depends_on: [REQ-CLT-003, REQ-CLT-008]
+---
+```

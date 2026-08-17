@@ -196,6 +196,8 @@ Codes d'échec (tous bloquants) :
 | `TRC-05` | Exigence `layer: [api]` sans opération OpenAPI correspondante |
 | `TRC-06` | Fichier de production sans aucune annotation (code orphelin) |
 | `TRC-07` | `requirements.lock.yaml` désynchronisé de `spec/requirements/` |
+| `ORC-01` | Exigence `oracle: legacy` sans oracle gelé ni dérogation datée (`oracle-coverage`, ADR 0059) |
+| `ORC-02` | Oracle gelé sans niveau de preuve `_evidence` déclaré |
 
 ---
 
@@ -312,15 +314,27 @@ export interface AppDriver {
 
 **Protocole obligatoire** pour toute exigence `oracle: legacy` :
 
-1. Écrire le scénario dans `e2e/specs/`.
-2. L'exécuter avec `TARGET=legacy`. **Il doit passer.** S'il échoue, la compréhension du
-   comportement de référence est fausse → corriger le scénario, pas l'application.
-3. Geler le résultat : `pnpm e2e:record` sérialise les valeurs observées dans
-   `e2e/fixtures/oracles/REQ-XXX-NNN.json`.
-4. Exécuter avec `TARGET=app`. Ce test rouge pilote l'implémentation.
+1. Capturer le comportement de référence sur la cible figée, et **geler** le résultat dans
+   `e2e/fixtures/oracles/REQ-XXX-NNN.json` en déclarant son **niveau de preuve** (`_evidence`) :
 
-Les scénarios d'exigences `oracle: design` (fonctionnalités nouvelles) sont taggés `@design`
-et exemptés de l'étape 2.
+   | `_evidence` | Comment | Ce que ça vaut |
+   |-------------|---------|----------------|
+   | `observed` | scénario rejoué contre l'application en marche (`LegacyDriver`) | le plus fort — c'est le comportement, pas notre lecture |
+   | `executed` | code d'origine exécuté dans l'image (`docker exec … php -r`, requête SQLite) | fort pour une règle de calcul ; muet sur ce qui est rendu |
+   | `read` | source ou schéma lus | plausible, **non vérifié** — à ne retenir qu'à défaut |
+
+2. Écrire le scénario dans `e2e/specs/`, taggé `@legacy`, asserté contre les valeurs gelées.
+3. L'exécuter contre notre application. Ce test rouge pilote l'implémentation.
+
+Les exigences `oracle: design` (fonctionnalités nouvelles) sont taggées `@design` et n'ont pas
+d'oracle.
+
+> ⚠️ **État réel de la couverture** (audit du 2026-08-17, ADR 0059). Sur 33 exigences
+> `oracle: legacy` : **9** `executed`, **10** `read`, **14 sans aucune capture**, **0** `observed`.
+> `LegacyDriver` n'implémente que l'authentification ; `e2e/legacy/` ne contient qu'un smoke de
+> connexion. Le niveau `observed` est donc une **cible**, pas l'existant — et la distinction est
+> écrite ici plutôt que laissée à découvrir. La porte `oracle-coverage` rend le décompte permanent,
+> et REQ-CLT-009 étend le relevé à l'interface, où lire le code ne suffit pas.
 
 **Passerelle vers les tests unitaires** : les oracles extraits (dates d'échéance, totaux,
 arrondis, conversions) sont réinjectés comme fixtures dans les tests de `core`. C'est le
