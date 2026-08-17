@@ -20,6 +20,8 @@
 | R7 | Aucune dépendance de coquille native hors de `frontend/shells/` : le code d'interface partagé ignore la plateforme et passe par l'adaptateur (REQ-CLT-003) | revue + `cargo xtask trace` |
 | R8 | Le schéma OpenAPI committé doit être identique à celui généré | CI drift gate |
 | R9 | **Dépôt unique** : serveur, interface, coquilles et recettes de paquets vivent dans `wallos-rs`. Aucun dépôt satellite, aucun sous-module | revue + ADR 0056 |
+| R10 | **Parité intégrale** : toute fonctionnalité de l'application d'origine est reproduite. Un écart n'est recevable que s'il est **technique** (PHP → Rust/Tauri) ou un **sur-ensemble strict** dont le comportement d'origine reste obtenable. « Mieux » n'est pas un motif ; « en plus » l'est | revue + `oracle-coverage` + ADR 0060 |
+| R11 | Toute exigence de parité porte un **test e2e** — sans exception — et un **test unitaire** dès qu'une règle calculable est en jeu, dont les vecteurs viennent de l'oracle et non de notre raisonnement | `cargo xtask trace` + revue |
 
 **Protocole de blocage** — si une règle rend une tâche impossible, l'agent **s'arrête**, ajoute une entrée
 dans `spec/OPEN-QUESTIONS.md` au format ci-dessous, et rend la main. Il ne contourne jamais.

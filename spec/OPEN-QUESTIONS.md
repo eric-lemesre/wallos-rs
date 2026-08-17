@@ -367,5 +367,13 @@ Il ne tranche jamais de sa propre initiative (AGENTS.md §0).
   d'abord la réinitialisation de mot de passe (enfermement dehors), puis la sauvegarde/restauration
   (perte de données), puis le reste. B ferait entrer les fonctions IA et l'OIDC dans un produit qui
   n'en a pas besoin ; C nierait des manques réels.
-- **Décision** : _(en attente)_
-- **Statut** : open
+- **Décision (responsable, 2026-08-17)** : **B — parité intégrale.** Toute fonctionnalité de
+  l'application d'origine doit être reproduite ; développer davantage reste autorisé. Les seuls
+  écarts recevables sont **techniques** (PHP → Rust/Tauri) ou **sur-ensembles stricts** préservant le
+  comportement d'origine comme cas particulier. Chaque reproduction est **prouvée** : test unitaire
+  quand une règle calculable est en jeu, test de bout en bout **sans exception**.
+  Les 43 % mesurés sont donc une **dette**, non un choix de périmètre. La recommandation d'ordre est
+  conservée — le risque prime sur le décompte. Voir `docs/adr/0060-full-parity-doctrine.md`, qui
+  reclasse les six écarts déjà actés : quatre régressions à corriger, un sur-ensemble à prouver, un à
+  trancher sur pièce.
+- **Statut** : resolved

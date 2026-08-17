@@ -75,6 +75,7 @@ Colonne **Relecture** — pour orienter l'attention du responsable du dépôt :
 | 0057 | **Principe frontend** repris d'`ergonomia` : `App({canal, apiBaseUrl})`, coquilles minces, design system à feuille unique, Storybook + MSW | 🔴 |
 | 0058 | Atelier : Storybook, et MSW à la **seule** frontière réseau (dépendances de dev, R6) | 🟡 |
 | 0059 | **Oracle exécutable** : niveaux de preuve, porte `oracle-coverage`, relevé d'interface | 🔴 |
+| 0060 | **Parité intégrale** : reproduire 100 % de l'original ; seuls écarts recevables = technique ou sur-ensemble strict (R10/R11) | 🔴 |
 
 ## À relire en priorité aujourd'hui (🔴)
 
@@ -87,6 +88,10 @@ Les décisions d'interprétation prises jusqu'ici, susceptibles de diverger de l
 - **0025** — sémantique « abonnement actif à ce mois-là » définie par conception (pas d'historique
   d'activation dans le modèle).
 - **0023** — jeu de catégories par défaut (impacte tout import/export et l'expérience initiale).
+- **0060** — **la parité devient intégrale** (décision du 2026-08-17). Reclasse six écarts déjà
+  actés : **quatre régressions** à corriger (tri normalisé 0024, entrées de coût nul 0031, catégories
+  traduites 0023, logos distants SUB-015), **un sur-ensemble à prouver** (foyer 0012), **un à trancher
+  sur pièce** (0025). À relire en premier : cet ADR change la lecture de tous les autres.
 - **0059** — **la parité n'est démontrée que pour un tiers du périmètre** : sur 33 exigences
   `oracle: legacy`, 9 reposent sur l'exécution du code d'origine, 10 sur sa simple lecture, et 14 sur
   rien. Aucun scénario n'a jamais été rejoué contre l'application en marche. À relire avant toute

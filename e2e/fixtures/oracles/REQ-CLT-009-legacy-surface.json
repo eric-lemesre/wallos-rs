@@ -2,7 +2,7 @@
   "_requirement": "REQ-CLT-009",
   "_evidence": "executed",
   "_source": "Inventaire du système de fichiers de l'image épinglée bellamy/wallos:5.4.2@sha256:316f26e13265958e7946ef98ff600516fddc51d698ee98bd1ae1577e5e00789f (ADR 0011), extrait par `docker export` puis énumération des `*.php` sous /var/www/html. Relevé le 2026-08-17.",
-  "_note": "Les PAGES et ENDPOINTS sont des faits relevés. Le champ `couvert` de `couverture` est une APPRÉCIATION de l'agent, soumise à arbitrage (OQ-016) : tant que le devenir des manques n'est pas tranché, un taux se lit comme une dette alors qu'il s'agit peut-être d'un choix de périmètre.",
+  "_note": "Les PAGES et ENDPOINTS sont des faits relevés. Le champ `couvert` de `couverture` est une APPRÉCIATION de l'agent. OQ-016 est TRANCHÉE (2026-08-17, ADR 0060) : parité INTÉGRALE — les manques sont une DETTE, non un choix de périmètre, et ce taux devient un indicateur de progression vers 100 %.",
   "_limite_de_methode": "Chaque point d'entrée compte pour un : un canal de notification pèse autant qu'une case « masquer les abonnements désactivés ». Wallos ayant de nombreuses préférences d'affichage, la méthode SOUS-ESTIME la couverture des domaines majeurs (abonnements, catégories, devises, statistiques, échéancier).",
   "_hors_perimetre_inverse": "Non comptabilisé ici : ce que wallos-rs fait et que Wallos ne fait PAS — synchronisation multi-appareils (SYN-001..008), payeurs, idempotence de l'ordonnanceur, pierres tombales, journal de conflits, chiffrement des secrets au repos, durcissement SSRF, politique de réessai.",
   "totaux": {
@@ -73,7 +73,7 @@
     "logos": {
       "releves": 3,
       "couvert": 0,
-      "note": "ÉCART DÉLIBÉRÉ : REQ-SUB-015 impose un substitut local déterministe, sans aucune requête réseau (confidentialité par conception)."
+      "note": "Récupération distante de logos, recherche d'images, détourage. RÉGRESSION depuis l'ADR 0060 : l'écart de confidentialité (REQ-SUB-015, substitut local sans requête réseau) n'est plus recevable — il retire une fonctionnalité au lieu d'en ajouter. Le substitut local reste pertinent EN REPLI."
     },
     "notifications": {
       "releves": 21,
@@ -235,5 +235,6 @@
       "regenerateapikey.php",
       "save_user.php"
     ]
-  }
+  },
+  "_ecarts_recevables": "Depuis l'ADR 0060, un écart n'est recevable que s'il est TECHNIQUE (PHP -> Rust/Tauri) ou un SUR-ENSEMBLE STRICT préservant le comportement d'origine comme cas particulier. Conséquence sur ce relevé : `logos` cesse d'être un écart délibéré et redevient un manque (REQ-SUB-015 à réviser)."
 }
