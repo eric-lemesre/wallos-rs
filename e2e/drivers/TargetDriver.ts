@@ -1,6 +1,8 @@
 import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
+import { canonicalAmount } from "./amount";
+
 import type { AppDriver, MoneyInput, SignupInput } from "./AppDriver";
 import type { Credentials, Harness } from "./Harness";
 
@@ -284,6 +286,17 @@ export class TargetDriver implements AppDriver, Harness {
   async subscriptionsTotal(): Promise<string> {
     await this.page.getByTestId("subscriptions-total").waitFor({ state: "visible", timeout: 5000 });
     return (await this.page.getByTestId("subscriptions-total").textContent()) ?? "";
+  }
+
+  /**
+   * Coût mensuel normalisé de l'ensemble des abonnements, rendu canonique (contrat `Harness`).
+   *
+   * Le total est ici LOCALISÉ (« Total : 10,00 € » en français) : la normalisation appartient donc
+   * au pilote, exactement comme le découpage de la vignette « Monthly Cost » appartient au pilote
+   * legacy. Un scénario partagé ne doit connaître ni l'un ni l'autre.
+   */
+  async readMonthlyTotal(): Promise<string> {
+    return canonicalAmount(await this.subscriptionsTotal());
   }
 
   // --- Évolution du coût sur 12 mois (REQ-STA-006) ---
