@@ -1,0 +1,67 @@
+# Release — paquets deb et rpm publiés sur la release GitHub (REQ-OPS-010, ADR 0062).
+# Déclenché par un tag `v<version>` ; le tag doit porter la version des crates
+# (workspace.package.version), vérifié avant construction. La recette unique
+# packaging/nfpm.yaml garantit un contenu identique pour les deux formats.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version depuis le tag (et cohérence avec le workspace)
+        id: version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          CARGO_VERSION="$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"
+          if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
+            echo "tag v$TAG_VERSION ≠ workspace $CARGO_VERSION" >&2
+            exit 1
+          fi
+          echo "version=$TAG_VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Binaire serveur (release)
+        run: cargo build --release -p wallos-server
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Espaces de travail npm : une seule installation à la racine (ADR 0057).
+      - name: Interface compilée
+        run: |
+          npm ci
+          npm run build:web
+
+      - name: nfpm
+        run: |
+          curl -fsSL https://github.com/goreleaser/nfpm/releases/latest/download/nfpm_amd64.deb -o /tmp/nfpm.deb
+          sudo dpkg -i /tmp/nfpm.deb
+
+      - name: Paquets deb et rpm (même recette, même version)
+        env:
+          WALLOS_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p dist
+          nfpm package -f packaging/nfpm.yaml --packager deb --target dist/
+          nfpm package -f packaging/nfpm.yaml --packager rpm --target dist/
+
+      - name: Contrôle du contenu du paquet deb
+        run: |
+          dpkg-deb -I dist/*.deb
+          dpkg-deb -c dist/*.deb | grep -E "usr/bin/wallos-server|usr/share/wallos-server/webui/index.html|usr/lib/systemd/system/wallos-server.service|etc/wallos-server/wallos-server.env"
+
+      - name: Publication sur la release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

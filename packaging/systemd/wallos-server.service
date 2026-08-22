@@ -1,0 +1,32 @@
+# Unité systemd de wallos-server (REQ-OPS-010).
+# La configuration vit dans /etc/wallos-server/wallos-server.env (référence :
+# docs/configuration.md). Le serveur draine proprement sur SIGTERM (REQ-OPS-006).
+[Unit]
+Description=Wallos — suivi d'abonnements (serveur API + interface web)
+Documentation=https://github.com/eric-lemesre/wallos-rs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=wallos-server
+Group=wallos-server
+EnvironmentFile=/etc/wallos-server/wallos-server.env
+Environment=WEBUI_DIR=/usr/share/wallos-server/webui
+ExecStart=/usr/bin/wallos-server
+Restart=on-failure
+RestartSec=5
+
+# Durcissement : compte non privilégié, système en lecture seule, pas de session.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+StateDirectory=wallos-server
+
+[Install]
+WantedBy=multi-user.target

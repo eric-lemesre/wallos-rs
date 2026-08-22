@@ -275,7 +275,7 @@ depends_on: [REQ-OPS-004, REQ-SEC-004]
 id: REQ-OPS-010
 title: Paquets système pour distributions Linux
 domain: ops
-status: draft
+status: verified
 criticality: high
 layer: [api]
 e2e: n-a

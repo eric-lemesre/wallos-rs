@@ -1,0 +1,45 @@
+# Recette nfpm — paquets deb et rpm de wallos-server (REQ-OPS-010, ADR 0062).
+# Une seule recette pour les deux formats ; la version est injectée par WALLOS_VERSION
+# NB : les chemins src sont relatifs au répertoire d'EXÉCUTION de nfpm — toujours
+# lancer depuis la racine du dépôt (comme la CI).
+# (CI de release : .github/workflows/release.yml). Gardée par crates/server/tests/packaging.rs.
+name: wallos-server
+arch: amd64
+platform: linux
+version: ${WALLOS_VERSION}
+section: web
+priority: optional
+maintainer: Eric Lemesre <eric.lemesre@gmail.com>
+description: |
+  Suivi d'abonnements personnels (réécriture Rust de Wallos).
+  Serveur API + interface web servies par un seul processus.
+  La base PostgreSQL n'est pas installée par ce paquet : la connexion
+  est décrite dans /etc/wallos-server/wallos-server.env.
+vendor: wallos-rs
+homepage: https://github.com/eric-lemesre/wallos-rs
+license: AGPL-3.0-or-later
+
+contents:
+  - src: target/release/wallos-server
+    dst: /usr/bin/wallos-server
+    file_info:
+      mode: 0o755
+  - src: frontend/shells/web/dist/
+    dst: /usr/share/wallos-server/webui
+  - src: packaging/systemd/wallos-server.service
+    dst: /usr/lib/systemd/system/wallos-server.service
+    file_info:
+      mode: 0o644
+  - src: packaging/config/wallos-server.env
+    dst: /etc/wallos-server/wallos-server.env
+    type: config|noreplace
+    file_info:
+      # Porteuse de secrets une fois renseignée : lisible du seul compte de service.
+      mode: 0o640
+      owner: root
+      group: wallos-server
+
+scripts:
+  postinstall: packaging/scripts/postinstall.sh
+  preremove: packaging/scripts/preremove.sh
+  postremove: packaging/scripts/postremove.sh

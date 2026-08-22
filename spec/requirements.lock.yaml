@@ -1000,7 +1000,7 @@ requirements:
 - id: REQ-OPS-010
   title: Paquets système pour distributions Linux
   domain: ops
-  status: draft
+  status: verified
   criticality: high
   layer:
   - api
