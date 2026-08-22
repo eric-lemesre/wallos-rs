@@ -32,7 +32,7 @@ depends_on: []
 id: REQ-OPS-002
 title: Adresse et port d'écoute configurables
 domain: ops
-status: draft
+status: verified
 criticality: high
 layer: [api]
 e2e: n-a

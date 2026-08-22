@@ -30,7 +30,9 @@ async fn main() -> anyhow::Result<()> {
         );
     }
     let app = wallos_server::app_with_db(db);
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+    // REQ-OPS-002 : écoute configurable par LISTEN_ADDR, arrêt immédiat si la valeur est invalide.
+    let raw_listen = std::env::var(wallos_server::listen::LISTEN_ADDR_VAR).ok();
+    let addr = wallos_server::listen::resolve_listen_addr(raw_listen.as_deref())?;
     info!("wallos-server listening on {addr}");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
