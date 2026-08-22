@@ -43,8 +43,12 @@ jobs:
           npm run build:web
 
       - name: nfpm
+        # Version épinglée (les assets nfpm sont versionnés, `latest/download/nfpm_amd64.deb`
+        # n'existe pas) — 2.47.0 est la version validée localement contre la recette.
+        env:
+          NFPM_VERSION: 2.47.0
         run: |
-          curl -fsSL https://github.com/goreleaser/nfpm/releases/latest/download/nfpm_amd64.deb -o /tmp/nfpm.deb
+          curl -fsSL "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_amd64.deb" -o /tmp/nfpm.deb
           sudo dpkg -i /tmp/nfpm.deb
 
       - name: Paquets deb et rpm (même recette, même version)
