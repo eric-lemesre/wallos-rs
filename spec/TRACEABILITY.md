@@ -2,7 +2,7 @@
 
 # Matrice de traçabilité des exigences
 
-Total : **96** exigences — 72 verified · 24 draft.
+Total : **96** exigences — 77 verified · 19 draft.
 
 Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et [`spec/requirements/`](requirements/). Régénérer avec `cargo xtask trace --write`.
 
@@ -86,15 +86,15 @@ Source de vérité : [`spec/requirements.lock.yaml`](requirements.lock.yaml) et 
 | ID | Titre | Criticité | Statut |
 |----|-------|-----------|--------|
 | `REQ-OPS-001` | Endpoint de santé | low | ✅ verified |
-| `REQ-OPS-002` | Adresse et port d'écoute configurables | high | ⚪ draft |
-| `REQ-OPS-003` | Service de l'interface web par le serveur | high | ⚪ draft |
-| `REQ-OPS-004` | Configuration d'exécution documentée et validée au démarrage | high | ⚪ draft |
+| `REQ-OPS-002` | Adresse et port d'écoute configurables | high | ✅ verified |
+| `REQ-OPS-003` | Service de l'interface web par le serveur | high | ✅ verified |
+| `REQ-OPS-004` | Configuration d'exécution documentée et validée au démarrage | high | ✅ verified |
 | `REQ-OPS-005` | Sonde de disponibilité distincte de la vivacité | medium | ⚪ draft |
-| `REQ-OPS-006` | Arrêt propre sur signal d'extinction | medium | ⚪ draft |
+| `REQ-OPS-006` | Arrêt propre sur signal d'extinction | medium | ✅ verified |
 | `REQ-OPS-007` | Image conteneur et composition de déploiement | high | ⚪ draft |
 | `REQ-OPS-008` | Publication de versions | medium | ⚪ draft |
 | `REQ-OPS-009` | Sauvegarde et restauration vérifiées | high | ⚪ draft |
-| `REQ-OPS-010` | Paquets système pour distributions Linux | high | ⚪ draft |
+| `REQ-OPS-010` | Paquets système pour distributions Linux | high | ✅ verified |
 | `REQ-OPS-011` | Archives binaires autonomes et canaux de distribution additionnels | medium | ⚪ draft |
 | `REQ-OPS-012` | Intégrité et authenticité des artefacts publiés | high | ⚪ draft |
 
