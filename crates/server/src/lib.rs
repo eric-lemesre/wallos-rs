@@ -48,6 +48,7 @@ pub mod shutdown;
 pub mod statistics;
 pub mod subscriptions;
 pub mod sync;
+pub mod webui;
 
 /// API wallos-rs v1.
 #[derive(OpenApi)]
@@ -209,7 +210,7 @@ fn problem_response(status: StatusCode, body: Problem) -> Response {
 
 /// Réponse par défaut : toute route inconnue renvoie une erreur RFC 9457.
 #[requirement(REQ-SEC-002)]
-async fn not_found(uri: Uri) -> Response {
+pub(crate) async fn not_found(uri: Uri) -> Response {
     let body = problem(StatusCode::NOT_FOUND.as_u16(), "about:blank", "Not Found")
         .with_instance(uri.path().to_string());
     problem_response(StatusCode::NOT_FOUND, body)
@@ -245,11 +246,23 @@ pub struct EncryptionKey(pub Option<[u8; 32]>);
 /// [`app_with_db_and_cron`] pour l'injecter sans variable d'environnement.
 #[requirement(REQ-AUT-001)]
 pub fn app_with_db(db: Db) -> Router {
+    app_with_db_webui(
+        db,
+        &webui::WebUi::Disabled {
+            reason: String::new(),
+        },
+    )
+}
+
+/// Comme [`app_with_db`], interface web comprise (REQ-OPS-003) — le chemin du binaire de
+/// production : cron et clé lus depuis l'environnement, interface selon la détection.
+#[requirement(REQ-OPS-003)]
+pub fn app_with_db_webui(db: Db, ui: &webui::WebUi) -> Router {
     let cron = std::env::var("CRON_TOKEN").ok().filter(|s| !s.is_empty());
     let key = std::env::var("ENCRYPTION_KEY")
         .ok()
         .and_then(|raw| wallos_core::secrets::derive_key(&raw));
-    app_with_db_cron_key(db, CronToken(cron), EncryptionKey(key))
+    app_with_db_cron_key_webui(db, CronToken(cron), EncryptionKey(key), ui)
 }
 
 /// Comme [`app_with_db`], mais le secret du cron est fourni explicitement (injection de test).
@@ -263,10 +276,29 @@ pub fn app_with_db_and_cron(db: Db, cron: CronToken) -> Router {
 }
 
 /// Comme [`app_with_db_and_cron`], avec la clé de chiffrement fournie explicitement
-/// (injection de test, REQ-SEC-004).
+/// (injection de test, REQ-SEC-004). Sans interface web : repli sur l'erreur structurée.
 #[requirement(REQ-AUT-001)]
 #[requirement(REQ-SEC-004)]
 pub fn app_with_db_cron_key(db: Db, cron: CronToken, encryption: EncryptionKey) -> Router {
+    app_with_db_cron_key_webui(
+        db,
+        cron,
+        encryption,
+        &webui::WebUi::Disabled {
+            reason: String::new(),
+        },
+    )
+}
+
+/// Routeur complet, interface web comprise (REQ-OPS-003) : l'API sous `/api/v1`, l'interface
+/// compilée en repli quand elle est présente, l'erreur structurée sinon.
+#[requirement(REQ-OPS-003)]
+pub fn app_with_db_cron_key_webui(
+    db: Db,
+    cron: CronToken,
+    encryption: EncryptionKey,
+    ui: &webui::WebUi,
+) -> Router {
     let (router, _api) = OpenApiRouter::new()
         .routes(routes!(api_v1_health))
         .routes(routes!(accounts::create_account))
@@ -334,9 +366,8 @@ pub fn app_with_db_cron_key(db: Db, cron: CronToken, encryption: EncryptionKey) 
         .routes(routes!(notifications::test_notification_channel))
         .routes(routes!(notifications::list_notification_deliveries))
         .split_for_parts();
-    Router::new()
-        .nest("/api/v1", router.with_state(db))
-        .fallback(not_found)
+    let base = Router::new().nest("/api/v1", router.with_state(db));
+    webui::attach(base, ui)
         .layer(axum::Extension(cron))
         .layer(axum::Extension(encryption))
         .layer(axum::middleware::map_response(security::security_headers))

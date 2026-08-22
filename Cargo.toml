@@ -35,7 +35,7 @@ tokio-cron-scheduler = "0.13"
 # Web / API
 axum = { version = "0.8", features = ["macros"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "fs"] }
 hyper = { version = "1.6", features = ["full"] }
 
 # OpenAPI

@@ -61,7 +61,7 @@ depends_on: [REQ-OPS-001]
 id: REQ-OPS-003
 title: Service de l'interface web par le serveur
 domain: ops
-status: draft
+status: verified
 criticality: high
 layer: [api, ui]
 e2e: optional

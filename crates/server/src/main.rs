@@ -34,7 +34,17 @@ async fn main() -> anyhow::Result<()> {
     let database_url = std::env::var("DATABASE_URL").context("DATABASE_URL is required")?;
     let db = Db::connect(&database_url).await?;
     db.migrate().await?;
-    let app = wallos_server::app_with_db(db.clone());
+    // REQ-OPS-003 : l'interface compilée est servie si WEBUI_DIR la désigne ; son absence est
+    // signalée et l'API reste seule servie.
+    let raw_webui = std::env::var(wallos_server::webui::WEBUI_DIR_VAR).ok();
+    let ui = wallos_server::webui::detect(raw_webui.as_deref());
+    match &ui {
+        wallos_server::webui::WebUi::Enabled(dir) => {
+            info!("interface web servie depuis {}", dir.display());
+        }
+        wallos_server::webui::WebUi::Disabled { reason } => tracing::warn!("{reason}"),
+    }
+    let app = wallos_server::app_with_db_webui(db.clone(), &ui);
     // REQ-OPS-002 : écoute configurable par LISTEN_ADDR, arrêt immédiat si la valeur est invalide.
     let raw_listen = std::env::var(wallos_server::listen::LISTEN_ADDR_VAR).ok();
     let addr = wallos_server::listen::resolve_listen_addr(raw_listen.as_deref())?;

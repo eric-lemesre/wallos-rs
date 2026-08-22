@@ -7,6 +7,7 @@
 |----------|------|-----------|--------|--------|
 | `DATABASE_URL` | URL de connexion PostgreSQL (utilisateur, hôte, base) | Obligatoire | — | oui |
 | `LISTEN_ADDR` | Adresse et port d'écoute du serveur HTTP (REQ-OPS-002) | Facultative | `127.0.0.1:3000` | non |
+| `WEBUI_DIR` | Répertoire de l'interface web compilée servie par le serveur (REQ-OPS-003) | Facultative | — | non |
 | `ENCRYPTION_KEY` | Clé de chiffrement au repos des secrets de canaux (REQ-SEC-004) | Facultative | — | oui |
 | `CRON_TOKEN` | Secret d'opérateur autorisant le déclenchement du cron de rappels (REQ-NOT-001) | Facultative | — | oui |
 | `SESSION_COOKIE_SECURE` | Attribut Secure du cookie de session (REQ-AUT-004) — `false` réservé aux tests locaux en HTTP | Facultative | `true` | non |

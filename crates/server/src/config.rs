@@ -66,6 +66,15 @@ pub const CONFIG_REFERENCE: &[VarSpec] = &[
         expects: Expects::ListenAddr,
     },
     VarSpec {
+        name: "WEBUI_DIR",
+        role: "Répertoire de l'interface web compilée servie par le serveur (REQ-OPS-003)",
+        required: false,
+        default: None,
+        secret: false,
+        absence_consequence: Some("interface web non servie : API seule"),
+        expects: Expects::NonEmpty,
+    },
+    VarSpec {
         name: "ENCRYPTION_KEY",
         role: "Clé de chiffrement au repos des secrets de canaux (REQ-SEC-004)",
         required: false,
