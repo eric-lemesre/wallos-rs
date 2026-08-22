@@ -12,21 +12,28 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     dotenvy::dotenv().ok();
 
+    // REQ-OPS-004 : configuration validée avant de servir la moindre requête — les manques
+    // bloquants arrêtent ici en nommant la variable, les manques tolérables sont journalisés
+    // avec leur conséquence fonctionnelle.
+    let report = wallos_server::config::validate_startup(&|name| std::env::var(name).ok())
+        .context("configuration invalide")?;
+    for warning in &report.warnings {
+        tracing::warn!("{warning}");
+    }
+    if let Ok(raw) = std::env::var("ENCRYPTION_KEY")
+        && !raw.is_empty()
+        && wallos_core::secrets::derive_key(&raw).is_none()
+    {
+        // REQ-SEC-004 : clé présente mais inutilisable — la création d'un canal à secrets sera
+        // refusée (422). Seul le nom de la variable est cité, jamais sa valeur.
+        tracing::warn!(
+            "ENCRYPTION_KEY présente mais inutilisable : les canaux à secrets seront refusés"
+        );
+    }
+
     let database_url = std::env::var("DATABASE_URL").context("DATABASE_URL is required")?;
     let db = Db::connect(&database_url).await?;
     db.migrate().await?;
-
-    if std::env::var("ENCRYPTION_KEY")
-        .ok()
-        .and_then(|raw| wallos_core::secrets::derive_key(&raw))
-        .is_none()
-    {
-        // REQ-SEC-004 : sans clé, la création d'un canal à secrets est refusée (422) — signaler
-        // clairement à l'opérateur plutôt que d'échouer silencieusement plus tard.
-        tracing::warn!(
-            "ENCRYPTION_KEY absente : chiffrement au repos désactivé, les canaux à secrets seront refusés"
-        );
-    }
     let app = wallos_server::app_with_db(db.clone());
     // REQ-OPS-002 : écoute configurable par LISTEN_ADDR, arrêt immédiat si la valeur est invalide.
     let raw_listen = std::env::var(wallos_server::listen::LISTEN_ADDR_VAR).ok();

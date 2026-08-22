@@ -31,6 +31,7 @@ use wallos_storage::Db;
 pub mod accounts;
 pub mod auth;
 pub mod categories;
+pub mod config;
 pub mod currencies;
 pub mod data;
 pub mod exchange;

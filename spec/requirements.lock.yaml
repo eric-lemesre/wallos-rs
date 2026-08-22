@@ -929,7 +929,7 @@ requirements:
 - id: REQ-OPS-004
   title: Configuration d'exécution documentée et validée au démarrage
   domain: ops
-  status: draft
+  status: verified
   criticality: high
   layer:
   - api

@@ -93,7 +93,7 @@ depends_on: [REQ-OPS-001, REQ-SEC-006]
 id: REQ-OPS-004
 title: Configuration d'exécution documentée et validée au démarrage
 domain: ops
-status: draft
+status: verified
 criticality: high
 layer: [api]
 e2e: n-a
