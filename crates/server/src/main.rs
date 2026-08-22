@@ -1,7 +1,5 @@
 //! Point d'entrée du serveur wallos-rs.
 
-use std::net::SocketAddr;
-
 use anyhow::Context;
 use tracing::info;
 use wallos_core::requirement;
@@ -29,19 +27,51 @@ async fn main() -> anyhow::Result<()> {
             "ENCRYPTION_KEY absente : chiffrement au repos désactivé, les canaux à secrets seront refusés"
         );
     }
-    let app = wallos_server::app_with_db(db);
+    let app = wallos_server::app_with_db(db.clone());
     // REQ-OPS-002 : écoute configurable par LISTEN_ADDR, arrêt immédiat si la valeur est invalide.
     let raw_listen = std::env::var(wallos_server::listen::LISTEN_ADDR_VAR).ok();
     let addr = wallos_server::listen::resolve_listen_addr(raw_listen.as_deref())?;
     info!("wallos-server listening on {addr}");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    // `into_make_service_with_connect_info` expose l'adresse du pair aux handlers (IP source pour la
-    // limitation du taux d'authentification, REQ-AUT-008).
-    axum::serve(
+    // REQ-OPS-006 : drainage des requêtes en vol sur SIGTERM/SIGINT, délai de grâce, fermeture
+    // explicite de la base. L'adresse du pair reste exposée aux handlers (IP source pour la
+    // limitation du taux d'authentification, REQ-AUT-008) : le service est construit avec
+    // `into_make_service_with_connect_info` dans `serve_with_graceful_shutdown`.
+    wallos_server::shutdown::serve_with_graceful_shutdown(
         listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
+        app,
+        db,
+        shutdown_signal(),
+        wallos_server::shutdown::DEFAULT_GRACE,
     )
     .await?;
     Ok(())
+}
+
+/// Résout à la réception de SIGTERM (orchestrateur, systemd) ou SIGINT (Ctrl-C).
+async fn shutdown_signal() {
+    let ctrl_c = tokio::signal::ctrl_c();
+    #[cfg(unix)]
+    {
+        let mut term =
+            match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+                Ok(t) => t,
+                Err(e) => {
+                    tracing::error!(
+                        "impossible d'écouter SIGTERM : {e} — seul Ctrl-C arrêtera proprement"
+                    );
+                    let _ = ctrl_c.await;
+                    return;
+                }
+            };
+        tokio::select! {
+            _ = ctrl_c => {}
+            _ = term.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = ctrl_c.await;
+    }
 }

@@ -43,6 +43,7 @@ pub mod reminders;
 pub mod schedule;
 pub mod security;
 pub mod settings;
+pub mod shutdown;
 pub mod statistics;
 pub mod subscriptions;
 pub mod sync;

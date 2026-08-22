@@ -156,7 +156,7 @@ depends_on: [REQ-OPS-001]
 id: REQ-OPS-006
 title: Arrêt propre sur signal d'extinction
 domain: ops
-status: draft
+status: verified
 criticality: medium
 layer: [api]
 e2e: n-a

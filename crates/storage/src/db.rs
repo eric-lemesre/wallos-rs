@@ -52,4 +52,13 @@ impl Db {
     pub const fn pool(&self) -> &PgPool {
         &self.pool
     }
+
+    /// Referme explicitement le pool : plus aucune connexion ouverte vers la base.
+    ///
+    /// Appelé en fin d'extinction (REQ-OPS-006) — jamais implicite, pour que l'arrêt soit
+    /// observable et que la base ne voie pas de connexions abandonnées.
+    #[requirement(REQ-OPS-006)]
+    pub async fn close(&self) {
+        self.pool.close().await;
+    }
 }
